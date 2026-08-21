@@ -1331,13 +1331,22 @@ compose.desktop {
 fun renameMacosDmgOutput(release: Boolean) {
     if (!isMacHost) return
 
+    val clientRoleValue = (findProperty("nuvio.client.role") as? String)
+        ?: System.getenv("NUVIO_CLIENT_ROLE")
+        ?: "user"
+    val isAdminClient = clientRoleValue.equals("admin", ignoreCase = true)
+    val rolePrefix = if (isAdminClient) "KhaYin-Admin" else "KhaYin"
+    val appDisplayName = if (isAdminClient) "KhaYin Admin" else "KhaYin"
+
     val distributionName = if (release) "main-release" else "main"
     val outputDir = layout.buildDirectory.dir("compose/binaries/$distributionName/dmg").get().asFile
-    val finalDmg = outputDir.resolve("KhaYin-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
-    val defaultDmg = outputDir.resolve("KhaYin-$desktopReleasePackageVersion.dmg")
+    val finalDmg = outputDir.resolve("$rolePrefix-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
+    val defaultDmg = outputDir.resolve("$appDisplayName-$desktopReleasePackageVersion.dmg")
+    val standardDefaultDmg = outputDir.resolve("KhaYin-$desktopReleasePackageVersion.dmg")
     val fallbackOldDefaultDmg = outputDir.resolve("Nuvio-$desktopReleasePackageVersion.dmg")
     val fallbackOldFinalDmg = outputDir.resolve("Nuvio-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
     val sourceDmg = defaultDmg.takeIf { it.exists() }
+        ?: standardDefaultDmg.takeIf { it.exists() }
         ?: finalDmg.takeIf { it.exists() }
         ?: fallbackOldDefaultDmg.takeIf { it.exists() }
         ?: fallbackOldFinalDmg.takeIf { it.exists() }
@@ -1457,8 +1466,15 @@ if (isMacHost) {
         dependsOn("packageReleaseDmg")
         dmgDir.set(layout.buildDirectory.dir("compose/binaries/main-release/dmg"))
         artifactDir.set(layout.buildDirectory.dir("compose/release-dmgs"))
-        finalDmgName.set("KhaYin-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
-        defaultDmgName.set("KhaYin-$desktopReleasePackageVersion.dmg")
+        val clientRoleValue = (findProperty("nuvio.client.role") as? String)
+            ?: System.getenv("NUVIO_CLIENT_ROLE")
+            ?: "user"
+        val isAdminClient = clientRoleValue.equals("admin", ignoreCase = true)
+        val rolePrefix = if (isAdminClient) "KhaYin-Admin" else "KhaYin"
+        val appDisplayName = if (isAdminClient) "KhaYin Admin" else "KhaYin"
+
+        finalDmgName.set("$rolePrefix-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
+        defaultDmgName.set("$appDisplayName-$desktopReleasePackageVersion.dmg")
         keychainProfile.set(macosNotaryKeychainProfile.orEmpty())
         keychainPath.set(macosNotaryKeychainPath.orEmpty())
         signingIdentity.set(macosSigningIdentity.orEmpty())
