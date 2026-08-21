@@ -226,9 +226,7 @@ jobs:
 
       - name: Build Android Release APK
         run: |
-          ./gradlew :androidApp:assembleFullRelease -Pnuvio.android.distribution=full --no-configuration-cache --stacktrace || \
-          ./gradlew :androidApp:assembleFullDebug -Pnuvio.android.distribution=full --no-configuration-cache --stacktrace || \
-          ./gradlew :composeApp:assembleFullRelease -Pnuvio.android.distribution=full --no-configuration-cache --stacktrace
+          ./gradlew :androidApp:assembleFullRelease -Pnuvio.android.distribution=full --no-configuration-cache --stacktrace
 
       - name: Rename and Prepare Android Artifact
         run: |
