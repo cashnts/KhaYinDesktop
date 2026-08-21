@@ -148,7 +148,6 @@ jobs:
         run: |
           & .\gradlew.bat `
             :composeApp:packageReleaseMsi `
-            :composeApp:packageReleaseExe `
             "-Pnuvio.android.distribution=full" `
             "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" `
             "-Pcompose.desktop.packaging.checkJdkVendor=false" `
@@ -162,20 +161,12 @@ jobs:
           mkdir -p dist
           
           MSI_FILE=$(find composeApp/build/compose -type f -name "*.msi" | head -n 1)
-          EXE_FILE=$(find composeApp/build/compose -type f -name "*.exe" | head -n 1)
           
           if [ -f "$MSI_FILE" ]; then
             cp "$MSI_FILE" "dist/khayin-win-v${VERSION}.msi"
             echo "Created dist/khayin-win-v${VERSION}.msi"
-          fi
-          
-          if [ -f "$EXE_FILE" ]; then
-            cp "$EXE_FILE" "dist/khayin-win-v${VERSION}.exe"
-            echo "Created dist/khayin-win-v${VERSION}.exe"
-          fi
-          
-          if [ ! -f "$MSI_FILE" ] && [ ! -f "$EXE_FILE" ]; then
-            echo "Error: No Windows MSI or EXE built!" >&2
+          else
+            echo "Error: No Windows MSI built!" >&2
             exit 1
           fi
 
