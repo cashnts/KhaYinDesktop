@@ -231,9 +231,15 @@ jobs:
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
           VERSION: ${{ needs.metadata.outputs.version }}
         run: |
-          if [ -z "${R2_ACCOUNT_ID}" ] || [ -z "${R2_ACCESS_KEY_ID}" ] || [ -z "${R2_SECRET_ACCESS_KEY}" ] || [ -z "${R2_BUCKET_NAME}" ]; then
-            echo "Warning: Cloudflare R2 secrets (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME) are not configured. Skipping R2 upload."
-            exit 0
+          MISSING=0
+          if [ -z "${R2_ACCOUNT_ID}" ]; then echo "::warning ::Secret R2_ACCOUNT_ID is empty or not found in repository secrets."; MISSING=1; fi
+          if [ -z "${AWS_ACCESS_KEY_ID}" ]; then echo "::warning ::Secret R2_ACCESS_KEY_ID is empty or not found in repository secrets."; MISSING=1; fi
+          if [ -z "${AWS_SECRET_ACCESS_KEY}" ]; then echo "::warning ::Secret R2_SECRET_ACCESS_KEY is empty or not found in repository secrets."; MISSING=1; fi
+          if [ -z "${R2_BUCKET_NAME}" ]; then echo "::warning ::Secret R2_BUCKET_NAME is empty or not found in repository secrets."; MISSING=1; fi
+          
+          if [ "$MISSING" -eq 1 ]; then
+            echo "Error: Cloudflare R2 secrets are missing. Skipping R2 upload."
+            exit 1
           fi
           
           R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
