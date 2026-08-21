@@ -254,7 +254,8 @@ jobs:
               filename=$(basename "$file")
               echo "Uploading $filename -> s3://${R2_BUCKET_NAME}/${TARGET_DIR}/${filename}"
               aws s3 cp "$file" "s3://${R2_BUCKET_NAME}/${TARGET_DIR}/${filename}" \
-                --endpoint-url "${R2_ENDPOINT}"
+                --endpoint-url "${R2_ENDPOINT}" \
+                --region auto
             fi
           done
           
