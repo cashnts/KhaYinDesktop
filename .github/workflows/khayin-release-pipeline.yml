@@ -85,7 +85,7 @@ jobs:
 
       - name: Build macOS Release DMG
         run: |
-          ./gradlew packageReleaseDmg --no-configuration-cache --stacktrace
+          ./gradlew packageReleaseDmg -Pnuvio.android.distribution=full --no-configuration-cache --stacktrace
 
       - name: Rename and Prepare macOS Artifact
         run: |
@@ -130,9 +130,30 @@ jobs:
         run: |
           dotnet tool install --global wix || true
 
-      - name: Build Windows Release Package
+      - name: Install WebView2 SDK
+        shell: pwsh
         run: |
-          .\gradlew packageReleaseMsi packageReleaseExe --no-configuration-cache --stacktrace
+          nuget install Microsoft.Web.WebView2 `
+            -Version 1.0.2903.40 `
+            -OutputDirectory "$env:RUNNER_TEMP\nuget" `
+            -DirectDownload `
+            -NonInteractive `
+            -NoCache
+
+          $webView2Root = Join-Path $env:RUNNER_TEMP "nuget\Microsoft.Web.WebView2.1.0.2903.40"
+          "WEBVIEW2_ROOT=$webView2Root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build Windows Release Package
+        shell: pwsh
+        run: |
+          & .\gradlew.bat `
+            :composeApp:packageReleaseMsi `
+            :composeApp:packageReleaseExe `
+            "-Pnuvio.android.distribution=full" `
+            "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" `
+            "-Pcompose.desktop.packaging.checkJdkVendor=false" `
+            --no-configuration-cache `
+            --stacktrace
 
       - name: Rename and Prepare Windows Artifact
         shell: bash
@@ -191,15 +212,16 @@ jobs:
 
       - name: Build Android Release APK
         run: |
-          ./gradlew :composeApp:assembleRelease --no-configuration-cache --stacktrace || \
-          ./gradlew :composeApp:assembleDebug --no-configuration-cache --stacktrace
+          ./gradlew :androidApp:assembleFullRelease -Pnuvio.android.distribution=full --no-configuration-cache --stacktrace || \
+          ./gradlew :androidApp:assembleFullDebug -Pnuvio.android.distribution=full --no-configuration-cache --stacktrace || \
+          ./gradlew :composeApp:assembleFullRelease -Pnuvio.android.distribution=full --no-configuration-cache --stacktrace
 
       - name: Rename and Prepare Android Artifact
         run: |
           VERSION="${{ needs.metadata.outputs.version }}"
           mkdir -p dist
           
-          APK_FILE=$(find composeApp/build/outputs/apk -type f -name "*.apk" | head -n 1)
+          APK_FILE=$(find . -type f -path "*/build/outputs/apk/*" -name "*.apk" | head -n 1)
           if [ -f "$APK_FILE" ]; then
             cp "$APK_FILE" "dist/khayin-android-v${VERSION}.apk"
             echo "Created dist/khayin-android-v${VERSION}.apk"
