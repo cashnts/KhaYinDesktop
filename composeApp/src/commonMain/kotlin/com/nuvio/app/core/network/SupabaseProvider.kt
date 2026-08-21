@@ -23,7 +23,7 @@ object SupabaseProvider {
     @OptIn(SupabaseInternal::class)
     private fun createClient(): SupabaseClient {
         val configuration = ServerConfigurationRepository.active.value
-        val userAgent = "NuvioMobile/${AppVersionConfig.VERSION_NAME.ifBlank { "dev" }}"
+        val userAgent = "KhaYin/${AppVersionConfig.DESKTOP_VERSION_NAME.ifBlank { AppVersionConfig.VERSION_NAME.ifBlank { "1.0.0" } }}"
         return createSupabaseClient(
             supabaseUrl = configuration.backendUrl,
             supabaseKey = configuration.publishableKey,

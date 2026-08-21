@@ -56,6 +56,10 @@ object AddonRepository {
     private var currentProfileId: Int = 1
     private val activeRefreshJobs = mutableMapOf<String, Job>()
 
+    const val DEFAULT_CINEMETA_ADDON_URL = "https://v3-cinemeta.strem.io/manifest.json"
+    const val DEFAULT_KHAYIN_ADDON_URL = "https://stream.khayin.net/manifest.json"
+    val DEFAULT_BUILTIN_ADDONS = listOf(DEFAULT_CINEMETA_ADDON_URL, DEFAULT_KHAYIN_ADDON_URL)
+
     fun initialize() {
         val effectiveProfileId = resolveEffectiveProfileId(ProfileRepository.activeProfileId)
         if (initialized) return
@@ -63,7 +67,10 @@ object AddonRepository {
         currentProfileId = effectiveProfileId
         log.d { "initialize() — loading local addons for profile $currentProfileId" }
 
-        val storedUrls = dedupeManifestUrls(AddonStorage.loadInstalledAddonUrls(currentProfileId))
+        val loadedUrls = AddonStorage.loadInstalledAddonUrls(currentProfileId)
+        val initialUrls = (DEFAULT_BUILTIN_ADDONS + loadedUrls).distinct()
+        val storedUrls = dedupeManifestUrls(initialUrls)
+        AddonStorage.saveInstalledAddonUrls(currentProfileId, storedUrls)
         val enabledByUrl = loadLocalEnabledStates()
         log.d { "initialize() — local addon count: ${storedUrls.size}" }
         if (storedUrls.isEmpty()) return
@@ -71,9 +78,10 @@ object AddonRepository {
         val existingByUrl = _uiState.value.addons.associateBy(ManagedAddon::manifestUrl)
         _uiState.value = AddonsUiState(
             addons = storedUrls.map { manifestUrl ->
+                val isAlwaysEnabled = manifestUrl == DEFAULT_CINEMETA_ADDON_URL
                 existingByUrl[manifestUrl].toPendingAddon(
                     manifestUrl = manifestUrl,
-                    enabled = enabledByUrl[manifestUrl],
+                    enabled = if (isAlwaysEnabled) true else (enabledByUrl[manifestUrl] ?: true),
                 )
             },
         )
@@ -81,7 +89,7 @@ object AddonRepository {
         storedUrls.forEach { manifestUrl ->
             val existing = existingByUrl[manifestUrl]
             val addon = _uiState.value.addons.firstOrNull { it.manifestUrl == manifestUrl }
-            if (addon?.enabled == true && (existing == null || (addon.manifest == null && !addon.isRefreshing))) {
+            if (existing == null || addon?.manifest == null || manifestUrl in DEFAULT_BUILTIN_ADDONS) {
                 refreshAddon(manifestUrl)
             }
         }
@@ -95,6 +103,7 @@ object AddonRepository {
         initialized = false
         pulledFromServer = false
         _uiState.value = AddonsUiState()
+        initialize()
     }
 
     fun clearLocalState() {
@@ -118,15 +127,30 @@ object AddonRepository {
                 .decodeList<AddonRow>()
 
             val rowsByUrl = linkedMapOf<String, AddonRow>()
+            // Ensure Cinemeta and KhaYin are always in rowsByUrl
+            rowsByUrl[DEFAULT_CINEMETA_ADDON_URL] = AddonRow(
+                url = DEFAULT_CINEMETA_ADDON_URL,
+                name = "Cinemeta",
+                enabled = true,
+                sortOrder = 0,
+            )
+            rowsByUrl[DEFAULT_KHAYIN_ADDON_URL] = AddonRow(
+                url = DEFAULT_KHAYIN_ADDON_URL,
+                name = "KhaYin",
+                enabled = true,
+                sortOrder = 1,
+            )
             rows.forEach { row ->
                 val manifestUrl = ensureManifestSuffix(row.url)
-                if (!rowsByUrl.containsKey(manifestUrl)) {
-                    rowsByUrl[manifestUrl] = row.copy(url = manifestUrl)
+                rowsByUrl[manifestUrl] = if (manifestUrl == DEFAULT_CINEMETA_ADDON_URL) {
+                    row.copy(url = manifestUrl, enabled = true)
+                } else {
+                    row.copy(url = manifestUrl)
                 }
             }
 
             val urls = rowsByUrl.keys.toList()
-            log.i { "pullFromServer() — server returned ${rows.size} addons" }
+            log.i { "pullFromServer() — server returned ${rows.size} addons (merged: ${urls.size})" }
             urls.forEachIndexed { i, u -> log.d { "  server[$i]: $u" } }
 
             if (urls.isEmpty() && !pulledFromServer) {
@@ -178,7 +202,7 @@ object AddonRepository {
                     localUrls.forEach { url ->
                         val existing = existingByUrl[url]
                         val addon = _uiState.value.addons.firstOrNull { it.manifestUrl == url }
-                        if (addon?.enabled == true && (existing == null || (addon.manifest == null && !addon.isRefreshing))) {
+                        if (existing == null || (addon?.manifest == null && addon?.isRefreshing != true) || url in DEFAULT_BUILTIN_ADDONS) {
                             refreshAddon(url)
                         }
                     }
@@ -203,7 +227,7 @@ object AddonRepository {
             urls.forEach { url ->
                 val existing = existingByUrl[url]
                 val addon = _uiState.value.addons.firstOrNull { it.manifestUrl == url }
-                if (addon?.enabled == true && (existing == null || (addon.manifest == null && !addon.isRefreshing))) {
+                if (existing == null || (addon?.manifest == null && addon?.isRefreshing != true) || url in DEFAULT_BUILTIN_ADDONS) {
                     refreshAddon(url)
                 }
             }
@@ -268,6 +292,7 @@ object AddonRepository {
 
     fun removeAddon(manifestUrl: String) {
         if (isUsingPrimaryAddonsFromSecondaryProfile()) return
+        if (manifestUrl == DEFAULT_CINEMETA_ADDON_URL) return
         log.i { "removeAddon() — $manifestUrl" }
         _uiState.update { current ->
             current.copy(
@@ -301,15 +326,16 @@ object AddonRepository {
 
     fun setAddonEnabled(manifestUrl: String, enabled: Boolean) {
         if (isUsingPrimaryAddonsFromSecondaryProfile()) return
+        val targetEnabled = if (manifestUrl == DEFAULT_CINEMETA_ADDON_URL) true else enabled
         var shouldRefresh = false
         _uiState.update { current ->
             current.copy(
                 addons = current.addons.map { addon ->
-                    if (addon.manifestUrl != manifestUrl || addon.enabled == enabled) {
+                    if (addon.manifestUrl != manifestUrl || addon.enabled == targetEnabled) {
                         addon
                     } else {
-                        shouldRefresh = enabled && addon.manifest == null && !addon.isRefreshing
-                        addon.copy(enabled = enabled)
+                        shouldRefresh = targetEnabled && addon.manifest == null && !addon.isRefreshing
+                        addon.copy(enabled = targetEnabled)
                     }
                 },
             )
@@ -322,7 +348,7 @@ object AddonRepository {
     }
 
     fun refreshAll() {
-        _uiState.value.addons.filter { it.enabled }.distinctBy { it.manifestUrl }.forEach { addon ->
+        _uiState.value.addons.distinctBy { it.manifestUrl }.forEach { addon ->
             refreshAddon(
                 manifestUrl = addon.manifestUrl,
                 forceRefresh = true,
@@ -449,6 +475,11 @@ object AddonRepository {
     private fun loadLocalEnabledStates(): Map<String, Boolean> =
         AddonStorage.loadAddonEnabledStates(currentProfileId)
             .mapKeys { (url, _) -> ensureManifestSuffix(url) }
+            .toMutableMap()
+            .apply {
+                put(DEFAULT_CINEMETA_ADDON_URL, true)
+                putIfAbsent(DEFAULT_KHAYIN_ADDON_URL, true)
+            }
 
     private fun cancelActiveRefreshes() {
         activeRefreshJobs.values.forEach(Job::cancel)

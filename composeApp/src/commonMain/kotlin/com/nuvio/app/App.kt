@@ -148,7 +148,9 @@ import com.nuvio.app.core.ui.localizedContinueWatchingSubtitle
 import com.nuvio.app.core.ui.nuvio
 import com.nuvio.app.features.auth.AuthScreen
 import com.nuvio.app.features.addons.AddAddonResult
+import com.nuvio.app.features.addons.AddonCustomPageScreen
 import com.nuvio.app.features.addons.AddonRepository
+import com.nuvio.app.navigation.AddonCustomPageRoute
 import com.nuvio.app.features.catalog.CatalogRepository
 import com.nuvio.app.features.catalog.CatalogScreen
 import com.nuvio.app.features.catalog.CatalogTarget
@@ -326,6 +328,7 @@ private val navigationSavedStateConfiguration = SavedStateConfiguration {
             subclass(StreamRoute::class, StreamRoute.serializer())
             subclass(CatalogRoute::class, CatalogRoute.serializer())
             subclass(PlayerRoute::class, PlayerRoute.serializer())
+            subclass(AddonCustomPageRoute::class, AddonCustomPageRoute.serializer())
         }
     }
 }
@@ -3184,6 +3187,22 @@ private fun MainAppContent(
                                 },
                             )
                         },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                entry<AddonCustomPageRoute> { route ->
+                    val onBack = rememberGuardedPopBackStack(navController, route)
+                    AddonCustomPageScreen(
+                        manifestUrl = route.manifestUrl,
+                        pageId = route.pageId,
+                        onBack = onBack,
+                        onPosterClick = { meta ->
+                            navController.navigate(DetailRoute(type = meta.type, id = meta.id, title = meta.name))
+                        },
+                        onPosterLongClick = { meta ->
+                            openPosterActions(PosterActionTarget(preview = meta))
+                        },
+                        onCatalogClick = onCatalogClick,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }

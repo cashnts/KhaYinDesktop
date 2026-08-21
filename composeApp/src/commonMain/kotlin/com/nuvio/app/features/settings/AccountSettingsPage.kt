@@ -85,6 +85,13 @@ private fun AccountSettingsBody(
 
             when (val state = authState) {
                 is AuthState.Authenticated -> {
+                    state.email?.takeUnless { state.isAnonymous }?.let { email ->
+                        AccountInfoRow(
+                            label = stringResource(Res.string.settings_account_email),
+                            value = email,
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
                     AccountInfoRow(
                         label = stringResource(Res.string.settings_account_status),
                         value = if (state.isAnonymous) {
@@ -94,13 +101,6 @@ private fun AccountSettingsBody(
                         },
                         valueColor = MaterialTheme.colorScheme.primary,
                     )
-                    state.email?.takeUnless { state.isAnonymous }?.let { email ->
-                        Spacer(modifier = Modifier.height(8.dp))
-                        AccountInfoRow(
-                            label = stringResource(Res.string.settings_account_email),
-                            value = email,
-                        )
-                    }
                 }
                 else -> {
                     Text(

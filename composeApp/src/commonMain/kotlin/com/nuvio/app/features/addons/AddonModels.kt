@@ -15,8 +15,18 @@ data class AddonManifest(
     val types: List<String>,
     val idPrefixes: List<String> = emptyList(),
     val catalogs: List<AddonCatalog> = emptyList(),
+    val pages: List<AddonPage> = emptyList(),
     val behaviorHints: AddonBehaviorHints = AddonBehaviorHints(),
     val transportUrl: String,
+)
+
+data class AddonPage(
+    val id: String,
+    val name: String,
+    val description: String = "",
+    val icon: String? = null,
+    val type: String? = null,
+    val catalogIds: List<String> = emptyList(),
 )
 
 data class AddonResource(

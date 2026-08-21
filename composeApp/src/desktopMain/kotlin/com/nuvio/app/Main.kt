@@ -114,7 +114,7 @@ fun main(args: Array<String>) {
                 SentryInitializer.close()
                 exitApplication()
             },
-            title = if (smokePlayerUrl == null) "Nuvio" else "Nuvio Player Smoke",
+            title = if (smokePlayerUrl == null) "KhaYin" else "KhaYin Player Smoke",
             state = windowState,
             icon = painterResource(appIconState.selected.transparentPreviewResource),
         ) {
@@ -240,5 +240,6 @@ private fun handleDesktopLaunchArgs(args: Array<String>) {
 }
 
 private fun isDesktopAppUrl(value: String): Boolean =
-    value.startsWith("nuvio://", ignoreCase = true) ||
+    value.startsWith("khayin://", ignoreCase = true) ||
+        value.startsWith("nuvio://", ignoreCase = true) ||
         value.startsWith("stremio://", ignoreCase = true)

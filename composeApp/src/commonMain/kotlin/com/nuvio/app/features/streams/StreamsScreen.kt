@@ -753,6 +753,7 @@ internal fun ProviderFilterRow(
     modifier: Modifier = Modifier,
 ) {
     val addonGroups = groups.filter { it.streams.isNotEmpty() || it.isLoading }
+    if (addonGroups.size <= 1) return
     val scrollState = rememberScrollState()
 
     Row(
@@ -948,10 +949,11 @@ internal fun StreamList(
                 }
 
                 else -> {
+                    val showSectionHeader = uiState.selectedFilter == null && filteredGroups.size > 1
                     streamSections.forEach { section ->
                         streamSection(
                             section = section,
-                            showHeader = uiState.selectedFilter == null,
+                            showHeader = showSectionHeader,
                             debridEnabled = debridEnabled,
                             appendInstantServiceToDefaultName = appendInstantServiceToDefaultName,
                             showFileSizeBadges = streamBadgeSettings.showFileSizeBadges,

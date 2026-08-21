@@ -36,6 +36,7 @@ internal object AddonManifestParser {
             types = defaultTypes,
             idPrefixes = defaultPrefixes,
             catalogs = root.catalogs(),
+            pages = root.pages(),
             behaviorHints = root.behaviorHints(),
             transportUrl = manifestUrl,
         )
@@ -82,6 +83,31 @@ internal object AddonManifestParser {
                     }
                 },
             )
+        }
+
+    private fun JsonObject.pages(): List<AddonPage> =
+        array("pages").mapNotNull { pageElement ->
+            when (pageElement) {
+                is JsonObject -> {
+                    val id = pageElement.optionalString("id") ?: return@mapNotNull null
+                    val name = pageElement.optionalString("name").orEmpty().ifBlank { id }
+                    val description = pageElement.optionalString("description").orEmpty()
+                    val icon = pageElement.optionalString("icon")
+                    val type = pageElement.optionalString("type")
+                    val catalogIds = pageElement.stringList("catalogs").ifEmpty {
+                        pageElement.stringList("catalogIds")
+                    }
+                    AddonPage(
+                        id = id,
+                        name = name,
+                        description = description,
+                        icon = icon,
+                        type = type,
+                        catalogIds = catalogIds,
+                    )
+                }
+                else -> null
+            }
         }
 
     private fun JsonObject.behaviorHints(): AddonBehaviorHints {

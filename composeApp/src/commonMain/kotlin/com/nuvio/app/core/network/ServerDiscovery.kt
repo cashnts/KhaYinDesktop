@@ -47,7 +47,7 @@ private data class DiscoveryCapabilities(
 
 internal object ServerDiscoveryPolicy {
     private const val discoveryPath = "/.well-known/nuvio"
-    private const val canonicalOfficialBackend = "https://api.nuvio.tv"
+    private const val canonicalOfficialBackend = "https://api.stream.khayin.net"
     private val json = Json { ignoreUnknownKeys = true }
 
     fun discoveryUrl(input: String): String {
@@ -71,7 +71,7 @@ internal object ServerDiscoveryPolicy {
         if (payload.version != 1) {
             throw ServerDiscoveryException(ServerDiscoveryFailure.UnsupportedVersion)
         }
-        if (!payload.service.equals("nuvio", ignoreCase = true)) {
+        if (!payload.service.equals("khayin", ignoreCase = true) && !payload.service.equals("nuvio", ignoreCase = true)) {
             throw ServerDiscoveryException(ServerDiscoveryFailure.WrongService)
         }
         if (!payload.selfHosted) {
@@ -158,7 +158,7 @@ object ServerDiscoveryService {
                     url = discoveryUrl,
                     headers = mapOf(
                         "Accept" to "application/json",
-                        "User-Agent" to "Mobile/${AppVersionConfig.VERSION_NAME.ifBlank { "dev" }}",
+                        "User-Agent" to "KhaYin/${AppVersionConfig.DESKTOP_VERSION_NAME.ifBlank { AppVersionConfig.VERSION_NAME.ifBlank { "1.0.0" } }}",
                     ),
                     body = "",
                     maxResponseBodyBytes = maxDocumentBytes + 1,

@@ -14,9 +14,9 @@ class ThemeAccessTest {
     }
 
     @Test
-    fun unavailableSupporterThemeFallsBackToWhite() {
+    fun unavailableSupporterThemeFallsBackToKhaYin() {
         assertEquals(
-            AppTheme.WHITE,
+            AppTheme.KHAYIN,
             resolveAppTheme(AppTheme.JADE, CosmeticEntitlements.None),
         )
     }

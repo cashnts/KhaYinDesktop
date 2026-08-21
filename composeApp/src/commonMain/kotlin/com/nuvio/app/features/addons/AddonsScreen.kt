@@ -96,7 +96,18 @@ internal fun AddonsSettingsPageContent(
     val enterAddonUrlMessage = stringResource(Res.string.addons_error_enter_url)
     val usePersonalMediaCopy = AppFeaturePolicy.personalMediaAddonCopyEnabled
 
-    val overview = remember(uiState.addons) { uiState.addons.toOverview() }
+    val visibleAddons = remember(uiState.addons) {
+        uiState.addons.filterNot { it.manifestUrl in AddonRepository.DEFAULT_BUILTIN_ADDONS }
+    }
+    val overview = remember(visibleAddons) { visibleAddons.toOverview() }
+
+    LaunchedEffect(visibleAddons) {
+        visibleAddons.forEach { addon ->
+            if (addon.manifest == null && !addon.isRefreshing) {
+                AddonRepository.refreshAddon(addon.manifestUrl)
+            }
+        }
+    }
 
     Column(
         modifier = modifier,
@@ -140,24 +151,29 @@ internal fun AddonsSettingsPageContent(
         )
 
         SectionHeader(stringResource(Res.string.addons_section_installed))
-        if (uiState.addons.isEmpty()) {
+        if (visibleAddons.isEmpty()) {
             EmptyStateCard(usePersonalMediaCopy = usePersonalMediaCopy)
         } else {
-            val lastIndex = uiState.addons.lastIndex
-            uiState.addons.forEachIndexed { index, addon ->
+            val lastIndex = visibleAddons.lastIndex
+            visibleAddons.forEachIndexed { index, addon ->
                 val manifest = addon.manifest
                 val behaviorHints = manifest?.behaviorHints
-                val showConfigureAction = behaviorHints?.configurable == true || behaviorHints?.configurationRequired == true
+                val isBuiltIn = addon.manifestUrl in AddonRepository.DEFAULT_BUILTIN_ADDONS
+                val showConfigureAction = behaviorHints?.configurable == true ||
+                    behaviorHints?.configurationRequired == true ||
+                    isBuiltIn
                 val configureUrl = addon.manifestUrl.toConfigureUrl()
+                val originalIndex = uiState.addons.indexOfFirst { it.manifestUrl == addon.manifestUrl }
                 InstalledAddonCard(
                     addon = addon,
-                    onMoveUpClick = if (index > 0) {
-                        { AddonRepository.moveAddon(index, index - 1) }
+                    isBuiltIn = isBuiltIn,
+                    onMoveUpClick = if (index > 0 && originalIndex > 0) {
+                        { AddonRepository.moveAddon(originalIndex, originalIndex - 1) }
                     } else {
                         null
                     },
-                    onMoveDownClick = if (index < lastIndex) {
-                        { AddonRepository.moveAddon(index, index + 1) }
+                    onMoveDownClick = if (index < lastIndex && originalIndex in 0 until uiState.addons.lastIndex) {
+                        { AddonRepository.moveAddon(originalIndex, originalIndex + 1) }
                     } else {
                         null
                     },
@@ -179,7 +195,11 @@ internal fun AddonsSettingsPageContent(
                     } else {
                         null
                     },
-                    onDeleteClick = { AddonRepository.removeAddon(addon.manifestUrl) },
+                    onDeleteClick = if (isBuiltIn) {
+                        null
+                    } else {
+                        { AddonRepository.removeAddon(addon.manifestUrl) }
+                    },
                 )
             }
         }
@@ -392,12 +412,13 @@ private fun EmptyStateCard(
 @Composable
 private fun InstalledAddonCard(
     addon: ManagedAddon,
+    isBuiltIn: Boolean = false,
     onMoveUpClick: (() -> Unit)?,
     onMoveDownClick: (() -> Unit)?,
     onRefreshClick: () -> Unit,
     onEnabledChange: (Boolean) -> Unit,
     onConfigureClick: (() -> Unit)?,
-    onDeleteClick: () -> Unit,
+    onDeleteClick: (() -> Unit)?,
 ) {
     val manifest = addon.manifest
 
@@ -433,6 +454,7 @@ private fun InstalledAddonCard(
             Switch(
                 checked = addon.enabled,
                 onCheckedChange = onEnabledChange,
+                enabled = !isBuiltIn || addon.manifestUrl != AddonRepository.DEFAULT_CINEMETA_ADDON_URL,
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                     checkedTrackColor = MaterialTheme.colorScheme.primary,
@@ -479,12 +501,14 @@ private fun InstalledAddonCard(
                     onClick = onConfigure,
                 )
             }
-            NuvioIconActionButton(
-                icon = Icons.Rounded.Delete,
-                contentDescription = stringResource(Res.string.addons_delete),
-                tint = MaterialTheme.colorScheme.error,
-                onClick = onDeleteClick,
-            )
+            onDeleteClick?.let { onDelete ->
+                NuvioIconActionButton(
+                    icon = Icons.Rounded.Delete,
+                    contentDescription = stringResource(Res.string.addons_delete),
+                    tint = MaterialTheme.colorScheme.error,
+                    onClick = onDelete,
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -496,6 +520,9 @@ private fun InstalledAddonCard(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            if (isBuiltIn) {
+                NuvioInfoBadge(text = "Built-in")
+            }
             NuvioInfoBadge(
                 text = when {
                     !addon.enabled -> stringResource(Res.string.addons_badge_disabled)
@@ -507,7 +534,7 @@ private fun InstalledAddonCard(
             manifest?.let {
                 NuvioInfoBadge(text = stringResource(Res.string.addons_badge_resources, it.resources.size))
                 NuvioInfoBadge(text = stringResource(Res.string.addons_badge_catalogs, it.catalogs.size))
-                if (it.behaviorHints.configurable) {
+                if (it.behaviorHints.configurable || isBuiltIn) {
                     NuvioInfoBadge(text = stringResource(Res.string.addons_badge_configurable))
                 }
             }

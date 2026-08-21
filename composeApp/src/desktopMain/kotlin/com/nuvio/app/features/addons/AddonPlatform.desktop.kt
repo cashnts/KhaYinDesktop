@@ -1,5 +1,6 @@
 package com.nuvio.app.features.addons
 
+import com.nuvio.app.core.build.AppVersionConfig
 import com.nuvio.app.core.storage.DesktopStorage
 import com.nuvio.app.core.network.DesktopIPv4FirstDns
 import kotlinx.coroutines.Dispatchers
@@ -23,23 +24,34 @@ import java.util.concurrent.TimeUnit
 internal actual object AddonStorage {
     private val store = DesktopStorage.store("nuvio_addons")
     private val json = Json { ignoreUnknownKeys = true }
+    private const val DEFAULT_CINEMETA_URL = "https://v3-cinemeta.strem.io/manifest.json"
+    private const val DEFAULT_KHAYIN_URL = "https://stream.khayin.net/manifest.json"
+    private val DEFAULT_ADDONS = listOf(DEFAULT_CINEMETA_URL, DEFAULT_KHAYIN_URL)
 
     actual fun loadInstalledAddonUrls(profileId: Int): List<String> =
         store.getString("installed_addon_urls_$profileId")
             ?.let { payload -> runCatching { json.decodeFromString<List<String>>(payload) }.getOrNull() }
-            ?: emptyList()
+            ?.let { (DEFAULT_ADDONS + it).distinct() }
+            ?: DEFAULT_ADDONS
 
     actual fun saveInstalledAddonUrls(profileId: Int, urls: List<String>) {
-        store.putString("installed_addon_urls_$profileId", json.encodeToString(urls))
+        store.putString("installed_addon_urls_$profileId", json.encodeToString((DEFAULT_ADDONS + urls).distinct()))
     }
 
     actual fun loadAddonEnabledStates(profileId: Int): Map<String, Boolean> =
-        store.getString("addon_enabled_states_$profileId")
+        (store.getString("addon_enabled_states_$profileId")
             ?.let { payload -> runCatching { json.decodeFromString<Map<String, Boolean>>(payload) }.getOrNull() }
-            ?: emptyMap()
+            ?.toMutableMap()
+            ?: mutableMapOf<String, Boolean>()).apply {
+                put(DEFAULT_CINEMETA_URL, true)
+                putIfAbsent(DEFAULT_KHAYIN_URL, true)
+            }
 
     actual fun saveAddonEnabledStates(profileId: Int, states: Map<String, Boolean>) {
-        store.putString("addon_enabled_states_$profileId", json.encodeToString(states))
+        val updated = states.toMutableMap().apply {
+            put(DEFAULT_CINEMETA_URL, true)
+        }
+        store.putString("addon_enabled_states_$profileId", json.encodeToString(updated))
     }
 }
 
@@ -158,6 +170,9 @@ private fun buildDesktopRequest(
     val normalizedMethod = method.trim().uppercase().ifBlank { "GET" }
     val sanitizedHeaders = headers.withoutAcceptEncoding()
     val builder = Request.Builder().url(url.encodeUnsafeHttpUrlCharacters())
+    if (sanitizedHeaders.getHeaderIgnoreCase("User-Agent") == null) {
+        builder.header("User-Agent", "KhaYin/${AppVersionConfig.DESKTOP_VERSION_NAME.ifBlank { AppVersionConfig.VERSION_NAME.ifBlank { "1.0.0" } }}")
+    }
     sanitizedHeaders.forEach { (key, value) ->
         if (key.isNotBlank() && value.isNotBlank()) {
             builder.header(key, value)

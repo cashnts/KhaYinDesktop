@@ -333,7 +333,7 @@
     <string name="collections_tab_all">All</string>
     <string name="collections_your_collections">Your Collections</string>
     <string name="compose_about_based_on_version_format">Based on Nuvio %1$s</string>
-    <string name="compose_about_made_with">Made with ❤️ by Tapframe and friends</string>
+    <string name="compose_about_made_with">KhaYin • Powered by Nuvio Open Source Engine</string>
     <string name="compose_about_version_format">Version %1$s (%2$s)</string>
     <string name="compose_action_off">Off</string>
     <string name="compose_action_on">On</string>
@@ -525,7 +525,7 @@
     <string name="compose_settings_root_general_section">GENERAL</string>
     <string name="compose_settings_root_integrations_description">Manage available integrations</string>
     <string name="compose_settings_root_notifications_description">Manage episode release alerts and send a test notification.</string>
-    <string name="compose_settings_root_privacy_policy_description">Learn how Nuvio handles your data</string>
+    <string name="compose_settings_root_privacy_policy_description">Learn how KhaYin handles your data</string>
     <string name="compose_settings_root_streams_description">Stream result display and badge URL rules.</string>
     <string name="compose_settings_root_switch_profile_description">Change to a different profile.</string>
     <string name="compose_settings_root_switch_profile_title">Switch Profile</string>
@@ -1348,6 +1348,8 @@
     <string name="source_trakt">Trakt</string>
     <string name="source_mal">MyAnimeList</string>
     <string name="subtitle_language_unknown">Unknown</string>
+    <string name="theme_khayin">KhaYin</string>
+    <string name="theme_dark_indigo">Dark Indigo</string>
     <string name="theme_amber">Amber</string>
     <string name="theme_crimson">Crimson</string>
     <string name="theme_emerald">Emerald</string>
@@ -1644,7 +1646,7 @@
     <string name="addon_already_installed">That addon is already installed.</string>
     <string name="addon_invalid_url">Enter a valid addon URL</string>
     <string name="addon_load_manifest_failed">Unable to load manifest</string>
-    <string name="app_brand_name">Nuvio</string>
+    <string name="app_brand_name">KhaYin</string>
     <string name="auth_account_deletion_failed">Account deletion failed</string>
     <string name="auth_sign_in_failed">Sign-in failed</string>
     <string name="auth_sign_out_failed">Sign-out failed</string>

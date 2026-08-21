@@ -147,3 +147,11 @@ data class PlayerRoute(
     override val hidesNavigationBar: Boolean
         get() = true
 }
+
+@Serializable
+data class AddonCustomPageRoute(
+    val manifestUrl: String,
+    val pageId: String,
+    override val title: String = "",
+) : AppRoute
+

@@ -1,6 +1,8 @@
 *.iml
 .kotlin
 .gradle
+bin/
+**/bin/
 **/build/
 !composeApp/src/**/kotlin/com/nuvio/app/core/build/
 !composeApp/src/**/kotlin/com/nuvio/app/core/build/**

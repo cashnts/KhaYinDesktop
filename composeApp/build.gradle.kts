@@ -577,14 +577,17 @@ fun runtimeConfigBoolean(key: String, default: Boolean): Boolean =
 
 val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generateRuntimeConfigs") {
     outputDir.set(generatedRuntimeConfigDir)
-    localPropertiesFile.set(rootProject.layout.projectDirectory.file("local.properties"))
+    val localProps = rootProject.layout.projectDirectory.file("local.properties")
+    if (localProps.asFile.exists()) {
+        localPropertiesFile.set(localProps)
+    }
     appVersionName.set(releaseAppVersionName)
     appVersionCode.set(releaseAppVersionCode)
     desktopAppVersionName.set(desktopReleaseVersionName)
     desktopAppVersionCode.set(desktopReleaseVersionCode)
-    supabaseUrl.set(runtimeConfigValue("NUVIO_SUPABASE_URL"))
-    supabaseAnonKey.set(runtimeConfigValue("NUVIO_SUPABASE_ANON_KEY"))
-    supabaseFallbackUrl.set(runtimeConfigValue("NUVIO_SUPABASE_FALLBACK_URL"))
+    supabaseUrl.set(runtimeConfigValue("NUVIO_SUPABASE_URL", "https://api.stream.khayin.net"))
+    supabaseAnonKey.set(runtimeConfigValue("NUVIO_SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg3MjIwNTM2LCJleHAiOjE5NDQ5MDA1MzZ9.BpzwMmPVhF3RjDBMgnsKXRqn-3TI-c3QGeRB6-4vs6M"))
+    supabaseFallbackUrl.set(runtimeConfigValue("NUVIO_SUPABASE_FALLBACK_URL", "https://api.stream.khayin.net"))
     sentryDsn.set(runtimeConfigValue("SENTRY_DSN"))
     sentryDesktopDsn.set(runtimeConfigValue("SENTRY_DESKTOP_DSN"))
     sentryEnvironment.set(
@@ -1230,9 +1233,9 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "Nuvio"
+            packageName = "KhaYin"
             packageVersion = desktopReleasePackageVersion
-            vendor = "Nuvio Media"
+            vendor = "KhaYin Media"
             if (isMacHost) {
                 appResourcesRootDir.set(macosPlayerAppResourcesRoot)
             }
@@ -1244,7 +1247,7 @@ compose.desktop {
                 "jdk.unsupported",
             )
             macOS {
-                bundleID = "com.nuvio.media.desktop"
+                bundleID = "net.khayin.stream.desktop"
                 iconFile.set(project.file("src/desktopMain/resources/icons/nuvio-app-icon-transparent.icns"))
                 infoPlist {
                     extraKeysRawXml = """
@@ -1252,9 +1255,10 @@ compose.desktop {
                         <array>
                             <dict>
                                 <key>CFBundleURLName</key>
-                                <string>com.nuvio.media.desktop</string>
+                                <string>net.khayin.stream.desktop</string>
                                 <key>CFBundleURLSchemes</key>
                                 <array>
+                                    <string>khayin</string>
                                     <string>nuvio</string>
                                     <string>stremio</string>
                                 </array>
@@ -1303,10 +1307,15 @@ fun renameMacosDmgOutput(release: Boolean) {
 
     val distributionName = if (release) "main-release" else "main"
     val outputDir = layout.buildDirectory.dir("compose/binaries/$distributionName/dmg").get().asFile
-    val finalDmg = outputDir.resolve("Nuvio-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
-    val defaultDmg = outputDir.resolve("Nuvio-$desktopReleasePackageVersion.dmg")
+    val finalDmg = outputDir.resolve("KhaYin-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
+    val defaultDmg = outputDir.resolve("KhaYin-$desktopReleasePackageVersion.dmg")
+    val fallbackOldDefaultDmg = outputDir.resolve("Nuvio-$desktopReleasePackageVersion.dmg")
+    val fallbackOldFinalDmg = outputDir.resolve("Nuvio-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
     val sourceDmg = defaultDmg.takeIf { it.exists() }
         ?: finalDmg.takeIf { it.exists() }
+        ?: fallbackOldDefaultDmg.takeIf { it.exists() }
+        ?: fallbackOldFinalDmg.takeIf { it.exists() }
+        ?: outputDir.listFiles()?.firstOrNull { it.name.endsWith(".dmg") }
         ?: error("Expected macOS DMG output in ${outputDir.absolutePath}")
 
     if (sourceDmg != finalDmg) {
@@ -1340,10 +1349,15 @@ fun publishWindowsMsiOutput(release: Boolean) {
 
     val distributionName = if (release) "main-release" else "main"
     val outputDir = layout.buildDirectory.dir("compose/binaries/$distributionName/msi").get().asFile
-    val finalMsi = outputDir.resolve("Nuvio-Windows-$windowsPlayerBridgeArch-$desktopReleaseVersionName.msi")
-    val defaultMsi = outputDir.resolve("Nuvio-$desktopReleasePackageVersion.msi")
+    val finalMsi = outputDir.resolve("KhaYin-Windows-$windowsPlayerBridgeArch-$desktopReleaseVersionName.msi")
+    val defaultMsi = outputDir.resolve("KhaYin-$desktopReleasePackageVersion.msi")
+    val fallbackOldDefaultMsi = outputDir.resolve("Nuvio-$desktopReleasePackageVersion.msi")
+    val fallbackOldFinalMsi = outputDir.resolve("Nuvio-Windows-$windowsPlayerBridgeArch-$desktopReleaseVersionName.msi")
     val sourceMsi = defaultMsi.takeIf { it.exists() }
         ?: finalMsi.takeIf { it.exists() }
+        ?: fallbackOldDefaultMsi.takeIf { it.exists() }
+        ?: fallbackOldFinalMsi.takeIf { it.exists() }
+        ?: outputDir.listFiles()?.firstOrNull { it.name.endsWith(".msi") }
         ?: error("Expected Windows MSI output in ${outputDir.absolutePath}")
 
     if (sourceMsi.canonicalFile != finalMsi.canonicalFile) {
@@ -1365,6 +1379,7 @@ fun publishWindowsMsiArtifact(msi: File) {
 }
 
 tasks.matching { it.name == "packageDmg" }.configureEach {
+    notCompatibleWithConfigurationCache("Compose Desktop package tasks are not configuration-cache safe.")
     doLast {
         if (!isMacosDmgNotarizationRequested) {
             renameMacosDmgOutput(release = false)
@@ -1373,6 +1388,7 @@ tasks.matching { it.name == "packageDmg" }.configureEach {
 }
 
 tasks.matching { it.name == "packageReleaseDmg" }.configureEach {
+    notCompatibleWithConfigurationCache("Compose Desktop package tasks are not configuration-cache safe.")
     doLast {
         if (!isMacosDmgNotarizationRequested) {
             renameMacosDmgOutput(release = true)
@@ -1415,8 +1431,8 @@ if (isMacHost) {
         dependsOn("packageReleaseDmg")
         dmgDir.set(layout.buildDirectory.dir("compose/binaries/main-release/dmg"))
         artifactDir.set(layout.buildDirectory.dir("compose/release-dmgs"))
-        finalDmgName.set("Nuvio-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
-        defaultDmgName.set("Nuvio-$desktopReleasePackageVersion.dmg")
+        finalDmgName.set("KhaYin-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
+        defaultDmgName.set("KhaYin-$desktopReleasePackageVersion.dmg")
         keychainProfile.set(macosNotaryKeychainProfile.orEmpty())
         keychainPath.set(macosNotaryKeychainPath.orEmpty())
         signingIdentity.set(macosSigningIdentity.orEmpty())

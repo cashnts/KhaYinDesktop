@@ -18,6 +18,44 @@ data class ThemeColorPalette(
 
 object ThemeColors {
 
+    val KhaYin = ThemeColorPalette(
+        secondary = Color(0xFF00E676),
+        secondaryVariant = Color(0xFF00B0FF),
+        accentGradient = listOf(
+            Color(0xFF00E676),
+            Color(0xFF00C853),
+            Color(0xFF00B4D8),
+            Color(0xFF00B0FF),
+        ),
+        nativeAccentHex = "#00E676",
+        onSecondary = Color(0xFF041C13),
+        onSecondaryVariant = Color(0xFF021724),
+        focusRing = Color(0xFF00E676),
+        focusBackground = Color(0xFF0D3325),
+        background = Color(0xFF081010),
+        backgroundElevated = Color(0xFF101B19),
+        backgroundCard = Color(0xFF152622),
+    )
+
+    val DarkIndigo = ThemeColorPalette(
+        secondary = Color(0xFF6366F1),
+        secondaryVariant = Color(0xFF818CF8),
+        accentGradient = listOf(
+            Color(0xFF818CF8),
+            Color(0xFF6366F1),
+            Color(0xFF4F46E5),
+            Color(0xFF4338CA),
+        ),
+        nativeAccentHex = "#6366F1",
+        onSecondary = Color.White,
+        onSecondaryVariant = Color.White,
+        focusRing = Color(0xFF818CF8),
+        focusBackground = Color(0xFF1E1B4B),
+        background = Color(0xFF0B0C16),
+        backgroundElevated = Color(0xFF121424),
+        backgroundCard = Color(0xFF181B30),
+    )
+
     val Gold = ThemeColorPalette(
         secondary = Color(0xFFE8A91C),
         secondaryVariant = Color(0xFF9A6200),
@@ -174,6 +212,8 @@ object ThemeColors {
     )
 
     fun getColorPalette(theme: AppTheme): ThemeColorPalette = when (theme) {
+        AppTheme.KHAYIN -> KhaYin
+        AppTheme.DARK_INDIGO -> DarkIndigo
         AppTheme.GOLD -> Gold
         AppTheme.JADE -> Jade
         AppTheme.ROSE_GOLD -> RoseGold

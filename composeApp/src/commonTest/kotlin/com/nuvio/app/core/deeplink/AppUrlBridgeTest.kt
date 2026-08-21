@@ -10,12 +10,20 @@ class AppUrlBridgeTest {
     fun `parses existing notification meta deeplink`() {
         assertEquals(
             AppDeepLink.Meta(type = "series", id = "tt0944947"),
+            parseAppDeepLink("khayin://meta?type=series&id=tt0944947"),
+        )
+        assertEquals(
+            AppDeepLink.Meta(type = "series", id = "tt0944947"),
             parseAppDeepLink("nuvio://meta?type=series&id=tt0944947"),
         )
     }
 
     @Test
-    fun `parses direct nuvio addon install deeplink`() {
+    fun `parses direct khayin and nuvio addon install deeplink`() {
+        assertEquals(
+            AppDeepLink.AddonInstall("https://stream.khayin.net/manifest.json"),
+            parseAppDeepLink("khayin://stream.khayin.net/manifest.json"),
+        )
         assertEquals(
             AppDeepLink.AddonInstall("https://free.nebulapro.xyz/sports/i/free/manifest.json"),
             parseAppDeepLink("nuvio://free.nebulapro.xyz/sports/i/free/manifest.json"),
