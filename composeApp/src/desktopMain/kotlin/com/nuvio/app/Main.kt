@@ -114,7 +114,11 @@ fun main(args: Array<String>) {
                 SentryInitializer.close()
                 exitApplication()
             },
-            title = if (smokePlayerUrl == null) "KhaYin" else "KhaYin Player Smoke",
+            title = if (smokePlayerUrl == null) {
+                if (com.nuvio.app.core.build.ClientRoleConfig.IS_ADMIN) "KhaYin Admin" else "KhaYin"
+            } else {
+                "KhaYin Player Smoke"
+            },
             state = windowState,
             icon = painterResource(appIconState.selected.transparentPreviewResource),
         ) {

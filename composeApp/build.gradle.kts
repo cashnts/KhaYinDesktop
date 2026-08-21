@@ -1250,10 +1250,16 @@ compose.desktop {
             "--add-opens=java.desktop/sun.awt.windows=ALL-UNNAMED",
             smokePlayerUrl?.takeIf { it.isNotBlank() }?.let { "-Dnuvio.desktop.smokePlayerUrl=$it" },
         )
+        val clientRoleValue = (findProperty("nuvio.client.role") as? String)
+            ?: System.getenv("NUVIO_CLIENT_ROLE")
+            ?: "user"
+        val isAdminClient = clientRoleValue.equals("admin", ignoreCase = true)
+        val desktopAppDisplayName = if (isAdminClient) "KhaYin Admin" else "KhaYin"
+        val desktopBundleId = if (isAdminClient) "net.khayin.stream.desktop.admin" else "net.khayin.stream.desktop"
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "KhaYin"
+            packageName = desktopAppDisplayName
             packageVersion = desktopReleasePackageVersion
             vendor = "KhaYin Media"
             if (isMacHost) {
@@ -1267,7 +1273,7 @@ compose.desktop {
                 "jdk.unsupported",
             )
             macOS {
-                bundleID = "net.khayin.stream.desktop"
+                bundleID = desktopBundleId
                 iconFile.set(project.file("src/desktopMain/resources/icons/nuvio-app-icon-transparent.icns"))
                 infoPlist {
                     extraKeysRawXml = """
