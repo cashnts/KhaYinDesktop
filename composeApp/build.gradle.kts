@@ -696,6 +696,7 @@ val macosPlayerBridgeCommand = if (missingMacosPlayerBridgeInputs.isNotEmpty()) 
           -framework WebKit \
           -framework Metal \
           -framework Security \
+          -lswiftCore \
           -lswiftCompatibility56 \
           -lswiftCompatibilityConcurrency \
           -lswiftCompatibilityPacks \
