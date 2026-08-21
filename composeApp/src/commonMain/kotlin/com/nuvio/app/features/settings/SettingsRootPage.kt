@@ -98,7 +98,7 @@ internal fun LazyListScope.settingsRootContent(
     showAdvancedSection: Boolean = true,
     showSupportersContributorsPage: Boolean = true,
 ) {
-    if (showAccountSection) {
+    if (showAccountSection && AppFeaturePolicy.isAdminClient) {
         item {
             SettingsSection(
                 title = stringResource(Res.string.compose_settings_root_account_section),
@@ -112,7 +112,7 @@ internal fun LazyListScope.settingsRootContent(
                         isTablet = isTablet,
                         onClick = onAccountClick,
                     )
-                    if (AppFeaturePolicy.isAdminClient && onAdminHubClick != null) {
+                    if (onAdminHubClick != null) {
                         SettingsGroupDivider(isTablet = isTablet)
                         SettingsNavigationRow(
                             title = "Admin Control Hub",

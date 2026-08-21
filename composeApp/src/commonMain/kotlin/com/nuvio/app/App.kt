@@ -789,7 +789,7 @@ fun App(
                         val active = profileState.activeProfile ?: profiles.first()
                         if (profileState.activeProfile == null) {
                             requestProfileSwitch(active, syncOnEnter = true)
-                        } else if (gateScreen != AppGateScreen.Main.name && gateScreen != AppGateScreen.ProfileSwitching.name) {
+                        } else if (gateScreen != AppGateScreen.Main.name && gateScreen != AppGateScreen.ProfileSwitching.name && gateScreen != AppGateScreen.ProfileEdit.name) {
                             gateScreen = AppGateScreen.Main.name
                         }
                     } else {
@@ -797,8 +797,15 @@ fun App(
                         val updatedProfiles = ProfileRepository.state.value.profiles
                         if (updatedProfiles.isNotEmpty()) {
                             requestProfileSwitch(updatedProfiles.first(), syncOnEnter = true)
-                        } else if (gateScreen != AppGateScreen.Main.name) {
-                            gateScreen = AppGateScreen.Main.name
+                            if (gateScreen != AppGateScreen.Main.name && gateScreen != AppGateScreen.ProfileSwitching.name && gateScreen != AppGateScreen.ProfileEdit.name) {
+                                gateScreen = AppGateScreen.Main.name
+                            }
+                        } else {
+                            editingProfile = null
+                            isNewProfile = true
+                            if (gateScreen != AppGateScreen.ProfileEdit.name) {
+                                gateScreen = AppGateScreen.ProfileEdit.name
+                            }
                         }
                     }
                 }
@@ -824,7 +831,9 @@ fun App(
                 AppGateScreen.LicenseActivation.name -> {
                     LicenseActivationScreen(
                         onActivated = {
-                            gateScreen = AppGateScreen.Loading.name
+                            editingProfile = null
+                            isNewProfile = true
+                            gateScreen = AppGateScreen.ProfileEdit.name
                         },
                         onOpenAdminPanel = {
                             gateScreen = AppGateScreen.AdminPanel.name
@@ -885,12 +894,36 @@ fun App(
                 }
                 AppGateScreen.ProfileEdit.name -> {
                     PlatformBackHandler(enabled = gateScreen == AppGateScreen.ProfileEdit.name) {
-                        gateScreen = AppGateScreen.ProfileSelection.name
+                        if (AppFeaturePolicy.isUserClient) {
+                            if (profileState.profiles.isNotEmpty()) {
+                                gateScreen = AppGateScreen.Main.name
+                            }
+                        } else {
+                            gateScreen = AppGateScreen.ProfileSelection.name
+                        }
                     }
                     ProfileEditScreen(
                         profile = editingProfile,
-                        onBack = { gateScreen = AppGateScreen.ProfileSelection.name },
-                        onSaved = { gateScreen = AppGateScreen.ProfileSelection.name },
+                        onBack = {
+                            if (AppFeaturePolicy.isUserClient) {
+                                if (profileState.profiles.isNotEmpty()) {
+                                    gateScreen = AppGateScreen.Main.name
+                                }
+                            } else {
+                                gateScreen = AppGateScreen.ProfileSelection.name
+                            }
+                        },
+                        onSaved = {
+                            if (AppFeaturePolicy.isUserClient) {
+                                val savedProfile = ProfileRepository.state.value.profiles.firstOrNull()
+                                if (savedProfile != null) {
+                                    requestProfileSwitch(savedProfile, syncOnEnter = true)
+                                }
+                                gateScreen = AppGateScreen.Main.name
+                            } else {
+                                gateScreen = AppGateScreen.ProfileSelection.name
+                            }
+                        },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
