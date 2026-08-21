@@ -759,7 +759,17 @@ fun App(
                                 gateScreen = AppGateScreen.Main.name
                             }
                         } else {
-                            gateScreen = AppGateScreen.Main.name
+                            ProfileRepository.pullProfiles()
+                            val pulled = ProfileRepository.state.value.profiles
+                            if (pulled.isNotEmpty()) {
+                                val act = ProfileRepository.state.value.activeProfile ?: pulled.first()
+                                requestProfileSwitch(act, syncOnEnter = true)
+                                gateScreen = AppGateScreen.Main.name
+                            } else {
+                                editingProfile = null
+                                isNewProfile = true
+                                gateScreen = AppGateScreen.ProfileEdit.name
+                            }
                         }
                     }
                 }
@@ -950,6 +960,11 @@ fun App(
                             autoSkipProfileSelection = false
                             gateScreen = AppGateScreen.ProfileSelection.name
                         },
+                        onAddProfile = {
+                            editingProfile = null
+                            isNewProfile = true
+                            gateScreen = AppGateScreen.ProfileEdit.name
+                        },
                         onOpenAdminHub = {
                             gateScreen = AppGateScreen.AdminPanel.name
                         },
@@ -978,6 +993,7 @@ private fun MainAppContent(
     nativeProfileSwitcherController: NativeProfileSwitcherController? = null,
     onRootContentReady: ((Boolean) -> Unit)? = null,
     onSwitchProfile: () -> Unit = {},
+    onAddProfile: () -> Unit = {},
     onOpenAdminHub: (() -> Unit)? = null,
 ) {
         val navBackStack = rememberNavBackStack(navigationSavedStateConfiguration, initialRoute)
@@ -2141,7 +2157,7 @@ private fun MainAppContent(
                                                 selected = selectedTab == AppScreenTab.Settings,
                                                 onClick = { handleRootTabClick(AppScreenTab.Settings) },
                                                 onProfileSelected = onProfileSelected,
-                                                onAddProfileRequested = onSwitchProfile,
+                                                onAddProfileRequested = onAddProfile,
                                             )
                                         }
                                     }
@@ -2298,14 +2314,14 @@ private fun MainAppContent(
                                         selectedTab = selectedTab,
                                         onTabSelected = ::handleRootTabClick,
                                         onProfileSelected = onProfileSelected,
-                                        onAddProfileRequested = onSwitchProfile,
+                                        onAddProfileRequested = onAddProfile,
                                     )
                                 } else if (useFloatingTopBar) {
                                     TabletFloatingTopBar(
                                         selectedTab = selectedTab,
                                         onTabSelected = ::handleRootTabClick,
                                         onProfileSelected = onProfileSelected,
-                                        onAddProfileRequested = onSwitchProfile,
+                                        onAddProfileRequested = onAddProfile,
                                     )
                                 }
 
@@ -2352,7 +2368,7 @@ private fun MainAppContent(
                                                 selected = selectedTab == AppScreenTab.Settings,
                                                 onClick = { handleRootTabClick(AppScreenTab.Settings) },
                                                 onProfileSelected = onProfileSelected,
-                                                onAddProfileRequested = onSwitchProfile,
+                                                onAddProfileRequested = onAddProfile,
                                             )
                                         }
                                     }

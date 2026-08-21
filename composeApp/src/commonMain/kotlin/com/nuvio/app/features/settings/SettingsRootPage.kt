@@ -98,48 +98,62 @@ internal fun LazyListScope.settingsRootContent(
     showAdvancedSection: Boolean = true,
     showSupportersContributorsPage: Boolean = true,
 ) {
-    if (showAccountSection && AppFeaturePolicy.isAdminClient) {
+    if (showAccountSection) {
         item {
             SettingsSection(
-                title = stringResource(Res.string.compose_settings_root_account_section),
+                title = if (AppFeaturePolicy.isAdminClient) {
+                    stringResource(Res.string.compose_settings_root_account_section)
+                } else {
+                    "Subscription"
+                },
                 isTablet = isTablet,
             ) {
                 SettingsGroup(isTablet = isTablet) {
-                    SettingsNavigationRow(
-                        title = stringResource(Res.string.compose_settings_page_account),
-                        description = stringResource(Res.string.compose_settings_root_account_description),
-                        icon = Icons.Rounded.AccountCircle,
-                        isTablet = isTablet,
-                        onClick = onAccountClick,
-                    )
-                    if (onAdminHubClick != null) {
-                        SettingsGroupDivider(isTablet = isTablet)
+                    if (AppFeaturePolicy.isAdminClient) {
                         SettingsNavigationRow(
-                            title = "Admin Control Hub",
-                            description = "License keys, mass addon push, broadcast notices, service controls",
-                            icon = Icons.Rounded.AdminPanelSettings,
+                            title = stringResource(Res.string.compose_settings_page_account),
+                            description = stringResource(Res.string.compose_settings_root_account_description),
+                            icon = Icons.Rounded.AccountCircle,
                             isTablet = isTablet,
-                            onClick = onAdminHubClick,
+                            onClick = onAccountClick,
                         )
-                    }
-                    if (onSwitchProfileClick != null) {
-                        SettingsGroupDivider(isTablet = isTablet)
+                        if (onAdminHubClick != null) {
+                            SettingsGroupDivider(isTablet = isTablet)
+                            SettingsNavigationRow(
+                                title = "Admin Control Hub",
+                                description = "License keys, mass addon push, broadcast notices, service controls",
+                                icon = Icons.Rounded.AdminPanelSettings,
+                                isTablet = isTablet,
+                                onClick = onAdminHubClick,
+                            )
+                        }
+                        if (onSwitchProfileClick != null) {
+                            SettingsGroupDivider(isTablet = isTablet)
+                            SettingsNavigationRow(
+                                title = stringResource(Res.string.compose_settings_root_switch_profile_title),
+                                description = stringResource(Res.string.compose_settings_root_switch_profile_description),
+                                icon = Icons.Rounded.People,
+                                isTablet = isTablet,
+                                onClick = onSwitchProfileClick,
+                            )
+                        }
+                        if (showTrackingEntry) {
+                            SettingsGroupDivider(isTablet = isTablet)
+                            SettingsNavigationRow(
+                                title = stringResource(Res.string.compose_settings_page_tracking),
+                                description = stringResource(Res.string.compose_settings_root_tracking_description),
+                                icon = Icons.Default.Sync,
+                                isTablet = isTablet,
+                                onClick = onTrackingClick,
+                            )
+                        }
+                    } else {
                         SettingsNavigationRow(
-                            title = stringResource(Res.string.compose_settings_root_switch_profile_title),
-                            description = stringResource(Res.string.compose_settings_root_switch_profile_description),
-                            icon = Icons.Rounded.People,
+                            title = "Subscription & License",
+                            description = "Active plan, expiry date, and license status",
+                            icon = Icons.Rounded.AccountCircle,
                             isTablet = isTablet,
-                            onClick = onSwitchProfileClick,
-                        )
-                    }
-                    if (showTrackingEntry) {
-                        SettingsGroupDivider(isTablet = isTablet)
-                        SettingsNavigationRow(
-                            title = stringResource(Res.string.compose_settings_page_tracking),
-                            description = stringResource(Res.string.compose_settings_root_tracking_description),
-                            icon = Icons.Default.Sync,
-                            isTablet = isTablet,
-                            onClick = onTrackingClick,
+                            onClick = onAccountClick,
                         )
                     }
                 }

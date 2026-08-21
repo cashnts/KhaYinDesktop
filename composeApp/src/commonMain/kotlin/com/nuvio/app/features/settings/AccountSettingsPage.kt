@@ -51,13 +51,150 @@ import nuvio.composeapp.generated.resources.settings_account_status
 import nuvio.composeapp.generated.resources.settings_account_status_anonymous
 import nuvio.composeapp.generated.resources.settings_account_status_signed_in
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.Verified
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import com.nuvio.app.features.license.LicenseInfo
+import com.nuvio.app.features.license.LicenseRepository
+import com.nuvio.app.features.license.LicenseState
+import com.nuvio.app.features.license.activeInfo
 
 internal fun LazyListScope.accountSettingsContent(
     isTablet: Boolean,
 ) {
     item {
-        AccountSettingsBody(isTablet = isTablet)
+        if (AppFeaturePolicy.isUserClient) {
+            SubscriptionSettingsBody(isTablet = isTablet)
+        } else {
+            AccountSettingsBody(isTablet = isTablet)
+        }
     }
+}
+
+@Composable
+private fun SubscriptionSettingsBody(
+    isTablet: Boolean,
+) {
+    val licenseState by LicenseRepository.state.collectAsStateWithLifecycle()
+    val licenseInfo = licenseState.activeInfo
+    val clipboardManager = LocalClipboardManager.current
+    var showDeactivateConfirm by remember { mutableStateOf(false) }
+    var copiedKey by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        NuvioSurfaceCard {
+            Text(
+                text = "Subscription & License",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+
+            if (licenseInfo != null) {
+                AccountInfoRow(
+                    label = "Status",
+                    value = if (licenseInfo.status.equals("active", ignoreCase = true)) "Active" else licenseInfo.status.replaceFirstChar { it.uppercase() },
+                    valueColor = if (licenseInfo.status.equals("active", ignoreCase = true)) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                AccountInfoRow(
+                    label = "Tier",
+                    value = (licenseInfo.tier ?: "Standard").replaceFirstChar { it.uppercase() },
+                    valueColor = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                val expiryText = if (licenseInfo.expiresAt.isNullOrBlank()) {
+                    "Lifetime Access (No Expiration)"
+                } else {
+                    licenseInfo.expiresAt.take(10)
+                }
+                AccountInfoRow(
+                    label = "Expires On",
+                    value = expiryText,
+                    valueColor = if (licenseInfo.expiresAt.isNullOrBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                AccountInfoRow(
+                    label = "Devices",
+                    value = "${licenseInfo.activeDevices} / ${licenseInfo.maxDevices} Active",
+                )
+
+                licenseInfo.customerName?.takeIf { it.isNotBlank() }?.let { name ->
+                    Spacer(modifier = Modifier.height(10.dp))
+                    AccountInfoRow(
+                        label = "Licensed To",
+                        value = name,
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "License Key",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = licenseInfo.key,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(licenseInfo.key))
+                            copiedKey = true
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.ContentCopy,
+                            contentDescription = "Copy License Key",
+                            tint = if (copiedKey) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            } else {
+                Text(
+                    text = "No active license attached.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        NuvioPrimaryButton(
+            text = "Switch / Deactivate License",
+            onClick = { showDeactivateConfirm = true },
+        )
+    }
+
+    NuvioStatusModal(
+        title = "Deactivate License",
+        message = "Are you sure you want to deactivate this license key on this device? You can re-enter a key at any time.",
+        isVisible = showDeactivateConfirm,
+        confirmText = "Deactivate",
+        dismissText = stringResource(Res.string.action_cancel),
+        onConfirm = {
+            showDeactivateConfirm = false
+            LicenseRepository.deactivate()
+        },
+        onDismiss = { showDeactivateConfirm = false },
+    )
 }
 
 @Composable

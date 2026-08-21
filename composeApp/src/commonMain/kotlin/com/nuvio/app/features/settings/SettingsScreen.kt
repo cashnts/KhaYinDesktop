@@ -101,7 +101,6 @@ private const val SettingsSearchRevealHapticDelayMillis = 90L
 
 private fun SettingsPage.isEnabledByPolicy(): Boolean =
     when (this) {
-        SettingsPage.Account -> AppFeaturePolicy.isAdminClient
         SettingsPage.Notifications -> AppFeaturePolicy.notificationsEnabled
         SettingsPage.Plugins -> AppFeaturePolicy.pluginsEnabled
         SettingsPage.SupportersContributors -> AppFeaturePolicy.supportersContributorsPageEnabled
@@ -906,9 +905,14 @@ private fun TabletSettingsScreen(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 Spacer(modifier = Modifier.height(10.dp))
-                SettingsCategory.entries.filter { if (it == SettingsCategory.Account) AppFeaturePolicy.isAdminClient else true }.forEach { category ->
+                SettingsCategory.entries.forEach { category ->
+                    val label = if (category == SettingsCategory.Account && !AppFeaturePolicy.isAdminClient) {
+                        "Subscription"
+                    } else {
+                        stringResource(category.labelRes)
+                    }
                     SettingsSidebarItem(
-                        label = stringResource(category.labelRes),
+                        label = label,
                         icon = category.icon,
                         selected = category == activeCategory,
                         onClick = {
@@ -1004,12 +1008,20 @@ private fun TabletSettingsScreen(
                         TabletPageHeader(
                             title = if (page == SettingsPage.Root) {
                                 if (settingsSearchQuery.isBlank()) {
-                                    stringResource(activeCategory.labelRes)
+                                    if (activeCategory == SettingsCategory.Account && !AppFeaturePolicy.isAdminClient) {
+                                        "Subscription"
+                                    } else {
+                                        stringResource(activeCategory.labelRes)
+                                    }
                                 } else {
                                     stringResource(Res.string.compose_settings_page_root)
                                 }
                             } else {
-                                stringResource(page.titleRes)
+                                if (page == SettingsPage.Account && !AppFeaturePolicy.isAdminClient) {
+                                    "Subscription & License"
+                                } else {
+                                    stringResource(page.titleRes)
+                                }
                             },
                             showBack = previousPage != null,
                             onBack = { previousPage?.let(onPageChange) },
