@@ -719,12 +719,54 @@ fun App(
         val licenseState by LicenseRepository.state.collectAsStateWithLifecycle()
 
         LaunchedEffect(Unit) {
-            LicenseRepository.initialize()
+            if (AppFeaturePolicy.isUserClient) {
+                LicenseRepository.initialize()
+            }
         }
 
-        LaunchedEffect(licenseState, profileState.profiles, gateScreen) {
+        LaunchedEffect(licenseState, authState, profileState.profiles, gateScreen) {
             if (gateScreen == AppGateScreen.ProfileSwitching.name || gateScreen == AppGateScreen.AdminPanel.name) return@LaunchedEffect
 
+            if (AppFeaturePolicy.isAdminClient) {
+                // Admin client uses normal account system
+                val cachedProfiles = profileState.profiles
+                when (authState) {
+                    is AuthState.Loading -> {
+                        if (cachedProfiles.isNotEmpty()) {
+                            val active = profileState.activeProfile ?: cachedProfiles.first()
+                            if (profileState.activeProfile == null) {
+                                requestProfileSwitch(active, syncOnEnter = false)
+                            } else {
+                                gateScreen = AppGateScreen.Main.name
+                            }
+                        } else {
+                            gateScreen = AppGateScreen.Loading.name
+                        }
+                    }
+                    is AuthState.Unauthenticated -> {
+                        ProfileRepository.clearInMemory()
+                        gateScreen = AppGateScreen.Auth.name
+                    }
+                    is AuthState.Authenticated -> {
+                        val authenticatedState = authState as AuthState.Authenticated
+                        ProfileRepository.ensureLoaded(authenticatedState.userId)
+                        val profiles = ProfileRepository.state.value.profiles
+                        if (profiles.isNotEmpty()) {
+                            val active = profileState.activeProfile ?: profiles.first()
+                            if (profileState.activeProfile == null) {
+                                requestProfileSwitch(active, syncOnEnter = true)
+                            } else {
+                                gateScreen = AppGateScreen.Main.name
+                            }
+                        } else {
+                            gateScreen = AppGateScreen.Main.name
+                        }
+                    }
+                }
+                return@LaunchedEffect
+            }
+
+            // User client uses license system
             when (val lic = licenseState) {
                 is LicenseState.Loading -> {
                     if (gateScreen != AppGateScreen.Loading.name) {
@@ -875,6 +917,9 @@ fun App(
                             autoSkipProfileSelection = false
                             gateScreen = AppGateScreen.ProfileSelection.name
                         },
+                        onOpenAdminHub = {
+                            gateScreen = AppGateScreen.AdminPanel.name
+                        },
                     )
                 }
             }
@@ -900,6 +945,7 @@ private fun MainAppContent(
     nativeProfileSwitcherController: NativeProfileSwitcherController? = null,
     onRootContentReady: ((Boolean) -> Unit)? = null,
     onSwitchProfile: () -> Unit = {},
+    onOpenAdminHub: (() -> Unit)? = null,
 ) {
         val navBackStack = rememberNavBackStack(navigationSavedStateConfiguration, initialRoute)
         val routeDisposalDecorator = remember {
@@ -2149,6 +2195,7 @@ private fun MainAppContent(
                                         libraryDisintegrationRequest = libraryDisintegrationRequests.current,
                                         continueWatchingDisintegrationRequest = continueWatchingDisintegrationRequests.current,
                                         onSwitchProfile = onSwitchProfile,
+                                        onOpenAdminHub = onOpenAdminHub,
                                         onHomescreenSettingsClick = { navController.navigate(HomescreenSettingsRoute(homescreenSettingsTitle)) },
                                         onMetaScreenSettingsClick = { navController.navigate(MetaScreenSettingsRoute(metaScreenSettingsTitle)) },
                                         onContinueWatchingSettingsClick = { navController.navigate(ContinueWatchingSettingsRoute(continueWatchingSettingsTitle)) },
@@ -3255,6 +3302,7 @@ private fun MainAppContent(
                         modifier = Modifier.fillMaxSize(),
                         requestedPageName = route.pageName,
                         onRequestedPageConsumed = {},
+                        onAdminHubClick = onOpenAdminHub,
                         onDownloadsClick = {
                             navController.navigate(DownloadsSettingsRoute(downloadsSettingsTitle))
                         },
@@ -3886,6 +3934,7 @@ private fun AppTabHost(
     libraryDisintegrationRequest: DisintegrationRequest<String>? = null,
     continueWatchingDisintegrationRequest: DisintegrationRequest<String>? = null,
     onSwitchProfile: (() -> Unit)? = null,
+    onOpenAdminHub: (() -> Unit)? = null,
     onHomescreenSettingsClick: () -> Unit = {},
     onMetaScreenSettingsClick: () -> Unit = {},
     onContinueWatchingSettingsClick: () -> Unit = {},
@@ -3974,6 +4023,7 @@ private fun AppTabHost(
                                 onAddonsClick = onAddonsSettingsClick,
                                 onPluginsClick = onPluginsSettingsClick,
                                 onAccountClick = onAccountSettingsClick,
+                                onAdminHubClick = onOpenAdminHub,
                                 onSupportersContributorsClick = onSupportersContributorsSettingsClick,
                                 onLicensesAttributionsClick = onLicensesAttributionsSettingsClick,
                                 onCheckForUpdatesClick = onCheckForUpdatesClick,
@@ -4077,6 +4127,7 @@ private fun AppSettingsTabContent(
     onAddonsClick: () -> Unit,
     onPluginsClick: () -> Unit,
     onAccountClick: () -> Unit,
+    onAdminHubClick: (() -> Unit)? = null,
     onSupportersContributorsClick: () -> Unit,
     onLicensesAttributionsClick: () -> Unit,
     onCheckForUpdatesClick: (() -> Unit)?,
@@ -4097,6 +4148,7 @@ private fun AppSettingsTabContent(
         onAddonsClick = onAddonsClick,
         onPluginsClick = onPluginsClick,
         onAccountClick = onAccountClick,
+        onAdminHubClick = onAdminHubClick,
         onSupportersContributorsClick = onSupportersContributorsClick,
         onLicensesAttributionsClick = onLicensesAttributionsClick,
         onCheckForUpdatesClick = onCheckForUpdatesClick,

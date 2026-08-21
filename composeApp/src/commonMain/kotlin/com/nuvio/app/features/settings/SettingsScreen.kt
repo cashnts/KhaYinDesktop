@@ -122,6 +122,7 @@ fun SettingsScreen(
     onPluginsClick: () -> Unit = {},
     onDownloadsClick: () -> Unit = {},
     onAccountClick: () -> Unit = {},
+    onAdminHubClick: (() -> Unit)? = null,
     onSupportersContributorsClick: () -> Unit = {},
     onLicensesAttributionsClick: () -> Unit = {},
     onCheckForUpdatesClick: (() -> Unit)? = null,
@@ -347,6 +348,7 @@ fun SettingsScreen(
                 onCheckForUpdatesClick = onCheckForUpdatesClick,
                 onTestUpdateBannerClick = onTestUpdateBannerClick,
                 onCollectionsClick = onCollectionsClick,
+                onAdminHubClick = onAdminHubClick,
             )
         } else {
             MobileSettingsScreen(
@@ -410,6 +412,7 @@ fun SettingsScreen(
                 onPluginsClick = onPluginsClick,
                 onDownloadsClick = onDownloadsClick,
                 onAccountClick = onAccountClick,
+                onAdminHubClick = onAdminHubClick,
                 onSupportersContributorsClick = onSupportersContributorsClick,
                 onLicensesAttributionsClick = onLicensesAttributionsClick,
                 onCheckForUpdatesClick = onCheckForUpdatesClick,
@@ -482,6 +485,7 @@ private fun MobileSettingsScreen(
     onPluginsClick: () -> Unit = {},
     onDownloadsClick: () -> Unit = {},
     onAccountClick: () -> Unit = {},
+    onAdminHubClick: (() -> Unit)? = null,
     onSupportersContributorsClick: () -> Unit = {},
     onLicensesAttributionsClick: () -> Unit = {},
     onCheckForUpdatesClick: (() -> Unit)? = null,
@@ -606,6 +610,7 @@ private fun MobileSettingsScreen(
                             onTestUpdateBannerClick = onTestUpdateBannerClick,
                             onDownloadsClick = onDownloadsClick,
                             onAccountClick = onAccountClick,
+                            onAdminHubClick = onAdminHubClick,
                             onSwitchProfileClick = onSwitchProfile,
                             showDownloadsEntry = AppFeaturePolicy.downloadsEnabled,
                             showNotificationsEntry = AppFeaturePolicy.notificationsEnabled,
@@ -855,6 +860,7 @@ private fun TabletSettingsScreen(
     onCheckForUpdatesClick: (() -> Unit)? = null,
     onTestUpdateBannerClick: (() -> Unit)? = null,
     onCollectionsClick: () -> Unit = {},
+    onAdminHubClick: (() -> Unit)? = null,
 ) {
     var selectedCategory by rememberSaveable { mutableStateOf(SettingsCategory.General.name) }
     val activeCategory = SettingsCategory.valueOf(selectedCategory)
@@ -1035,6 +1041,7 @@ private fun TabletSettingsScreen(
                                     onTestUpdateBannerClick = onTestUpdateBannerClick,
                                     onDownloadsClick = onDownloadsClick,
                                     onAccountClick = { openInlinePage(SettingsPage.Account) },
+                                    onAdminHubClick = onAdminHubClick,
                                     onSwitchProfileClick = onSwitchProfile,
                                     showDownloadsEntry = AppFeaturePolicy.downloadsEnabled,
                                     showNotificationsEntry = AppFeaturePolicy.notificationsEnabled,

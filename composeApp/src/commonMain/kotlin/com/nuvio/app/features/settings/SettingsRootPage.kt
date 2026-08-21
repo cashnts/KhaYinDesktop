@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.rounded.AdminPanelSettings
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Extension
@@ -26,6 +27,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
+import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.core.build.AppVersionPolicy
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.compose_about_based_on_version_format
@@ -84,6 +86,7 @@ internal fun LazyListScope.settingsRootContent(
     onTestUpdateBannerClick: (() -> Unit)? = null,
     onDownloadsClick: () -> Unit,
     onAccountClick: () -> Unit,
+    onAdminHubClick: (() -> Unit)? = null,
     onSwitchProfileClick: (() -> Unit)? = null,
     showTrackingEntry: Boolean = false,
     showIntegrationsEntry: Boolean = false,
@@ -109,6 +112,16 @@ internal fun LazyListScope.settingsRootContent(
                         isTablet = isTablet,
                         onClick = onAccountClick,
                     )
+                    if (AppFeaturePolicy.isAdminClient && onAdminHubClick != null) {
+                        SettingsGroupDivider(isTablet = isTablet)
+                        SettingsNavigationRow(
+                            title = "Admin Control Hub",
+                            description = "License keys, mass addon push, broadcast notices, service controls",
+                            icon = Icons.Rounded.AdminPanelSettings,
+                            isTablet = isTablet,
+                            onClick = onAdminHubClick,
+                        )
+                    }
                     if (onSwitchProfileClick != null) {
                         SettingsGroupDivider(isTablet = isTablet)
                         SettingsNavigationRow(

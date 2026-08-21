@@ -78,7 +78,9 @@ fun LicenseExpiredScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             AppBrandWordmark(
-                modifier = Modifier.padding(bottom = 20.dp),
+                modifier = Modifier
+                    .height(90.dp)
+                    .padding(bottom = 14.dp),
             )
 
             Icon(
@@ -209,33 +211,6 @@ fun LicenseExpiredScreen(
                     Text(
                         text = "Enter New License Key",
                         style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp),
-                    )
-                }
-            }
-
-            if (com.nuvio.app.core.build.AppFeaturePolicy.isAdminClient) {
-                Spacer(modifier = Modifier.height(20.dp))
-
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onOpenAdminPanel)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.AdminPanelSettings,
-                        contentDescription = null,
-                        tint = Color(0xFF6B6B7F),
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Administrator Portal",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = Color(0xFF6B6B7F),
-                            fontWeight = FontWeight.Medium,
-                        ),
                     )
                 }
             }
