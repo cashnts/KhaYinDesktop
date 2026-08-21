@@ -1,4 +1,4 @@
-name: KhaYin Multi-Platform Build & Cloudflare R2 Release
+name: KhaYin Desktop Multi-Platform Release (macOS & Windows)
 
 on:
   workflow_dispatch:
@@ -11,7 +11,6 @@ on:
           - all
           - macos
           - windows
-          - android
         default: all
       version_override:
         description: 'Optional version tag override (e.g. 1.0.0 or 1). Leave empty to use DesktopVersion.properties'
@@ -73,7 +72,7 @@ jobs:
           echo "Resolved version: ${CLEAN_VERSION}"
 
   # ---------------------------------------------------------------------------
-  # 2. Build macOS (Apple Silicon ARM64 & Intel)
+  # 2. Build macOS (Apple Silicon ARM64)
   # ---------------------------------------------------------------------------
   build-macos:
     name: Build macOS (ARM64)
@@ -125,7 +124,7 @@ jobs:
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
-  # 3. Build Windows (x64 MSI & EXE)
+  # 3. Build Windows (x64 MSI)
   # ---------------------------------------------------------------------------
   build-windows:
     name: Build Windows (x64)
@@ -200,62 +199,13 @@ jobs:
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
-  # 4. Build Android (Release APK)
-  # ---------------------------------------------------------------------------
-  build-android:
-    name: Build Android APK
-    needs: metadata
-    if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'android' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-          cache: 'gradle'
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      - name: Build Android Release APK
-        run: |
-          ./gradlew :androidApp:assembleFullRelease -Pnuvio.android.distribution=full --no-configuration-cache --stacktrace
-
-      - name: Rename and Prepare Android Artifact
-        run: |
-          VERSION="${{ needs.metadata.outputs.version }}"
-          mkdir -p dist
-          
-          APK_FILE=$(find . -type f -path "*/build/outputs/apk/*" -name "*.apk" | head -n 1)
-          if [ -f "$APK_FILE" ]; then
-            cp "$APK_FILE" "dist/khayin-android-v${VERSION}.apk"
-            echo "Created dist/khayin-android-v${VERSION}.apk"
-          else
-            echo "Warning: APK file not found!"
-          fi
-
-      - name: Upload Android Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-artifacts
-          path: dist/*
-          if-no-files-found: warn
-
-  # ---------------------------------------------------------------------------
-  # 5. Collect, Upload to Cloudflare R2 & Publish Release
+  # 4. Collect, Upload to Cloudflare R2 & Publish Release
   # ---------------------------------------------------------------------------
   publish-release:
     name: Upload to Cloudflare R2 & Publish Release
-    needs: [metadata, build-macos, build-windows, build-android]
+    needs: [metadata, build-macos, build-windows]
     runs-on: ubuntu-latest
-    if: always() && (needs.build-macos.result == 'success' || needs.build-windows.result == 'success' || needs.build-android.result == 'success')
+    if: always() && (needs.build-macos.result == 'success' || needs.build-windows.result == 'success')
     steps:
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
