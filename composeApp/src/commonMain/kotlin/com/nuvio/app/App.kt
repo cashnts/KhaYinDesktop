@@ -218,6 +218,15 @@ import com.nuvio.app.features.profiles.ProfileSwitcherTab
 import com.nuvio.app.features.profiles.SidebarProfileSwitcherStack
 import com.nuvio.app.features.profiles.parseHexColor
 import com.nuvio.app.features.profiles.profileAvatarImageUrl
+import com.nuvio.app.features.license.LicenseRepository
+import com.nuvio.app.features.license.LicenseState
+import com.nuvio.app.features.license.LicenseInfo
+import com.nuvio.app.features.license.LicenseActivationScreen
+import com.nuvio.app.features.license.LicenseExpiredScreen
+import com.nuvio.app.features.license.AdminLicenseScreen
+import com.nuvio.app.features.license.isActive
+import com.nuvio.app.features.license.isExpired
+import com.nuvio.app.features.license.activeInfo
 import com.nuvio.app.features.search.SearchScreen
 import com.nuvio.app.features.settings.SettingsScreen
 import com.nuvio.app.features.settings.HomescreenSettingsScreen
@@ -452,6 +461,9 @@ private fun PlayerLaunch.toExternalPlayerPlaybackRequest(): ExternalPlayerPlayba
 
 private enum class AppGateScreen {
     Loading,
+    LicenseActivation,
+    LicenseExpired,
+    AdminPanel,
     Auth,
     ProfileSelection,
     ProfileSwitching,
@@ -704,82 +716,50 @@ fun App(
             }
         }
 
-        LaunchedEffect(authState, networkStatusUiState.condition, profileState.profiles) {
-            if (gateScreen == AppGateScreen.ProfileSwitching.name) return@LaunchedEffect
+        val licenseState by LicenseRepository.state.collectAsStateWithLifecycle()
 
-            val cachedProfiles = profileState.profiles
-            val hasCachedProfileAccess =
-                cachedProfiles.isNotEmpty() &&
-                    authState !is AuthState.Authenticated
-            val allowCachedProfileAccess =
-                hasCachedProfileAccess &&
-                    (
-                        networkStatusUiState.condition != NetworkCondition.Online ||
-                            gateScreen != AppGateScreen.Auth.name
-                    )
+        LaunchedEffect(Unit) {
+            LicenseRepository.initialize()
+        }
 
-            when (authState) {
-                is AuthState.Loading -> {
-                    if (hasCachedProfileAccess) {
-                        enterProfileGate(cachedProfiles, syncOnEnter = false)
-                    } else {
+        LaunchedEffect(licenseState, profileState.profiles, gateScreen) {
+            if (gateScreen == AppGateScreen.ProfileSwitching.name || gateScreen == AppGateScreen.AdminPanel.name) return@LaunchedEffect
+
+            when (val lic = licenseState) {
+                is LicenseState.Loading -> {
+                    if (gateScreen != AppGateScreen.Loading.name) {
                         gateScreen = AppGateScreen.Loading.name
                     }
                 }
-                is AuthState.Unauthenticated -> {
-                    if (allowCachedProfileAccess) {
-                        enterProfileGate(cachedProfiles, syncOnEnter = false)
+                is LicenseState.Unlicensed -> {
+                    if (gateScreen != AppGateScreen.LicenseActivation.name) {
+                        gateScreen = AppGateScreen.LicenseActivation.name
+                    }
+                }
+                is LicenseState.Expired, is LicenseState.Revoked -> {
+                    if (gateScreen != AppGateScreen.LicenseExpired.name) {
+                        gateScreen = AppGateScreen.LicenseExpired.name
+                    }
+                }
+                is LicenseState.Active -> {
+                    val profiles = profileState.profiles
+                    if (profiles.isNotEmpty()) {
+                        val active = profileState.activeProfile ?: profiles.first()
+                        if (profileState.activeProfile == null) {
+                            requestProfileSwitch(active, syncOnEnter = true)
+                        } else if (gateScreen != AppGateScreen.Main.name && gateScreen != AppGateScreen.ProfileSwitching.name) {
+                            gateScreen = AppGateScreen.Main.name
+                        }
                     } else {
-                        ProfileRepository.clearInMemory()
-                        gateScreen = AppGateScreen.Auth.name
+                        ProfileRepository.ensureLoaded(lic.info.key)
+                        val updatedProfiles = ProfileRepository.state.value.profiles
+                        if (updatedProfiles.isNotEmpty()) {
+                            requestProfileSwitch(updatedProfiles.first(), syncOnEnter = true)
+                        } else if (gateScreen != AppGateScreen.Main.name) {
+                            gateScreen = AppGateScreen.Main.name
+                        }
                     }
                 }
-                is AuthState.Authenticated -> {
-                    val authenticatedState = authState as AuthState.Authenticated
-                    ProfileRepository.ensureLoaded(authenticatedState.userId)
-                    if (gateScreen == AppGateScreen.Loading.name || gateScreen == AppGateScreen.Auth.name) {
-                        enterProfileGate(ProfileRepository.state.value.profiles, syncOnEnter = true)
-                    }
-                }
-            }
-        }
-
-        LaunchedEffect((authState as? AuthState.Authenticated)?.userId) {
-            val authenticatedState = authState as? AuthState.Authenticated ?: return@LaunchedEffect
-            ProfileRepository.ensureLoaded(authenticatedState.userId)
-            ProfileRepository.pullProfiles()
-        }
-
-        LaunchedEffect(
-            gateScreen,
-            autoSkipProfileSelection,
-            profileState.profiles,
-            profileState.hasEverSelectedProfile,
-            profileState.rememberLastProfileEnabled,
-            profileState.activeProfile?.profileIndex,
-            profileState.activeProfile?.pinEnabled,
-        ) {
-            if (
-                autoSkipProfileSelection &&
-                gateScreen == AppGateScreen.ProfileSelection.name
-            ) {
-                rememberedStartupProfile(profileState.profiles)?.let { profile ->
-                    requestProfileSwitch(
-                        profile = profile,
-                        syncOnEnter = authState is AuthState.Authenticated,
-                    )
-                    return@LaunchedEffect
-                }
-
-                if (profileState.profiles.size != 1) return@LaunchedEffect
-
-                val onlyProfile = profileState.profiles.first()
-                if (onlyProfile.pinEnabled) return@LaunchedEffect
-
-                requestProfileSwitch(
-                    profile = onlyProfile,
-                    syncOnEnter = authState is AuthState.Authenticated,
-                )
             }
         }
 
@@ -796,6 +776,39 @@ fun App(
                 AppGateScreen.ProfileSwitching.name -> {
                     AppLaunchOverlay(
                         profileColor = gateProfileColor,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                AppGateScreen.LicenseActivation.name -> {
+                    LicenseActivationScreen(
+                        onActivated = {
+                            gateScreen = AppGateScreen.Loading.name
+                        },
+                        onOpenAdminPanel = {
+                            gateScreen = AppGateScreen.AdminPanel.name
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                AppGateScreen.LicenseExpired.name -> {
+                    val activeInfo = licenseState.activeInfo ?: LicenseInfo(key = "N/A")
+                    LicenseExpiredScreen(
+                        licenseInfo = activeInfo,
+                        onEnterNewKey = {
+                            LicenseRepository.deactivate()
+                            gateScreen = AppGateScreen.LicenseActivation.name
+                        },
+                        onOpenAdminPanel = {
+                            gateScreen = AppGateScreen.AdminPanel.name
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                AppGateScreen.AdminPanel.name -> {
+                    AdminLicenseScreen(
+                        onBack = {
+                            gateScreen = if (licenseState.isActive) AppGateScreen.Main.name else AppGateScreen.LicenseActivation.name
+                        },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }

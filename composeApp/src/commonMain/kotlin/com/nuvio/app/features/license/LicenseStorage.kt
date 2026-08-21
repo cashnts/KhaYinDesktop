@@ -1,0 +1,9 @@
+package com.nuvio.app.features.license
+
+internal expect object LicenseStorage {
+    fun loadLicensePayload(): String?
+    fun saveLicensePayload(payload: String)
+    fun clearLicensePayload()
+    fun loadDeviceId(): String?
+    fun saveDeviceId(deviceId: String)
+}
