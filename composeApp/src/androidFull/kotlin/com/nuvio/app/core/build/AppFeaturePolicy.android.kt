@@ -16,5 +16,7 @@ actual object AppFeaturePolicy {
     actual val inAppUpdaterEnabled: Boolean = true
     actual val imdbRatingLogoEnabled: Boolean = true
     actual val mediaPlaybackForegroundServiceEnabled: Boolean = true
-    actual val customServerConnectionsEnabled: Boolean = true
+    actual val customServerConnectionsEnabled: Boolean = ClientRoleConfig.IS_ADMIN
+    actual val isAdminClient: Boolean = ClientRoleConfig.IS_ADMIN
+    actual val isUserClient: Boolean = ClientRoleConfig.IS_USER
 }

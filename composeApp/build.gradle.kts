@@ -58,6 +58,9 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
     @get:Input
     abstract val sentryEnvironment: Property<String>
 
+    @get:Input
+    abstract val clientRole: Property<String>
+
     @TaskAction
     fun generate() {
         val props = Properties()
@@ -134,6 +137,21 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 |
                 |object DiscordConfig {
                 |    const val CLIENT_ID = "${props.getProperty("NUVIO_DISCORD_CLIENT_ID", "1538974392376369212")}"
+                |}
+                """.trimMargin()
+            )
+        }
+
+        outDir.resolve("com/nuvio/app/core/build").apply {
+            mkdirs()
+            resolve("ClientRoleConfig.kt").writeText(
+                """
+                |package com.nuvio.app.core.build
+                |
+                |object ClientRoleConfig {
+                |    const val ROLE = "${clientRole.get()}"
+                |    const val IS_ADMIN = ${clientRole.get().equals("admin", ignoreCase = true)}
+                |    const val IS_USER = ${!clientRole.get().equals("admin", ignoreCase = true)}
                 |}
                 """.trimMargin()
             )
@@ -590,6 +608,7 @@ val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generat
     supabaseFallbackUrl.set(runtimeConfigValue("NUVIO_SUPABASE_FALLBACK_URL", "https://api.stream.khayin.net"))
     sentryDsn.set(runtimeConfigValue("SENTRY_DSN"))
     sentryDesktopDsn.set(runtimeConfigValue("SENTRY_DESKTOP_DSN"))
+    clientRole.set(runtimeConfigValue("NUVIO_CLIENT_ROLE", (findProperty("nuvio.client.role") as? String) ?: "user"))
     sentryEnvironment.set(
         when {
             requestedGradleTasks.any { "benchmark" in it } -> "benchmark"

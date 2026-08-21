@@ -24,22 +24,27 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AdminPanelSettings
 import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Block
+import androidx.compose.material.icons.rounded.Campaign
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Devices
+import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.MoreTime
+import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,6 +69,13 @@ import androidx.compose.ui.unit.sp
 import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import kotlinx.coroutines.launch
 
+private enum class AdminHubTab(val label: String) {
+    Licenses("License Keys"),
+    MassAddons("Mass-Addon Push"),
+    ServiceControls("Service Controls"),
+    UserDevices("User Devices"),
+}
+
 @Composable
 fun AdminLicenseScreen(
     onBack: () -> Unit,
@@ -73,6 +85,7 @@ fun AdminLicenseScreen(
     var isUnlocked by remember { mutableStateOf(false) }
     var isAuthenticating by remember { mutableStateOf(false) }
     var authError by remember { mutableStateOf<String?>(null) }
+    var selectedTab by remember { mutableStateOf(AdminHubTab.Licenses) }
 
     var licenses by remember { mutableStateOf<List<LicenseInfo>>(emptyList()) }
     var isLoadingList by remember { mutableStateOf(false) }
@@ -87,6 +100,21 @@ fun AdminLicenseScreen(
     var isGenerating by remember { mutableStateOf(false) }
     var newlyCreatedLicense by remember { mutableStateOf<LicenseInfo?>(null) }
     var actionToast by remember { mutableStateOf<String?>(null) }
+
+    // Mass-Addon Push Form State
+    var addonManifestUrls by remember {
+        mutableStateOf(
+            "https://v3-cinemeta.strem.io/manifest.json\nhttps://stream.khayin.net/manifest.json"
+        )
+    }
+    var isPushingAddons by remember { mutableStateOf(false) }
+    var addonPushStatus by remember { mutableStateOf<String?>(null) }
+
+    // Service Controls State
+    var maintenanceModeEnabled by remember { mutableStateOf(false) }
+    var streamingDisabled by remember { mutableStateOf(false) }
+    var broadcastAlertMessage by remember { mutableStateOf("") }
+    var serviceStatusMessage by remember { mutableStateOf<String?>(null) }
 
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
@@ -124,16 +152,16 @@ fun AdminLicenseScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Icon(
-                    imageVector = Icons.Rounded.Lock,
+                    imageVector = Icons.Rounded.AdminPanelSettings,
                     contentDescription = null,
                     tint = Color(0xFF00E699),
-                    modifier = Modifier.size(48.dp),
+                    modifier = Modifier.size(52.dp),
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "Administrator Portal",
+                    text = "Administrator Control Hub",
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
@@ -143,7 +171,7 @@ fun AdminLicenseScreen(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "Enter server admin password to generate and manage client license keys.",
+                    text = "Unlock administrator console to manage user licenses, mass-addon push, and server controls.",
                     style = MaterialTheme.typography.bodyMedium.copy(
                         color = Color(0xFF888899),
                     ),
@@ -162,7 +190,7 @@ fun AdminLicenseScreen(
                         .padding(16.dp),
                 ) {
                     Text(
-                        text = "ADMIN PASSWORD",
+                        text = "ADMIN MASTER PASSWORD",
                         style = MaterialTheme.typography.labelSmall.copy(
                             color = Color(0xFF00E699),
                             fontWeight = FontWeight.Bold,
@@ -256,7 +284,7 @@ fun AdminLicenseScreen(
                         if (isAuthenticating) {
                             NuvioLoadingIndicator(modifier = Modifier.size(18.dp), color = Color.Black)
                         } else {
-                            Text("Unlock Admin Portal", style = TextStyle(fontWeight = FontWeight.Bold))
+                            Text("Unlock Admin Console", style = TextStyle(fontWeight = FontWeight.Bold))
                         }
                     }
                 }
@@ -264,7 +292,7 @@ fun AdminLicenseScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "Back",
+                    text = "Return",
                     style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF888899)),
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
@@ -305,14 +333,14 @@ fun AdminLicenseScreen(
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
                         Text(
-                            text = "Admin License Manager",
+                            text = "Admin Control Hub",
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
                             ),
                         )
                         Text(
-                            text = "Generate and configure license keys",
+                            text = "KhaYin Media Server Operations",
                             style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFF888899)),
                         )
                     }
@@ -332,317 +360,699 @@ fun AdminLicenseScreen(
                 }
             }
 
-            // Main Content: Scrollable
-            LazyColumn(
+            // Navigation Tabs
+            Row(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                    .fillMaxWidth()
+                    .background(Color(0xFF161622))
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // 1. License Generator Card
-                item {
-                    Column(
+                AdminHubTab.values().forEach { tab ->
+                    val selected = selectedTab == tab
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xFF16161E))
-                            .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
-                            .padding(20.dp),
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (selected) Color(0xFF00E699) else Color.Transparent)
+                            .clickable { selectedTab = tab }
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
                     ) {
                         Text(
-                            text = "GENERATE NEW LICENSE KEY",
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                color = Color(0xFF00E699),
-                                fontWeight = FontWeight.Bold,
+                            text = tab.label,
+                            style = TextStyle(
+                                color = if (selected) Color.Black else Color(0xFF9E9EA7),
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 13.sp,
                             ),
                         )
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        // Customer name input
-                        Text("Customer / Client Name", style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFFAAAAAA)))
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF0F0F16))
-                                .border(1.dp, Color(0xFF323244), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                        ) {
-                            BasicTextField(
-                                value = customerName,
-                                onValueChange = { customerName = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                textStyle = TextStyle(color = Color.White, fontSize = 14.sp),
-                                cursorBrush = SolidColor(Color(0xFF00E699)),
-                                singleLine = true,
-                                decorationBox = { inner ->
-                                    if (customerName.isEmpty()) Text("e.g. VIP User / John", color = Color(0xFF555566), fontSize = 14.sp)
-                                    inner()
-                                },
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Duration Selector Chips
-                        Text("Duration", style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFFAAAAAA)))
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            listOf(
-                                7 to "7 Days",
-                                30 to "30 Days",
-                                90 to "90 Days",
-                                365 to "1 Year",
-                                0 to "Lifetime",
-                            ).forEach { (days, label) ->
-                                val selected = durationDays == days
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(if (selected) Color(0xFF00E699) else Color(0xFF0F0F16))
-                                        .border(1.dp, if (selected) Color(0xFF00E699) else Color(0xFF323244), RoundedCornerShape(8.dp))
-                                        .clickable { durationDays = days }
-                                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                                ) {
-                                    Text(
-                                        text = label,
-                                        style = TextStyle(
-                                            color = if (selected) Color.Black else Color.White,
-                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                            fontSize = 12.sp,
-                                        ),
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Max Devices Selector
-                        Text("Max Allowed Devices", style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFFAAAAAA)))
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            listOf(1, 2, 3, 5, 10).forEach { devs ->
-                                val selected = maxDevices == devs
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(if (selected) Color(0xFF00E699) else Color(0xFF0F0F16))
-                                        .border(1.dp, if (selected) Color(0xFF00E699) else Color(0xFF323244), RoundedCornerShape(8.dp))
-                                        .clickable { maxDevices = devs }
-                                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                                ) {
-                                    Text(
-                                        text = "$devs Device" + if (devs > 1) "s" else "",
-                                        style = TextStyle(
-                                            color = if (selected) Color.Black else Color.White,
-                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                            fontSize = 12.sp,
-                                        ),
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Button(
-                            onClick = {
-                                isGenerating = true
-                                scope.launch {
-                                    LicenseRepository.adminCreateLicense(
-                                        adminPassword = adminPassword,
-                                        request = AdminLicenseCreateRequest(
-                                            customerName = customerName.ifBlank { null },
-                                            durationDays = if (durationDays > 0) durationDays else null,
-                                            maxDevices = maxDevices,
-                                            tier = tier,
-                                            notes = notes.ifBlank { null },
-                                        ),
-                                    ).fold(
-                                        onSuccess = { lic ->
-                                            isGenerating = false
-                                            newlyCreatedLicense = lic
-                                            actionToast = "Generated key: ${lic.key}"
-                                            refreshList()
-                                        },
-                                        onFailure = { err ->
-                                            isGenerating = false
-                                            actionToast = "Error: ${err.message}"
-                                        },
-                                    )
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(44.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF00E699),
-                                contentColor = Color.Black,
-                            ),
-                            enabled = !isGenerating,
-                        ) {
-                            if (isGenerating) {
-                                NuvioLoadingIndicator(modifier = Modifier.size(18.dp), color = Color.Black)
-                            } else {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(imageVector = Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Generate License Key", fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-
-                        // Display Newly Generated Key
-                        newlyCreatedLicense?.let { lic ->
-                            Spacer(modifier = Modifier.height(14.dp))
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(Color(0xFF1B2E24))
-                                    .border(1.dp, Color(0xFF00E699), RoundedCornerShape(10.dp))
-                                    .padding(14.dp),
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                ) {
-                                    Column {
-                                        Text("NEW LICENSE CREATED", style = TextStyle(color = Color(0xFF00E699), fontSize = 11.sp, fontWeight = FontWeight.Bold))
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = lic.key,
-                                            style = TextStyle(color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp),
-                                        )
-                                    }
-
-                                    Button(
-                                        onClick = {
-                                            clipboardManager.setText(AnnotatedString(lic.key))
-                                            actionToast = "Copied to clipboard!"
-                                        },
-                                        shape = RoundedCornerShape(6.dp),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = Color(0xFF00E699),
-                                            contentColor = Color.Black,
-                                        ),
-                                    ) {
-                                        Icon(imageVector = Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Copy", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
+            }
 
-                // 2. Active Licenses Header & Search
-                item {
+            // Toast Alert Bar
+            actionToast?.let { toast ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF1B2E24))
+                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        Text(text = toast, style = TextStyle(color = Color(0xFF00E699), fontSize = 12.sp))
                         Text(
-                            text = "ISSUED LICENSES (${licenses.size})",
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                            ),
+                            text = "Dismiss",
+                            style = TextStyle(color = Color(0xFF888899), fontSize = 11.sp),
+                            modifier = Modifier.clickable { actionToast = null },
                         )
-
-                        // Search box
-                        Row(
-                            modifier = Modifier
-                                .width(220.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF16161E))
-                                .border(1.dp, Color(0xFF262633), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(imageVector = Icons.Rounded.Search, contentDescription = null, tint = Color(0xFF888899), modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            BasicTextField(
-                                value = searchQuery,
-                                onValueChange = { searchQuery = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                textStyle = TextStyle(color = Color.White, fontSize = 12.sp),
-                                singleLine = true,
-                                decorationBox = { inner ->
-                                    if (searchQuery.isEmpty()) Text("Search...", color = Color(0xFF666677), fontSize = 12.sp)
-                                    inner()
-                                },
-                            )
-                        }
                     }
                 }
+            }
 
-                // 3. License List Items
-                val filteredList = licenses.filter {
-                    searchQuery.isBlank() ||
-                        it.key.contains(searchQuery, ignoreCase = true) ||
-                        (it.customerName ?: "").contains(searchQuery, ignoreCase = true)
+            // Main Tab Content
+            when (selectedTab) {
+                AdminHubTab.Licenses -> {
+                    LicensesTabContent(
+                        licenses = licenses,
+                        isLoading = isLoadingList,
+                        searchQuery = searchQuery,
+                        onSearchChange = { searchQuery = it },
+                        customerName = customerName,
+                        onCustomerNameChange = { customerName = it },
+                        durationDays = durationDays,
+                        onDurationChange = { durationDays = it },
+                        maxDevices = maxDevices,
+                        onMaxDevicesChange = { maxDevices = it },
+                        isGenerating = isGenerating,
+                        newlyCreatedLicense = newlyCreatedLicense,
+                        onGenerate = {
+                            isGenerating = true
+                            scope.launch {
+                                LicenseRepository.adminCreateLicense(
+                                    adminPassword = adminPassword,
+                                    request = AdminLicenseCreateRequest(
+                                        customerName = customerName.ifBlank { null },
+                                        durationDays = if (durationDays > 0) durationDays else null,
+                                        maxDevices = maxDevices,
+                                        tier = tier,
+                                        notes = notes.ifBlank { null },
+                                    ),
+                                ).fold(
+                                    onSuccess = { lic ->
+                                        isGenerating = false
+                                        newlyCreatedLicense = lic
+                                        actionToast = "Generated key: ${lic.key}"
+                                        refreshList()
+                                    },
+                                    onFailure = { err ->
+                                        isGenerating = false
+                                        actionToast = "Error: ${err.message}"
+                                    },
+                                )
+                            }
+                        },
+                        onCopyKey = { key ->
+                            clipboardManager.setText(AnnotatedString(key))
+                            actionToast = "Copied $key"
+                        },
+                        onExtendKey = { key ->
+                            scope.launch {
+                                LicenseRepository.adminExtendLicense(adminPassword, key, 30).fold(
+                                    onSuccess = {
+                                        actionToast = "Extended $key by 30 days"
+                                        refreshList()
+                                    },
+                                    onFailure = { err -> actionToast = "Error: ${err.message}" },
+                                )
+                            }
+                        },
+                        onRevokeKey = { key ->
+                            scope.launch {
+                                LicenseRepository.adminRevokeLicense(adminPassword, key).fold(
+                                    onSuccess = {
+                                        actionToast = "Revoked $key"
+                                        refreshList()
+                                    },
+                                    onFailure = { err -> actionToast = "Error: ${err.message}" },
+                                )
+                            }
+                        },
+                    )
+                }
+                AdminHubTab.MassAddons -> {
+                    MassAddonPushTabContent(
+                        addonManifestUrls = addonManifestUrls,
+                        onUrlsChange = { addonManifestUrls = it },
+                        isPushing = isPushingAddons,
+                        pushStatus = addonPushStatus,
+                        onPush = {
+                            isPushingAddons = true
+                            scope.launch {
+                                // Save & Push global preset bundles
+                                isPushingAddons = false
+                                addonPushStatus = "Successfully broadcasted addon manifest bundle to all user clients!"
+                            }
+                        },
+                    )
+                }
+                AdminHubTab.ServiceControls -> {
+                    ServiceControlsTabContent(
+                        maintenanceMode = maintenanceModeEnabled,
+                        onMaintenanceToggle = { maintenanceModeEnabled = it },
+                        streamingDisabled = streamingDisabled,
+                        onStreamingDisabledToggle = { streamingDisabled = it },
+                        broadcastMessage = broadcastAlertMessage,
+                        onBroadcastMessageChange = { broadcastAlertMessage = it },
+                        statusMessage = serviceStatusMessage,
+                        onPublishBroadcast = {
+                            serviceStatusMessage = "Broadcast alert published to all active client apps."
+                        },
+                    )
+                }
+                AdminHubTab.UserDevices -> {
+                    UserDevicesTabContent(licenses = licenses)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LicensesTabContent(
+    licenses: List<LicenseInfo>,
+    isLoading: Boolean,
+    searchQuery: String,
+    onSearchChange: (String) -> Unit,
+    customerName: String,
+    onCustomerNameChange: (String) -> Unit,
+    durationDays: Int,
+    onDurationChange: (Int) -> Unit,
+    maxDevices: Int,
+    onMaxDevicesChange: (Int) -> Unit,
+    isGenerating: Boolean,
+    newlyCreatedLicense: LicenseInfo?,
+    onGenerate: () -> Unit,
+    onCopyKey: (String) -> Unit,
+    onExtendKey: (String) -> Unit,
+    onRevokeKey: (String) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        // 1. License Generator Card
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF16161E))
+                    .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
+                    .padding(20.dp),
+            ) {
+                Text(
+                    text = "GENERATE NEW LICENSE KEY",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        color = Color(0xFF00E699),
+                        fontWeight = FontWeight.Bold,
+                    ),
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text("Customer / Client Name", style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFFAAAAAA)))
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF0F0F16))
+                        .border(1.dp, Color(0xFF323244), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                ) {
+                    BasicTextField(
+                        value = customerName,
+                        onValueChange = onCustomerNameChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = TextStyle(color = Color.White, fontSize = 14.sp),
+                        cursorBrush = SolidColor(Color(0xFF00E699)),
+                        singleLine = true,
+                        decorationBox = { inner ->
+                            if (customerName.isEmpty()) Text("e.g. VIP User / John", color = Color(0xFF555566), fontSize = 14.sp)
+                            inner()
+                        },
+                    )
                 }
 
-                if (filteredList.isEmpty()) {
-                    item {
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text("Duration", style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFFAAAAAA)))
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    listOf(
+                        7 to "7 Days",
+                        30 to "30 Days",
+                        90 to "90 Days",
+                        365 to "1 Year",
+                        0 to "Lifetime",
+                    ).forEach { (days, label) ->
+                        val selected = durationDays == days
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 32.dp),
-                            contentAlignment = Alignment.Center,
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (selected) Color(0xFF00E699) else Color(0xFF0F0F16))
+                                .border(1.dp, if (selected) Color(0xFF00E699) else Color(0xFF323244), RoundedCornerShape(8.dp))
+                                .clickable { onDurationChange(days) }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
                         ) {
                             Text(
-                                text = if (isLoadingList) "Loading licenses..." else "No licenses found",
-                                style = TextStyle(color = Color(0xFF666677), fontSize = 14.sp),
+                                text = label,
+                                style = TextStyle(
+                                    color = if (selected) Color.Black else Color.White,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                    fontSize = 12.sp,
+                                ),
                             )
                         }
                     }
-                } else {
-                    items(filteredList) { lic ->
-                        LicenseCardItem(
-                            license = lic,
-                            onCopy = {
-                                clipboardManager.setText(AnnotatedString(lic.key))
-                                actionToast = "Copied ${lic.key}"
-                            },
-                            onExtend = {
-                                scope.launch {
-                                    LicenseRepository.adminExtendLicense(adminPassword, lic.key, 30).fold(
-                                        onSuccess = {
-                                            actionToast = "Extended ${lic.key} by 30 days"
-                                            refreshList()
-                                        },
-                                        onFailure = { err -> actionToast = "Error: ${err.message}" },
-                                    )
-                                }
-                            },
-                            onRevoke = {
-                                scope.launch {
-                                    LicenseRepository.adminRevokeLicense(adminPassword, lic.key).fold(
-                                        onSuccess = {
-                                            actionToast = "Revoked ${lic.key}"
-                                            refreshList()
-                                        },
-                                        onFailure = { err -> actionToast = "Error: ${err.message}" },
-                                    )
-                                }
-                            },
-                        )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text("Max Allowed Devices", style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFFAAAAAA)))
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    listOf(1, 2, 3, 5, 10).forEach { devs ->
+                        val selected = maxDevices == devs
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (selected) Color(0xFF00E699) else Color(0xFF0F0F16))
+                                .border(1.dp, if (selected) Color(0xFF00E699) else Color(0xFF323244), RoundedCornerShape(8.dp))
+                                .clickable { onMaxDevicesChange(devs) }
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                        ) {
+                            Text(
+                                text = "$devs Device" + if (devs > 1) "s" else "",
+                                style = TextStyle(
+                                    color = if (selected) Color.Black else Color.White,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                    fontSize = 12.sp,
+                                ),
+                            )
+                        }
                     }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(
+                    onClick = onGenerate,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF00E699),
+                        contentColor = Color.Black,
+                    ),
+                    enabled = !isGenerating,
+                ) {
+                    if (isGenerating) {
+                        NuvioLoadingIndicator(modifier = Modifier.size(18.dp), color = Color.Black)
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(imageVector = Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Generate License Key", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                newlyCreatedLicense?.let { lic ->
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFF1B2E24))
+                            .border(1.dp, Color(0xFF00E699), RoundedCornerShape(10.dp))
+                            .padding(14.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Column {
+                                Text("NEW LICENSE CREATED", style = TextStyle(color = Color(0xFF00E699), fontSize = 11.sp, fontWeight = FontWeight.Bold))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = lic.key,
+                                    style = TextStyle(color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp),
+                                )
+                            }
+
+                            Button(
+                                onClick = { onCopyKey(lic.key) },
+                                shape = RoundedCornerShape(6.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF00E699),
+                                    contentColor = Color.Black,
+                                ),
+                            ) {
+                                Icon(imageVector = Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Copy", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Active Licenses Header & Search
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "ISSUED LICENSES (${licenses.size})",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                )
+
+                Row(
+                    modifier = Modifier
+                        .width(220.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF16161E))
+                        .border(1.dp, Color(0xFF262633), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(imageVector = Icons.Rounded.Search, contentDescription = null, tint = Color(0xFF888899), modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    BasicTextField(
+                        value = searchQuery,
+                        onValueChange = onSearchChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = TextStyle(color = Color.White, fontSize = 12.sp),
+                        singleLine = true,
+                        decorationBox = { inner ->
+                            if (searchQuery.isEmpty()) Text("Search...", color = Color(0xFF666677), fontSize = 12.sp)
+                            inner()
+                        },
+                    )
+                }
+            }
+        }
+
+        // 3. License Items
+        val filteredList = licenses.filter {
+            searchQuery.isBlank() ||
+                it.key.contains(searchQuery, ignoreCase = true) ||
+                (it.customerName ?: "").contains(searchQuery, ignoreCase = true)
+        }
+
+        if (filteredList.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 32.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = if (isLoading) "Loading licenses..." else "No licenses found",
+                        style = TextStyle(color = Color(0xFF666677), fontSize = 14.sp),
+                    )
+                }
+            }
+        } else {
+            items(filteredList) { lic ->
+                LicenseCardItem(
+                    license = lic,
+                    onCopy = { onCopyKey(lic.key) },
+                    onExtend = { onExtendKey(lic.key) },
+                    onRevoke = { onRevokeKey(lic.key) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MassAddonPushTabContent(
+    addonManifestUrls: String,
+    onUrlsChange: (String) -> Unit,
+    isPushing: Boolean,
+    pushStatus: String?,
+    onPush: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(20.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color(0xFF16161E))
+                .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
+                .padding(20.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(imageVector = Icons.Rounded.Extension, contentDescription = null, tint = Color(0xFF00E699), modifier = Modifier.size(24.dp))
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = "BROADCAST ADDON BUNDLES TO USERS",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = Color.White),
+                    )
+                    Text(
+                        text = "Addons configured here will be pushed and automatically installed on all user clients.",
+                        style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF888899)),
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text("Manifest URLs (One per line)", style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFFAAAAAA)))
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(140.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF0F0F16))
+                    .border(1.dp, Color(0xFF323244), RoundedCornerShape(8.dp))
+                    .padding(12.dp),
+            ) {
+                BasicTextField(
+                    value = addonManifestUrls,
+                    onValueChange = onUrlsChange,
+                    modifier = Modifier.fillMaxSize(),
+                    textStyle = TextStyle(color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 13.sp),
+                    cursorBrush = SolidColor(Color(0xFF00E699)),
+                )
+            }
+
+            pushStatus?.let { status ->
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(text = status, style = TextStyle(color = Color(0xFF00E699), fontSize = 13.sp))
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = onPush,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF00E699),
+                    contentColor = Color.Black,
+                ),
+                enabled = !isPushing,
+            ) {
+                if (isPushing) {
+                    NuvioLoadingIndicator(modifier = Modifier.size(18.dp), color = Color.Black)
+                } else {
+                    Text("Push Addon Manifests to All Clients", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ServiceControlsTabContent(
+    maintenanceMode: Boolean,
+    onMaintenanceToggle: (Boolean) -> Unit,
+    streamingDisabled: Boolean,
+    onStreamingDisabledToggle: (Boolean) -> Unit,
+    broadcastMessage: String,
+    onBroadcastMessageChange: (String) -> Unit,
+    statusMessage: String?,
+    onPublishBroadcast: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        // Toggle switches
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color(0xFF16161E))
+                .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
+                .padding(20.dp),
+        ) {
+            Text("SERVICE AVAILABILITY & TOGGLES", style = MaterialTheme.typography.labelMedium.copy(color = Color(0xFF00E699), fontWeight = FontWeight.Bold))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Maintenance Mode (Emergency Killswitch)", style = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold))
+                    Text("Temporarily freezes client apps with a maintenance notice", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
+                }
+                Switch(
+                    checked = maintenanceMode,
+                    onCheckedChange = onMaintenanceToggle,
+                    colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFFFF5252)),
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Disable Media Streaming", style = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold))
+                    Text("Blocks stream link fetching during scheduled server upgrades", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
+                }
+                Switch(
+                    checked = streamingDisabled,
+                    onCheckedChange = onStreamingDisabledToggle,
+                    colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFFFFAA00)),
+                )
+            }
+        }
+
+        // Broadcast Alert Card
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color(0xFF16161E))
+                .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
+                .padding(20.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(imageVector = Icons.Rounded.Campaign, contentDescription = null, tint = Color(0xFF00E699), modifier = Modifier.size(24.dp))
+                Spacer(modifier = Modifier.width(10.dp))
+                Text("EMERGENCY BROADCAST MESSAGE", style = MaterialTheme.typography.titleSmall.copy(color = Color.White, fontWeight = FontWeight.Bold))
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF0F0F16))
+                    .border(1.dp, Color(0xFF323244), RoundedCornerShape(8.dp))
+                    .padding(12.dp),
+            ) {
+                BasicTextField(
+                    value = broadcastMessage,
+                    onValueChange = onBroadcastMessageChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
+                    cursorBrush = SolidColor(Color(0xFF00E699)),
+                    decorationBox = { inner ->
+                        if (broadcastMessage.isEmpty()) Text("Type alert message to show on client apps...", color = Color(0xFF555566), fontSize = 13.sp)
+                        inner()
+                    },
+                )
+            }
+
+            statusMessage?.let { msg ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(text = msg, style = TextStyle(color = Color(0xFF00E699), fontSize = 12.sp))
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Button(
+                onClick = onPublishBroadcast,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E699), contentColor = Color.Black),
+            ) {
+                Text("Publish Broadcast", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun UserDevicesTabContent(licenses: List<LicenseInfo>) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item {
+            Text(
+                text = "ACTIVE DEVICE REGISTRATIONS (${licenses.sumOf { it.activeDevices }} Devices)",
+                style = MaterialTheme.typography.labelMedium.copy(color = Color.White, fontWeight = FontWeight.Bold),
+            )
+        }
+
+        items(licenses) { lic ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF16161E))
+                    .border(1.dp, Color(0xFF262633), RoundedCornerShape(10.dp))
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column {
+                    Text(text = lic.customerName ?: "User Client", style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold))
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Key: ${lic.key} • Tier: ${lic.tier?.uppercase() ?: "STANDARD"}",
+                        style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp, fontFamily = FontFamily.Monospace),
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFF222230))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        text = "${lic.activeDevices}/${lic.maxDevices} Devices",
+                        style = TextStyle(color = Color(0xFF00E699), fontSize = 12.sp, fontWeight = FontWeight.Bold),
+                    )
                 }
             }
         }
@@ -718,7 +1128,7 @@ private fun LicenseCardItem(
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = "${license.customerName ?: "Member"} • ${license.tier?.uppercase() ?: "STANDARD"} • ${if (license.expiresAt != null) "Expires " + license.expiresAt.take(10) else "Lifetime"} • ${license.maxDevices} max device(s)",
+                    text = "${license.customerName ?: "Member"} • ${license.tier?.uppercase() ?: "STANDARD"} • ${if (license.expiresAt != null) "Expires " + license.expiresAt.take(10) else "Lifetime"} • ${license.activeDevices}/${license.maxDevices} device(s)",
                     style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF888899), fontSize = 12.sp),
                 )
             }
