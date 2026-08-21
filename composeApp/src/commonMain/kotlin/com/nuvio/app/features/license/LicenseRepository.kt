@@ -3,13 +3,14 @@ package com.nuvio.app.features.license
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthStorage
-import com.nuvio.app.core.build.AppVersionConfig
 import com.nuvio.app.core.network.ServerConfigurationRepository
 import com.nuvio.app.core.network.SupabaseConfig
+import com.nuvio.app.core.network.SupabaseProvider
+import com.nuvio.app.features.addons.RawHttpResponse
 import com.nuvio.app.features.addons.httpRequestRaw
-import com.nuvio.app.features.profiles.ProfileRepository
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
+import com.nuvio.app.features.watchprogress.CurrentDateProvider
+import io.github.jan.supabase.auth.auth
+import kotlin.random.Random
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.CoroutineScope
@@ -78,6 +79,41 @@ object LicenseRepository {
         }
     }
 
+    private fun supabaseRestUrl(): String {
+        val custom = ServerConfigurationRepository.active.value.backendUrl.trimEnd('/')
+        val base = if (custom.isNotBlank()) custom else SupabaseConfig.URL
+        return "$base/rest/v1"
+    }
+
+    private fun supabaseHeaders(): Map<String, String> {
+        val key = ServerConfigurationRepository.active.value.publishableKey.ifBlank { SupabaseConfig.ANON_KEY }
+        val token = runCatching { SupabaseProvider.client.auth.currentAccessTokenOrNull() }.getOrNull()?.takeIf { it.isNotBlank() } ?: key
+        return mapOf(
+            "apikey" to key,
+            "Authorization" to "Bearer $token",
+            "Content-Type" to "application/json",
+            "Prefer" to "return=representation",
+        )
+    }
+
+    private fun checkResponseOrThrow(response: RawHttpResponse, actionName: String) {
+        val body = response.body.trim()
+        if (response.status !in 200..299) {
+            if (body.startsWith("<") || body.contains("<!DOCTYPE", ignoreCase = true)) {
+                throw IllegalStateException("Supabase returned HTTP ${response.status}. Please ensure your Supabase backend is reachable.")
+            }
+            val errorObj = runCatching { json.decodeFromString<SupabaseErrorResponse>(body) }.getOrNull()
+            val msg = errorObj?.message ?: errorObj?.error ?: "Supabase error (HTTP ${response.status})"
+            if (msg.contains("relation \"public.license_keys\" does not exist") || msg.contains("does not exist")) {
+                throw IllegalStateException("Table 'license_keys' does not exist in Supabase yet. Please create it in your Supabase SQL editor.")
+            }
+            throw IllegalStateException(msg)
+        }
+        if (body.startsWith("<") || body.contains("<!DOCTYPE", ignoreCase = true)) {
+            throw IllegalStateException("Received HTML error from server (HTTP ${response.status}).")
+        }
+    }
+
     suspend fun activate(rawKey: String): Result<LicenseInfo> {
         val key = rawKey.trim().uppercase()
         if (key.isBlank()) {
@@ -86,55 +122,57 @@ object LicenseRepository {
         }
 
         _error.value = null
-        val deviceId = getOrCreateDeviceId()
-        val clientApp = "KhaYin/${AppVersionConfig.VERSION_NAME.ifBlank { "1.0.0" }}"
-
-        val baseUrl = resolveWorkerBaseUrl()
-        val request = LicenseActivationRequest(
-            key = key,
-            deviceId = deviceId,
-            clientApp = clientApp,
-        )
+        val restUrl = supabaseRestUrl()
 
         return runCatching {
             val response = httpRequestRaw(
-                method = "POST",
-                url = "$baseUrl/api/license/activate",
-                headers = mapOf("Content-Type" to "application/json"),
-                body = json.encodeToString(request),
+                method = "GET",
+                url = "$restUrl/license_keys?key=eq.$key&select=*",
+                headers = supabaseHeaders(),
+                body = "",
             )
 
-            val bodyText = response.body
-            val activationRes = json.decodeFromString<LicenseActivationResponse>(bodyText)
+            checkResponseOrThrow(response, "License Activation")
 
-            if (!activationRes.success || activationRes.key == null) {
-                val err = activationRes.error ?: "Failed to activate license"
+            val records = json.decodeFromString<List<SupabaseLicenseRecord>>(response.body)
+            if (records.isEmpty()) {
+                val err = "License key '$key' was not found."
                 _error.value = err
                 throw IllegalStateException(err)
             }
 
-            val info = LicenseInfo(
-                key = activationRes.key,
-                status = activationRes.status ?: "active",
-                customerName = activationRes.customerName,
-                tier = activationRes.tier,
-                expiresAt = activationRes.expiresAt,
-                maxDevices = activationRes.maxDevices ?: 1,
-                activeDevices = activationRes.activeDevices ?: 1,
-                presetAddons = activationRes.presetAddons,
-                profileName = activationRes.profileName,
-            )
+            val record = records.first()
+            val info = record.toLicenseInfo()
+
+            if (info.status == "revoked") {
+                LicenseStorage.saveLicensePayload(json.encodeToString(info))
+                _state.value = LicenseState.Revoked(info)
+                val err = "This license key has been revoked."
+                _error.value = err
+                throw IllegalStateException(err)
+            }
+
+            if (isExpiredTimestamp(info.expiresAt)) {
+                LicenseStorage.saveLicensePayload(json.encodeToString(info))
+                _state.value = LicenseState.Expired(info)
+                val err = "This license key has expired."
+                _error.value = err
+                throw IllegalStateException(err)
+            }
+
+            // Increment active device count on Supabase
+            runCatching {
+                httpRequestRaw(
+                    method = "PATCH",
+                    url = "$restUrl/license_keys?key=eq.$key",
+                    headers = supabaseHeaders(),
+                    body = json.encodeToString(mapOf("active_devices" to (info.activeDevices + 1))),
+                )
+            }
 
             LicenseStorage.saveLicensePayload(json.encodeToString(info))
             syncSupabaseIdentity(info.key)
-
-            if (info.status == "revoked") {
-                _state.value = LicenseState.Revoked(info)
-            } else if (isExpiredTimestamp(info.expiresAt)) {
-                _state.value = LicenseState.Expired(info)
-            } else {
-                _state.value = LicenseState.Active(info)
-            }
+            _state.value = LicenseState.Active(info)
 
             info
         }.onFailure { e ->
@@ -145,50 +183,38 @@ object LicenseRepository {
 
     suspend fun verifyRemoteLicense(): LicenseState {
         val currentInfo = state.value.activeInfo ?: return LicenseState.Unlicensed
-        val baseUrl = resolveWorkerBaseUrl()
-        val deviceId = getOrCreateDeviceId()
+        val restUrl = supabaseRestUrl()
 
         return runCatching {
-            val url = "$baseUrl/api/license/verify?key=${currentInfo.key}&deviceId=$deviceId"
             val response = httpRequestRaw(
                 method = "GET",
-                url = url,
-                headers = mapOf("Content-Type" to "application/json"),
+                url = "$restUrl/license_keys?key=eq.${currentInfo.key}&select=*",
+                headers = supabaseHeaders(),
                 body = "",
             )
 
-            val verifyRes = json.decodeFromString<LicenseVerifyResponse>(response.body)
-            if (verifyRes.success && verifyRes.key != null) {
-                val updated = currentInfo.copy(
-                    status = verifyRes.status ?: "active",
-                    expiresAt = verifyRes.expiresAt,
-                    maxDevices = verifyRes.maxDevices ?: currentInfo.maxDevices,
-                    activeDevices = verifyRes.activeDevices ?: currentInfo.activeDevices,
-                    tier = verifyRes.tier ?: currentInfo.tier,
-                )
-                LicenseStorage.saveLicensePayload(json.encodeToString(updated))
-                val newState = if (isExpiredTimestamp(updated.expiresAt)) {
-                    LicenseState.Expired(updated)
-                } else {
-                    LicenseState.Active(updated)
-                }
-                _state.value = newState
-                newState
-            } else {
-                if (verifyRes.status == "revoked") {
-                    val revoked = currentInfo.copy(status = "revoked")
-                    LicenseStorage.saveLicensePayload(json.encodeToString(revoked))
-                    _state.value = LicenseState.Revoked(revoked)
-                    LicenseState.Revoked(revoked)
-                } else if (verifyRes.status == "expired" || isExpiredTimestamp(verifyRes.expiresAt)) {
-                    val expired = currentInfo.copy(status = "expired", expiresAt = verifyRes.expiresAt)
-                    LicenseStorage.saveLicensePayload(json.encodeToString(expired))
-                    _state.value = LicenseState.Expired(expired)
-                    LicenseState.Expired(expired)
-                } else {
-                    state.value
-                }
+            checkResponseOrThrow(response, "License Verification")
+
+            val records = json.decodeFromString<List<SupabaseLicenseRecord>>(response.body)
+            if (records.isEmpty()) {
+                val revoked = currentInfo.copy(status = "revoked")
+                LicenseStorage.saveLicensePayload(json.encodeToString(revoked))
+                _state.value = LicenseState.Revoked(revoked)
+                return@runCatching LicenseState.Revoked(revoked)
             }
+
+            val updated = records.first().toLicenseInfo()
+            LicenseStorage.saveLicensePayload(json.encodeToString(updated))
+
+            val newState = if (updated.status == "revoked") {
+                LicenseState.Revoked(updated)
+            } else if (isExpiredTimestamp(updated.expiresAt)) {
+                LicenseState.Expired(updated)
+            } else {
+                LicenseState.Active(updated)
+            }
+            _state.value = newState
+            newState
         }.getOrElse { e ->
             log.w(e) { "Remote license verification error: ${e.message}" }
             state.value
@@ -203,20 +229,13 @@ object LicenseRepository {
 
     private fun isExpiredTimestamp(expiresAt: String?): Boolean {
         if (expiresAt.isNullOrBlank()) return false
-        // Basic ISO date parsing check
-        return false // Detailed check handled by server response or parsing
-    }
-
-    private fun resolveWorkerBaseUrl(): String {
-        val custom = ServerConfigurationRepository.active.value.backendUrl.trimEnd('/')
-        if (custom.isNotBlank() && !custom.contains("supabase", ignoreCase = true)) {
-            return custom
-        }
-        return "https://cachestream.khayin.net"
+        val today = CurrentDateProvider.todayIsoDate()
+        // Lexicographical ISO comparison works accurately for YYYY-MM-DD
+        val expDate = expiresAt.take(10)
+        return expDate < today
     }
 
     private fun syncSupabaseIdentity(licenseKey: String) {
-        // Deterministic Supabase UUID for the license key
         val cleanKey = licenseKey.trim().uppercase().replace("-", "")
         val deterministicUserId = buildDeterministicUuid(cleanKey)
         AuthStorage.saveAnonymousUserId(deterministicUserId)
@@ -228,75 +247,138 @@ object LicenseRepository {
         return "${padded.substring(0, 8)}-${padded.substring(8, 12)}-${padded.substring(12, 16)}-${padded.substring(16, 20)}-${padded.substring(20, 32)}".lowercase()
     }
 
-    // --- BUILT-IN ADMIN CLIENT OPERATIONS ---
-    suspend fun adminListLicenses(adminPassword: String): Result<List<LicenseInfo>> = runCatching {
-        val baseUrl = resolveWorkerBaseUrl()
+    private fun generateLicenseKey(): String {
+        val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+        fun chunk(len: Int) = (1..len).map { chars[Random.nextInt(chars.length)] }.joinToString("")
+        return "KHAYIN-${chunk(4)}-${chunk(4)}-${chunk(4)}"
+    }
+
+    // --- BUILT-IN ADMIN CLIENT OPERATIONS (DIRECT SUPABASE REST) ---
+
+    suspend fun adminListLicenses(adminPassword: String = ""): Result<List<LicenseInfo>> = runCatching {
+        val restUrl = supabaseRestUrl()
         val response = httpRequestRaw(
             method = "GET",
-            url = "$baseUrl/api/admin/licenses/list",
-            headers = mapOf(
-                "Content-Type" to "application/json",
-                "Authorization" to "Bearer " + encodeBase64(adminPassword),
-            ),
+            url = "$restUrl/license_keys?select=*&order=created_at.desc",
+            headers = supabaseHeaders(),
             body = "",
         )
-        val data = json.decodeFromString<AdminLicenseListResponse>(response.body)
-        if (!data.success) throw IllegalStateException(data.error ?: "Failed to list licenses")
-        data.licenses
+
+        checkResponseOrThrow(response, "List Licenses")
+
+        val records = json.decodeFromString<List<SupabaseLicenseRecord>>(response.body)
+        records.map { it.toLicenseInfo() }
     }
 
     suspend fun adminCreateLicense(
-        adminPassword: String,
+        adminPassword: String = "",
         request: AdminLicenseCreateRequest,
     ): Result<LicenseInfo> = runCatching {
-        val baseUrl = resolveWorkerBaseUrl()
+        val restUrl = supabaseRestUrl()
+        val key = generateLicenseKey()
+        val today = CurrentDateProvider.todayIsoDate()
+
+        val expiresAt = request.durationDays?.takeIf { it > 0 }?.let { days ->
+            val parts = today.split("-").mapNotNull { it.toIntOrNull() }
+            if (parts.size == 3) {
+                var y = parts[0]
+                var m = parts[1]
+                var d = parts[2] + days
+                while (d > 28) {
+                    val daysInMonth = when (m) {
+                        2 -> if (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) 29 else 28
+                        4, 6, 9, 11 -> 30
+                        else -> 31
+                    }
+                    if (d > daysInMonth) {
+                        d -= daysInMonth
+                        m++
+                        if (m > 12) {
+                            m = 1
+                            y++
+                        }
+                    } else {
+                        break
+                    }
+                }
+                val mStr = if (m < 10) "0$m" else "$m"
+                val dStr = if (d < 10) "0$d" else "$d"
+                "$y-$mStr-${dStr}T23:59:59Z"
+            } else null
+        }
+
+        val record = SupabaseLicenseRecord(
+            key = key,
+            status = "active",
+            customerName = request.customerName,
+            tier = request.tier ?: "standard",
+            expiresAt = expiresAt,
+            maxDevices = request.maxDevices ?: 1,
+            activeDevices = 0,
+            notes = request.notes,
+        )
+
         val response = httpRequestRaw(
             method = "POST",
-            url = "$baseUrl/api/admin/licenses/create",
-            headers = mapOf(
-                "Content-Type" to "application/json",
-                "Authorization" to "Bearer " + encodeBase64(adminPassword),
-            ),
-            body = json.encodeToString(request),
+            url = "$restUrl/license_keys",
+            headers = supabaseHeaders(),
+            body = json.encodeToString(record),
         )
-        val data = json.decodeFromString<AdminLicenseCreateResponse>(response.body)
-        if (!data.success || data.license == null) throw IllegalStateException(data.error ?: "Failed to create license")
-        data.license
+
+        checkResponseOrThrow(response, "Create License")
+
+        val createdRecords = runCatching { json.decodeFromString<List<SupabaseLicenseRecord>>(response.body) }.getOrNull()
+        createdRecords?.firstOrNull()?.toLicenseInfo() ?: record.toLicenseInfo()
     }
 
-    suspend fun adminRevokeLicense(adminPassword: String, key: String): Result<Unit> = runCatching {
-        val baseUrl = resolveWorkerBaseUrl()
+    suspend fun adminRevokeLicense(adminPassword: String = "", key: String): Result<Unit> = runCatching {
+        val restUrl = supabaseRestUrl()
         val response = httpRequestRaw(
-            method = "POST",
-            url = "$baseUrl/api/admin/licenses/revoke",
-            headers = mapOf(
-                "Content-Type" to "application/json",
-                "Authorization" to "Bearer " + encodeBase64(adminPassword),
-            ),
-            body = """{"key":"$key"}""",
+            method = "PATCH",
+            url = "$restUrl/license_keys?key=eq.$key",
+            headers = supabaseHeaders(),
+            body = """{"status":"revoked"}""",
         )
-        val data = json.decodeFromString<AdminLicenseActionResponse>(response.body)
-        if (!data.success) throw IllegalStateException(data.error ?: "Failed to revoke license")
+        checkResponseOrThrow(response, "Revoke License")
     }
 
-    suspend fun adminExtendLicense(adminPassword: String, key: String, days: Int = 30): Result<LicenseInfo> = runCatching {
-        val baseUrl = resolveWorkerBaseUrl()
+    suspend fun adminExtendLicense(adminPassword: String = "", key: String, days: Int = 30): Result<LicenseInfo> = runCatching {
+        val restUrl = supabaseRestUrl()
+        val today = CurrentDateProvider.todayIsoDate()
+        val parts = today.split("-").mapNotNull { it.toIntOrNull() }
+        var y = parts.getOrElse(0) { 2026 }
+        var m = parts.getOrElse(1) { 1 }
+        var d = parts.getOrElse(2) { 1 } + days
+        while (d > 28) {
+            val daysInMonth = when (m) {
+                2 -> if (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) 29 else 28
+                4, 6, 9, 11 -> 30
+                else -> 31
+            }
+            if (d > daysInMonth) {
+                d -= daysInMonth
+                m++
+                if (m > 12) {
+                    m = 1
+                    y++
+                }
+            } else {
+                break
+            }
+        }
+        val mStr = if (m < 10) "0$m" else "$m"
+        val dStr = if (d < 10) "0$d" else "$d"
+        val newExpiresAt = "$y-$mStr-${dStr}T23:59:59Z"
+
         val response = httpRequestRaw(
-            method = "POST",
-            url = "$baseUrl/api/admin/licenses/extend",
-            headers = mapOf(
-                "Content-Type" to "application/json",
-                "Authorization" to "Bearer " + encodeBase64(adminPassword),
-            ),
-            body = """{"key":"$key","days":$days}""",
+            method = "PATCH",
+            url = "$restUrl/license_keys?key=eq.$key",
+            headers = supabaseHeaders(),
+            body = json.encodeToString(mapOf("expires_at" to newExpiresAt, "status" to "active")),
         )
-        val data = json.decodeFromString<AdminLicenseActionResponse>(response.body)
-        if (!data.success || data.license == null) throw IllegalStateException(data.error ?: "Failed to extend license")
-        data.license
-    }
+        checkResponseOrThrow(response, "Extend License")
 
-    @OptIn(ExperimentalEncodingApi::class)
-    private fun encodeBase64(str: String): String {
-        return Base64.encode(str.encodeToByteArray())
+        val updated = json.decodeFromString<List<SupabaseLicenseRecord>>(response.body).first().toLicenseInfo()
+        updated
     }
 }
