@@ -3,6 +3,16 @@ name: KhaYin Multi-Platform Build & Cloudflare R2 Release
 on:
   workflow_dispatch:
     inputs:
+      platform:
+        description: 'Choose platform to compile and upload'
+        required: true
+        type: choice
+        options:
+          - all
+          - macos
+          - windows
+          - android
+        default: all
       version_override:
         description: 'Optional version tag override (e.g. 1.0.0 or 1). Leave empty to use DesktopVersion.properties'
         required: false
@@ -68,6 +78,7 @@ jobs:
   build-macos:
     name: Build macOS (ARM64)
     needs: metadata
+    if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'macos' }}
     runs-on: macos-14
     steps:
       - name: Checkout Code
@@ -119,6 +130,7 @@ jobs:
   build-windows:
     name: Build Windows (x64)
     needs: metadata
+    if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'windows' }}
     runs-on: windows-latest
     steps:
       - name: Checkout Code
@@ -193,6 +205,7 @@ jobs:
   build-android:
     name: Build Android APK
     needs: metadata
+    if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'android' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
