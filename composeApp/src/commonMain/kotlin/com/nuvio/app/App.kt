@@ -775,20 +775,15 @@ fun App(
                             val active = profileState.activeProfile ?: profiles.first()
                             if (profileState.activeProfile == null) {
                                 requestProfileSwitch(active, syncOnEnter = true)
-                            } else if (gateScreen != AppGateScreen.Main.name && gateScreen != AppGateScreen.ProfileEdit.name) {
+                            } else if (gateScreen != AppGateScreen.Main.name && gateScreen != AppGateScreen.ProfileEdit.name && gateScreen != AppGateScreen.ProfileSelection.name) {
                                 gateScreen = AppGateScreen.Main.name
                             }
                         } else {
-                            // Automatically seed default admin profile so admin has a clean workspace
-                            scope.launch {
-                                ProfileRepository.createProfile(
-                                    name = "Admin",
-                                    avatarColorHex = "#00E699",
-                                    usesPrimaryAddons = true,
-                                )
-                            }
-                            if (gateScreen != AppGateScreen.Main.name) {
-                                gateScreen = AppGateScreen.Main.name
+                            // If no profiles exist yet, open profile editor so user sets their desired profile name
+                            editingProfile = null
+                            isNewProfile = true
+                            if (gateScreen != AppGateScreen.ProfileEdit.name && gateScreen != AppGateScreen.ProfileSelection.name) {
+                                gateScreen = AppGateScreen.ProfileEdit.name
                             }
                         }
                     }

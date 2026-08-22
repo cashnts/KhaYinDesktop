@@ -417,7 +417,7 @@ fun AdminLicenseScreen(
                         statusMessage = serviceStatusMessage,
                         onPublishBroadcast = {
                             scope.launch {
-                                val ts = if (broadcastAlertMessage.isNotBlank()) 1000L else 0L
+                                val ts = if (broadcastAlertMessage.isNotBlank()) com.nuvio.app.features.watchprogress.WatchProgressClock.nowEpochMs() else 0L
                                 AdminControlRepository.updateConfig(
                                     AdminControlRepository.config.value.copy(
                                         broadcastMessage = broadcastAlertMessage.trim(),
