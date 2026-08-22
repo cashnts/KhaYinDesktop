@@ -3,24 +3,21 @@ package com.nuvio.app.features.updater
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -31,6 +28,7 @@ import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -47,33 +45,27 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.build.AppFeaturePolicy
-import com.nuvio.app.core.ui.AppTheme
-import com.nuvio.app.core.ui.appTheme
-import com.nuvio.app.core.ui.nuvio
+import com.nuvio.app.features.settings.AppBrandWordmark
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.action_close
 import nuvio.composeapp.generated.resources.action_continue
-import nuvio.composeapp.generated.resources.action_install
 import nuvio.composeapp.generated.resources.action_later
-import nuvio.composeapp.generated.resources.action_retry
-import nuvio.composeapp.generated.resources.action_update
-import nuvio.composeapp.generated.resources.updates_debug_test_complete
-import nuvio.composeapp.generated.resources.updates_downloading_progress
 import nuvio.composeapp.generated.resources.updates_message_allow_installs
-import nuvio.composeapp.generated.resources.updates_message_ready
 import nuvio.composeapp.generated.resources.updates_no_release_notes
-import nuvio.composeapp.generated.resources.updates_preparing_download
 import nuvio.composeapp.generated.resources.updates_release_notes
 import nuvio.composeapp.generated.resources.updates_title_allow_installs
-import nuvio.composeapp.generated.resources.updates_title_available
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -98,22 +90,18 @@ fun AppUpdaterHost(
     }
 
     val update = state.update
-    val showBanner = state.showDialog && update != null
+    val showModal = state.showDialog && update != null
 
-    Column(modifier = modifier) {
+    Box(modifier = modifier.fillMaxSize()) {
+        content()
+
         AnimatedVisibility(
-            visible = showBanner,
-            enter = expandVertically(
-                expandFrom = Alignment.Top,
-                animationSpec = tween(durationMillis = 300),
-            ) + fadeIn(animationSpec = tween(durationMillis = 180)),
-            exit = shrinkVertically(
-                shrinkTowards = Alignment.Top,
-                animationSpec = tween(durationMillis = 240),
-            ) + fadeOut(animationSpec = tween(durationMillis = 150)),
+            visible = showModal,
+            enter = fadeIn(animationSpec = tween(durationMillis = 250)),
+            exit = fadeOut(animationSpec = tween(durationMillis = 200)),
         ) {
             update?.let { availableUpdate ->
-                AppUpdateBanner(
+                AppUpdateScreen(
                     state = state,
                     update = availableUpdate,
                     onDownload = controller::downloadUpdate,
@@ -122,21 +110,6 @@ fun AppUpdaterHost(
                     onDismiss = controller::dismissDialog,
                 )
             }
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .then(
-                    if (showBanner) {
-                        Modifier.consumeWindowInsets(WindowInsets.statusBars)
-                    } else {
-                        Modifier
-                    },
-                ),
-        ) {
-            content()
         }
     }
 
@@ -156,149 +129,177 @@ fun AppUpdaterHost(
 }
 
 @Composable
-private fun AppUpdateBanner(
+fun AppUpdateScreen(
     state: AppUpdaterUiState,
     update: AppUpdate,
     onDownload: () -> Unit,
     onInstall: () -> Unit,
     onShowReleaseNotes: () -> Unit,
     onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val tokens = MaterialTheme.nuvio
-    val targetProgress = when {
-        state.isDownloading -> state.downloadProgress ?: 0f
-        state.isDebugTest && !state.isUpdateAvailable -> 1f
-        else -> 0f
-    }.coerceIn(0f, 1f)
-    val progress by animateFloatAsState(
-        targetValue = targetProgress,
-        animationSpec = tween(durationMillis = 180),
-        label = "updateBannerProgress",
+    val progress = (state.downloadProgress ?: 0f).coerceIn(0f, 1f)
+    val percentage = (progress * 100).toInt().coerceIn(0, 100)
+    val isInstalling = state.downloadedUpdatePath != null
+    val animatedProgress by animateFloatAsState(
+        targetValue = if (isInstalling) 1f else progress,
+        animationSpec = tween(durationMillis = 200),
+        label = "updateProgress",
     )
-    val containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-    val isWhiteTheme = MaterialTheme.appTheme == AppTheme.WHITE
-    val progressColor = if (isWhiteTheme) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-    } else {
-        MaterialTheme.colorScheme.primary
-    }
-    val dividerColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
-    val debugTestComplete = state.isDebugTest && !state.isDownloading && !state.isUpdateAvailable
-    val subtitle = when {
-        state.errorMessage != null -> state.errorMessage
-        state.isDownloading && state.downloadProgress != null -> stringResource(
-            Res.string.updates_downloading_progress,
-            (state.downloadProgress * 100).toInt().coerceIn(0, 100),
-        )
-        state.isDownloading -> stringResource(Res.string.updates_preparing_download)
-        debugTestComplete -> stringResource(Res.string.updates_debug_test_complete)
-        state.downloadedUpdatePath != null -> stringResource(Res.string.updates_message_ready)
-        else -> stringResource(Res.string.updates_title_available)
-    }
-    val updateLabel = listOfNotNull(
-        update.tag,
-        update.assetSizeBytes?.let(::formatFileSize),
-    ).joinToString(separator = " • ")
 
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .drawBehind {
-                drawRect(containerColor)
-                if (progress > 0f) {
-                    drawRect(
-                        color = progressColor,
-                        size = Size(width = size.width * progress, height = size.height),
-                    )
-                }
-                drawRect(
-                    color = dividerColor,
-                    topLeft = Offset(0f, size.height - 1.dp.toPx()),
-                    size = Size(width = size.width, height = 1.dp.toPx()),
-                )
-            }
-            .windowInsetsPadding(WindowInsets.statusBars),
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color(0xFF0D0D11))
+            .zIndex(100f),
+        contentAlignment = Alignment.Center,
     ) {
-        Row(
+        Box(
             modifier = Modifier
+                .size(600.dp)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            Color(0x2200E699),
+                            Color.Transparent,
+                        ),
+                    ),
+                ),
+        )
+
+        Column(
+            modifier = Modifier
+                .widthIn(max = 520.dp)
                 .fillMaxWidth()
-                .heightIn(min = 68.dp)
-                .padding(horizontal = tokens.spacing.screenHorizontal, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Icon(
-                imageVector = if (debugTestComplete) Icons.Rounded.CheckCircle else Icons.Rounded.CloudDownload,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(24.dp),
+            AppBrandWordmark(
+                modifier = Modifier
+                    .height(90.dp)
+                    .padding(bottom = 16.dp),
             )
 
+            Icon(
+                imageVector = if (isInstalling) Icons.Rounded.CheckCircle else Icons.Rounded.CloudDownload,
+                contentDescription = null,
+                tint = Color(0xFF00E699),
+                modifier = Modifier.size(56.dp),
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = if (isInstalling) "Update Ready" else "Updating KhaYin",
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                ),
+                textAlign = TextAlign.Center,
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = if (isInstalling) {
+                    "Version ${update.tag} has been downloaded and is ready to install."
+                } else if (state.isDownloading) {
+                    "Downloading version ${update.tag}... Please keep the app open."
+                } else {
+                    "A new version of KhaYin (v${update.tag}) is available."
+                },
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    color = Color(0xFF9E9EA7),
+                ),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+
+            Spacer(modifier = Modifier.height(28.dp))
+
             Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(
-                    text = updateLabel,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = when {
-                        state.errorMessage != null -> MaterialTheme.colorScheme.error
-                        state.isDownloading && isWhiteTheme -> MaterialTheme.colorScheme.onSurface
-                        state.isDownloading -> MaterialTheme.colorScheme.onPrimary
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    maxLines = 2,
-                )
-            }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(10.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(Color(0xFF222228)),
+                ) {
+                    if (state.isDownloading || isInstalling) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(maxOf(animatedProgress, 0.04f))
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(5.dp))
+                                .background(
+                                    Brush.horizontalGradient(
+                                        colors = listOf(
+                                            Color(0xFF00B0FF),
+                                            Color(0xFF00E699),
+                                        ),
+                                    ),
+                                ),
+                        )
+                    }
+                }
 
-            IconButton(
-                onClick = onShowReleaseNotes,
-                enabled = update.notes.isNotBlank(),
-                modifier = Modifier.size(40.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Info,
-                    contentDescription = stringResource(Res.string.updates_release_notes),
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-
-            if (!state.isDownloading && !debugTestComplete) {
-                Button(
-                    onClick = if (state.downloadedUpdatePath != null) onInstall else onDownload,
-                    enabled = state.downloadedUpdatePath != null || state.isUpdateAvailable,
-                    modifier = Modifier.heightIn(min = 40.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        if (state.downloadedUpdatePath != null) {
-                            stringResource(Res.string.action_install)
-                        } else if (state.errorMessage != null) {
-                            stringResource(Res.string.action_retry)
-                        } else {
-                            stringResource(Res.string.action_update)
-                        },
+                        text = if (isInstalling) "Ready to install" else if (state.isDownloading) "Downloading..." else "Pending",
+                        style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF7A7A85)),
+                    )
+                    Text(
+                        text = if (isInstalling) "100%" else "$percentage%",
+                        style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF00E699), fontWeight = FontWeight.Bold),
                     )
                 }
             }
 
-            if (!state.isDownloading) {
-                IconButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.size(40.dp),
+            Spacer(modifier = Modifier.height(28.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (state.isDownloading || !isInstalling) {
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF222228),
+                            contentColor = Color.White,
+                        ),
+                    ) {
+                        Text(
+                            text = if (state.isDownloading) "Background" else "Later",
+                            style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp),
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = if (isInstalling) onInstall else onDownload,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF00E699),
+                        contentColor = Color.Black,
+                    ),
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Close,
-                        contentDescription = stringResource(Res.string.action_close),
-                        tint = MaterialTheme.colorScheme.onSurface,
+                    Text(
+                        text = if (isInstalling) "Install & Restart" else if (state.isDownloading) "Downloading..." else "Update Now",
+                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp),
                     )
                 }
             }

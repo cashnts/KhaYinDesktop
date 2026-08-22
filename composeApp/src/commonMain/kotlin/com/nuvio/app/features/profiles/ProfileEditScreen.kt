@@ -349,7 +349,7 @@ fun ProfileEditScreen(
             )
         }
 
-        if (!isNew && (currentProfile?.profileIndex ?: 0) > 1) {
+        if (!isNew && (profileState.profiles.size > 1 || AppFeaturePolicy.isAdminClient)) {
             item {
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(

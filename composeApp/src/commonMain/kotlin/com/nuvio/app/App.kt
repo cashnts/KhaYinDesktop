@@ -1,14 +1,17 @@
 package com.nuvio.app
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -2339,13 +2342,26 @@ private fun MainAppContent(
 
                                 val adminConfig by AdminControlRepository.config.collectAsStateWithLifecycle()
                                 val dismissedTimestamp by AdminControlRepository.dismissedBroadcastTimestamp.collectAsStateWithLifecycle()
-                                if (adminConfig.broadcastMessage.isNotBlank() && adminConfig.broadcastTimestamp > dismissedTimestamp) {
+                                val isBroadcastVisible = adminConfig.broadcastMessage.isNotBlank() && adminConfig.broadcastTimestamp > dismissedTimestamp
+
+                                LaunchedEffect(adminConfig.broadcastTimestamp, adminConfig.broadcastMessage) {
+                                    if (adminConfig.broadcastMessage.isNotBlank() && adminConfig.broadcastTimestamp > dismissedTimestamp) {
+                                        delay(12_000L)
+                                        AdminControlRepository.dismissBroadcast(adminConfig.broadcastTimestamp)
+                                    }
+                                }
+
+                                AnimatedVisibility(
+                                    visible = isBroadcastVisible,
+                                    enter = fadeIn() + expandVertically(),
+                                    exit = fadeOut() + shrinkVertically(),
+                                    modifier = Modifier
+                                        .align(Alignment.TopCenter)
+                                        .padding(top = (topChromePadding ?: 0.dp) + 12.dp, start = if (useDesktopSidebar) 80.dp else 16.dp, end = 16.dp)
+                                        .zIndex(NuvioTokens.Z.toast),
+                                ) {
                                     Surface(
-                                        modifier = Modifier
-                                            .align(Alignment.TopCenter)
-                                            .padding(top = (topChromePadding ?: 0.dp) + 12.dp, start = if (useDesktopSidebar) 80.dp else 16.dp, end = 16.dp)
-                                            .widthIn(min = 280.dp, max = 560.dp)
-                                            .zIndex(NuvioTokens.Z.toast),
+                                        modifier = Modifier.widthIn(min = 280.dp, max = 560.dp),
                                         shape = RoundedCornerShape(20.dp),
                                         color = Color(0xFF1E1611).copy(alpha = 0.95f),
                                         border = BorderStroke(1.dp, Color(0xFFFF9800).copy(alpha = 0.6f)),
