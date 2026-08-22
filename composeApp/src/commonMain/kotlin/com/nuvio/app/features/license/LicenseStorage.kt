@@ -6,4 +6,6 @@ internal expect object LicenseStorage {
     fun clearLicensePayload()
     fun loadDeviceId(): String?
     fun saveDeviceId(deviceId: String)
+    fun loadDismissedBroadcastTimestamp(): Long
+    fun saveDismissedBroadcastTimestamp(timestamp: Long)
 }

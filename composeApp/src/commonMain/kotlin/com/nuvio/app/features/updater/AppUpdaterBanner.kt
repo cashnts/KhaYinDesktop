@@ -74,7 +74,7 @@ fun AppUpdaterHost(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    if (!AppFeaturePolicy.inAppUpdaterEnabled || !AppUpdaterPlatform.isSupported) {
+    if (AppFeaturePolicy.isAdminClient || !AppFeaturePolicy.inAppUpdaterEnabled || !AppUpdaterPlatform.isSupported) {
         content()
         return
     }

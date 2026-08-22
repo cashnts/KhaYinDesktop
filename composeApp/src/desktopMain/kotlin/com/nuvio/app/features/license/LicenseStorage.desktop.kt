@@ -6,6 +6,7 @@ internal actual object LicenseStorage {
     private val store = DesktopStorage.store("nuvio_license")
     private const val payloadKey = "license_payload"
     private const val deviceIdKey = "device_unique_id"
+    private const val dismissedBroadcastKey = "dismissed_broadcast_timestamp"
 
     actual fun loadLicensePayload(): String? =
         store.getString(payloadKey)
@@ -23,5 +24,12 @@ internal actual object LicenseStorage {
 
     actual fun saveDeviceId(deviceId: String) {
         store.putString(deviceIdKey, deviceId)
+    }
+
+    actual fun loadDismissedBroadcastTimestamp(): Long =
+        store.getString(dismissedBroadcastKey)?.toLongOrNull() ?: 0L
+
+    actual fun saveDismissedBroadcastTimestamp(timestamp: Long) {
+        store.putString(dismissedBroadcastKey, timestamp.toString())
     }
 }

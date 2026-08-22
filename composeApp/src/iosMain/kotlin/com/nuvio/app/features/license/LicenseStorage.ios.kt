@@ -5,6 +5,7 @@ import platform.Foundation.NSUserDefaults
 actual object LicenseStorage {
     private const val payloadKey = "license_payload"
     private const val deviceIdKey = "device_unique_id"
+    private const val dismissedBroadcastKey = "dismissed_broadcast_timestamp"
 
     actual fun loadLicensePayload(): String? =
         NSUserDefaults.standardUserDefaults.stringForKey(payloadKey)
@@ -22,5 +23,12 @@ actual object LicenseStorage {
 
     actual fun saveDeviceId(deviceId: String) {
         NSUserDefaults.standardUserDefaults.setObject(deviceId, forKey = deviceIdKey)
+    }
+
+    actual fun loadDismissedBroadcastTimestamp(): Long =
+        NSUserDefaults.standardUserDefaults.stringForKey(dismissedBroadcastKey)?.toLongOrNull() ?: 0L
+
+    actual fun saveDismissedBroadcastTimestamp(timestamp: Long) {
+        NSUserDefaults.standardUserDefaults.setObject(timestamp.toString(), forKey = dismissedBroadcastKey)
     }
 }

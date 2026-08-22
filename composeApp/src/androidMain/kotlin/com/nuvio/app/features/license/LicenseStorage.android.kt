@@ -7,6 +7,7 @@ actual object LicenseStorage {
     private const val preferencesName = "nuvio_license_cache"
     private const val payloadKey = "license_payload"
     private const val deviceIdKey = "device_unique_id"
+    private const val dismissedBroadcastKey = "dismissed_broadcast_timestamp"
 
     private var preferences: SharedPreferences? = null
 
@@ -30,5 +31,12 @@ actual object LicenseStorage {
 
     actual fun saveDeviceId(deviceId: String) {
         preferences?.edit()?.putString(deviceIdKey, deviceId)?.apply()
+    }
+
+    actual fun loadDismissedBroadcastTimestamp(): Long =
+        preferences?.getLong(dismissedBroadcastKey, 0L) ?: 0L
+
+    actual fun saveDismissedBroadcastTimestamp(timestamp: Long) {
+        preferences?.edit()?.putLong(dismissedBroadcastKey, timestamp)?.apply()
     }
 }

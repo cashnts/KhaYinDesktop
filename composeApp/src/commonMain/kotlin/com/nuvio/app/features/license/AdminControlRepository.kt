@@ -47,11 +47,12 @@ object AdminControlRepository {
     private val _config = MutableStateFlow(SystemServiceConfig())
     val config: StateFlow<SystemServiceConfig> = _config.asStateFlow()
 
-    private val _dismissedBroadcastTimestamp = MutableStateFlow(0L)
+    private val _dismissedBroadcastTimestamp = MutableStateFlow(LicenseStorage.loadDismissedBroadcastTimestamp())
     val dismissedBroadcastTimestamp: StateFlow<Long> = _dismissedBroadcastTimestamp.asStateFlow()
 
     fun dismissBroadcast(timestamp: Long) {
         _dismissedBroadcastTimestamp.value = timestamp
+        LicenseStorage.saveDismissedBroadcastTimestamp(timestamp)
     }
 
     fun startPolling() {
