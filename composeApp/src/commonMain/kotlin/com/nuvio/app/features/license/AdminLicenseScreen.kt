@@ -343,6 +343,17 @@ fun AdminLicenseScreen(
                                 )
                             }
                         },
+                        onResetDevices = { key ->
+                            scope.launch {
+                                LicenseRepository.adminResetDevices(adminPassword, key).fold(
+                                    onSuccess = {
+                                        actionToast = "Active devices reset for $key"
+                                        refreshList()
+                                    },
+                                    onFailure = { err -> actionToast = "Error: ${err.message}" },
+                                )
+                            }
+                        },
                     )
                 }
                 AdminHubTab.MassAddons -> {
@@ -455,6 +466,7 @@ private fun LicensesTabContent(
     onCopyKey: (String) -> Unit,
     onExtendKey: (String) -> Unit,
     onRevokeKey: (String) -> Unit,
+    onResetDevices: (String) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier
@@ -708,6 +720,7 @@ private fun LicensesTabContent(
                     onCopy = { onCopyKey(lic.key) },
                     onExtend = { onExtendKey(lic.key) },
                     onRevoke = { onRevokeKey(lic.key) },
+                    onResetDevices = { onResetDevices(lic.key) },
                 )
             }
         }
@@ -982,6 +995,7 @@ private fun LicenseCardItem(
     onCopy: () -> Unit,
     onExtend: () -> Unit,
     onRevoke: () -> Unit,
+    onResetDevices: () -> Unit,
 ) {
     val isRevoked = license.status == "revoked"
     val isExpired = license.status == "expired"
@@ -1059,6 +1073,15 @@ private fun LicenseCardItem(
                     modifier = Modifier.height(32.dp),
                 ) {
                     Icon(imageVector = Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
+                }
+
+                Button(
+                    onClick = onResetDevices,
+                    shape = RoundedCornerShape(6.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222230), contentColor = Color(0xFF88AAFF)),
+                    modifier = Modifier.height(32.dp),
+                ) {
+                    Text("Reset Dev", fontSize = 11.sp)
                 }
 
                 Button(

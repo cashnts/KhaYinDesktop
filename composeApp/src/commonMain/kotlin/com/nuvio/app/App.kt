@@ -747,20 +747,10 @@ fun App(
             }
 
             if (AppFeaturePolicy.isAdminClient) {
-                // Admin client uses normal account system
-                val cachedProfiles = profileState.profiles
+                // Admin client uses authenticated master account only
                 when (authState) {
                     is AuthState.Loading -> {
-                        if (cachedProfiles.isNotEmpty()) {
-                            val active = profileState.activeProfile ?: cachedProfiles.first()
-                            if (profileState.activeProfile == null) {
-                                requestProfileSwitch(active, syncOnEnter = false)
-                            } else {
-                                gateScreen = AppGateScreen.Main.name
-                            }
-                        } else {
-                            gateScreen = AppGateScreen.Loading.name
-                        }
+                        gateScreen = AppGateScreen.Loading.name
                     }
                     is AuthState.Unauthenticated -> {
                         ProfileRepository.clearInMemory()
@@ -768,6 +758,13 @@ fun App(
                     }
                     is AuthState.Authenticated -> {
                         val authenticatedState = authState as AuthState.Authenticated
+                        val adminEmail = authenticatedState.email.orEmpty().trim()
+                        if (!adminEmail.equals("cash@kmkl.dev", ignoreCase = true)) {
+                            scope.launch { AuthRepository.signOut() }
+                            gateScreen = AppGateScreen.Auth.name
+                            return@LaunchedEffect
+                        }
+
                         ProfileRepository.ensureLoaded(authenticatedState.userId)
                         var profiles = ProfileRepository.state.value.profiles
                         if (profiles.isEmpty()) {
@@ -782,7 +779,7 @@ fun App(
                                 gateScreen = AppGateScreen.Main.name
                             }
                         } else {
-                            // Automatically seed default admin profile so user doesn't get trapped on Add Profile screen
+                            // Automatically seed default admin profile so admin has a clean workspace
                             scope.launch {
                                 ProfileRepository.createProfile(
                                     name = "Admin",

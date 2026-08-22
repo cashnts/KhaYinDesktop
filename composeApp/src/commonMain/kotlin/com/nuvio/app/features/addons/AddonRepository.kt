@@ -478,7 +478,9 @@ object AddonRepository {
             .toMutableMap()
             .apply {
                 put(DEFAULT_CINEMETA_ADDON_URL, true)
-                putIfAbsent(DEFAULT_KHAYIN_ADDON_URL, true)
+                if (!containsKey(DEFAULT_KHAYIN_ADDON_URL)) {
+                    put(DEFAULT_KHAYIN_ADDON_URL, true)
+                }
             }
 
     private fun cancelActiveRefreshes() {

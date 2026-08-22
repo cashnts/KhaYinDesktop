@@ -82,8 +82,13 @@ fun ProfileEditScreen(
         }
     }
     val fallbackColorHex = currentProfile?.avatarColorHex ?: PROFILE_COLORS.first()
+    val defaultInitialName = if (isNew && AppFeaturePolicy.isUserClient) {
+        (com.nuvio.app.features.license.LicenseRepository.state.value as? com.nuvio.app.features.license.LicenseState.Active)?.info?.customerName?.takeIf { it.isNotBlank() } ?: ""
+    } else {
+        currentProfile?.name ?: ""
+    }
 
-    var name by rememberSaveable { mutableStateOf(currentProfile?.name ?: "") }
+    var name by rememberSaveable { mutableStateOf(defaultInitialName) }
     var selectedAvatarId by rememberSaveable { mutableStateOf(currentProfile?.avatarId) }
     var avatarUrl by rememberSaveable { mutableStateOf(currentProfile?.avatarUrl.orEmpty()) }
     var selectedBackgroundId by rememberSaveable { mutableStateOf(currentProfile?.profileBackgroundId) }

@@ -619,29 +619,42 @@ private fun AuthHeading(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        AnimatedContent(
-            targetState = isSignUp,
-            transitionSpec = { fadeIn() togetherWith fadeOut() },
-            label = "authHeading",
-        ) { signUp ->
+        if (AppFeaturePolicy.isAdminClient) {
             Text(
-                text = if (signUp) stringResource(Res.string.compose_auth_create_account)
-                else stringResource(Res.string.compose_auth_welcome_back),
+                text = "KhaYin Administrator",
                 style = headingStyle,
                 color = AuthTextPrimary,
             )
-        }
-        AnimatedContent(
-            targetState = isSignUp,
-            transitionSpec = { fadeIn() togetherWith fadeOut() },
-            label = "authSubtitle",
-        ) { signUp ->
             Text(
-                text = if (signUp) stringResource(Res.string.compose_auth_sign_up_subtitle)
-                else stringResource(Res.string.compose_auth_sign_in_subtitle),
+                text = "Sign in with your master admin account (cash@kmkl.dev) to access the Admin Panel.",
                 style = subtitleStyle,
                 color = AuthTextSecondary,
             )
+        } else {
+            AnimatedContent(
+                targetState = isSignUp,
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                label = "authHeading",
+            ) { signUp ->
+                Text(
+                    text = if (signUp) stringResource(Res.string.compose_auth_create_account)
+                    else stringResource(Res.string.compose_auth_welcome_back),
+                    style = headingStyle,
+                    color = AuthTextPrimary,
+                )
+            }
+            AnimatedContent(
+                targetState = isSignUp,
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                label = "authSubtitle",
+            ) { signUp ->
+                Text(
+                    text = if (signUp) stringResource(Res.string.compose_auth_sign_up_subtitle)
+                    else stringResource(Res.string.compose_auth_sign_in_subtitle),
+                    style = subtitleStyle,
+                    color = AuthTextSecondary,
+                )
+            }
         }
     }
 }
@@ -741,41 +754,43 @@ private fun AuthForm(
             onClick = onSubmit,
         )
 
-        Spacer(modifier = Modifier.height(metrics.toggleTop))
+        if (!AppFeaturePolicy.isAdminClient) {
+            Spacer(modifier = Modifier.height(metrics.toggleTop))
 
-        AuthModeToggle(
-            isSignUp = isSignUp,
-            scale = scale,
-            onToggleAuthMode = onToggleAuthMode,
-        )
+            AuthModeToggle(
+                isSignUp = isSignUp,
+                scale = scale,
+                onToggleAuthMode = onToggleAuthMode,
+            )
 
-        Spacer(modifier = Modifier.height(metrics.dividerTop))
+            Spacer(modifier = Modifier.height(metrics.dividerTop))
 
-        AuthDivider(scale = scale)
+            AuthDivider(scale = scale)
 
-        Spacer(modifier = Modifier.height(metrics.secondaryTop))
+            Spacer(modifier = Modifier.height(metrics.secondaryTop))
 
-        AuthSecondaryButton(
-            text = stringResource(Res.string.compose_auth_continue_without_account),
-            enabled = !isLoading,
-            height = metrics.secondaryHeight,
-            scale = scale,
-            onClick = onContinueWithoutAccount,
-        )
+            AuthSecondaryButton(
+                text = stringResource(Res.string.compose_auth_continue_without_account),
+                enabled = !isLoading,
+                height = metrics.secondaryHeight,
+                scale = scale,
+                onClick = onContinueWithoutAccount,
+            )
 
-        Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-        Text(
-            text = stringResource(Res.string.compose_auth_store_locally),
-            modifier = Modifier.fillMaxWidth(),
-            style = MaterialTheme.typography.bodyMedium.copy(
-                color = AuthTextMuted,
-                fontSize = (13f * scale).sp,
-                lineHeight = (18f * scale).sp,
-                fontWeight = FontWeight.Normal,
-            ),
-            textAlign = TextAlign.Center,
-        )
+            Text(
+                text = stringResource(Res.string.compose_auth_store_locally),
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    color = AuthTextMuted,
+                    fontSize = (13f * scale).sp,
+                    lineHeight = (18f * scale).sp,
+                    fontWeight = FontWeight.Normal,
+                    textAlign = TextAlign.Center,
+                ),
+            )
+        }
     }
 }
 

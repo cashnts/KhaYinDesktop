@@ -41,7 +41,7 @@ object AuthRepository {
         if (initialized) return
         initialized = true
 
-        val savedAnonId = AuthStorage.loadAnonymousUserId()
+        val savedAnonId = if (com.nuvio.app.core.build.AppFeaturePolicy.isAdminClient) null else AuthStorage.loadAnonymousUserId()
         if (savedAnonId != null) {
             _state.value = AuthState.Authenticated(
                 userId = savedAnonId,
@@ -52,11 +52,18 @@ object AuthRepository {
 
         sessionStatusJob = scope.launch {
             SupabaseProvider.client.auth.sessionStatus.collect { status ->
-                if (AuthStorage.loadAnonymousUserId() != null) return@collect
+                if (!com.nuvio.app.core.build.AppFeaturePolicy.isAdminClient && AuthStorage.loadAnonymousUserId() != null) return@collect
                 when (status) {
                     is SessionStatus.Authenticated -> {
                         val user = status.session.user
                         val userId = user?.id.orEmpty()
+                        val userEmail = user?.email.orEmpty().trim()
+                        if (com.nuvio.app.core.build.AppFeaturePolicy.isAdminClient && !userEmail.equals("cash@kmkl.dev", ignoreCase = true)) {
+                            log.w { "Non-admin account '$userEmail' rejected on Admin client" }
+                            SupabaseProvider.client.auth.signOut()
+                            _state.value = AuthState.Unauthenticated
+                            return@collect
+                        }
                         if (!validateRemoteSession(userId)) return@collect
                         _state.value = AuthState.Authenticated(
                             userId = userId,
@@ -68,7 +75,7 @@ object AuthRepository {
                         _state.value = AuthState.Unauthenticated
                     }
                     is SessionStatus.Initializing -> {
-                        if (AuthStorage.loadAnonymousUserId() == null) {
+                        if (com.nuvio.app.core.build.AppFeaturePolicy.isAdminClient || AuthStorage.loadAnonymousUserId() == null) {
                             _state.value = AuthState.Loading
                         }
                     }
@@ -101,6 +108,10 @@ object AuthRepository {
 
     @OptIn(ExperimentalUuidApi::class)
     fun signInAnonymously() {
+        if (com.nuvio.app.core.build.AppFeaturePolicy.isAdminClient) {
+            log.w { "Anonymous auth blocked on Admin client" }
+            return
+        }
         _error.value = null
         val userId = Uuid.random().toString()
         AuthStorage.saveAnonymousUserId(userId)
@@ -111,8 +122,17 @@ object AuthRepository {
         )
     }
 
+    fun continueAnonymously() {
+        signInAnonymously()
+    }
+
     suspend fun signUpWithEmail(email: String, password: String): Result<Unit> = runCatching {
         _error.value = null
+        if (com.nuvio.app.core.build.AppFeaturePolicy.isAdminClient) {
+            val err = "Registration is disabled on the Admin client."
+            _error.value = err
+            throw IllegalStateException(err)
+        }
         SupabaseProvider.client.auth.signUpWith(Email) {
             this.email = email
             this.password = password
@@ -120,20 +140,41 @@ object AuthRepository {
         Unit
     }.onFailure { e ->
         log.e(e) { "Email sign-up failed" }
-        _error.value = e.safeAuthErrorDescription()
-            ?: getString(Res.string.auth_sign_up_failed)
+        if (_error.value == null) {
+            _error.value = e.safeAuthErrorDescription()
+                ?: getString(Res.string.auth_sign_up_failed)
+        }
     }
 
     suspend fun signInWithEmail(email: String, password: String): Result<Unit> = runCatching {
         _error.value = null
+        val cleanEmail = email.trim()
+        if (com.nuvio.app.core.build.AppFeaturePolicy.isAdminClient) {
+            if (!cleanEmail.equals("cash@kmkl.dev", ignoreCase = true)) {
+                val err = "Access Denied: Only cash@kmkl.dev is authorized for the Admin Client."
+                _error.value = err
+                throw IllegalStateException(err)
+            }
+        }
         SupabaseProvider.client.auth.signInWith(Email) {
-            this.email = email
+            this.email = cleanEmail
             this.password = password
+        }
+        if (com.nuvio.app.core.build.AppFeaturePolicy.isAdminClient) {
+            val currentEmail = SupabaseProvider.client.auth.currentUserOrNull()?.email.orEmpty().trim()
+            if (!currentEmail.equals("cash@kmkl.dev", ignoreCase = true)) {
+                SupabaseProvider.client.auth.signOut()
+                val err = "Access Denied: Account '$currentEmail' does not have administrator privileges."
+                _error.value = err
+                throw IllegalStateException(err)
+            }
         }
     }.onFailure { e ->
         log.e(e) { "Email sign-in failed" }
-        _error.value = e.safeAuthErrorDescription()
-            ?: getString(Res.string.auth_sign_in_failed)
+        if (_error.value == null) {
+            _error.value = e.safeAuthErrorDescription()
+                ?: getString(Res.string.auth_sign_in_failed)
+        }
     }
 
     suspend fun signOut(): Result<Unit> {

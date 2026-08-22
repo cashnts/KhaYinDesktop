@@ -138,11 +138,20 @@ private fun SubscriptionSettingsBody(
                     value = "${licenseInfo.activeDevices} / ${licenseInfo.maxDevices} Active",
                 )
 
-                licenseInfo.customerName?.takeIf { it.isNotBlank() }?.let { name ->
+                val activeProfileName = com.nuvio.app.features.profiles.ProfileRepository.state.value.activeProfile?.name?.takeIf { it.isNotBlank() }
+                val licensedToName = licenseInfo.customerName?.takeIf { it.isNotBlank() } ?: activeProfileName
+                if (licensedToName != null) {
                     Spacer(modifier = Modifier.height(10.dp))
                     AccountInfoRow(
                         label = "Licensed To",
-                        value = name,
+                        value = licensedToName,
+                    )
+                }
+                if (activeProfileName != null && !activeProfileName.equals(licensedToName, ignoreCase = true)) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    AccountInfoRow(
+                        label = "Profile",
+                        value = activeProfileName,
                     )
                 }
 

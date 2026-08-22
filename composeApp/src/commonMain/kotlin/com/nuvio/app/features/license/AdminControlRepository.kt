@@ -71,15 +71,16 @@ object AdminControlRepository {
         return "$base/rest/v1"
     }
 
-    private fun supabaseHeaders(): Map<String, String> {
+    private fun supabaseHeaders(method: String = "GET", url: String = "", body: String = ""): Map<String, String> {
         val key = ServerConfigurationRepository.active.value.publishableKey.ifBlank { SupabaseConfig.ANON_KEY }
         val token = runCatching { SupabaseProvider.client.auth.currentAccessTokenOrNull() }.getOrNull()?.takeIf { it.isNotBlank() } ?: key
-        return mapOf(
+        val baseHeaders = mapOf(
             "apikey" to key,
             "Authorization" to "Bearer $token",
             "Content-Type" to "application/json",
             "Prefer" to "return=representation,resolution=merge-duplicates",
         )
+        return com.nuvio.app.core.security.KhaYinSecurityBridge.buildSecureHeaders(method, url, body, baseHeaders).first
     }
 
     suspend fun fetchConfig(): SystemServiceConfig {

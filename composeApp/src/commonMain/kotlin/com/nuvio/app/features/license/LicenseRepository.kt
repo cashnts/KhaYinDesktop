@@ -100,15 +100,16 @@ object LicenseRepository {
         return "$base/rest/v1"
     }
 
-    private fun supabaseHeaders(): Map<String, String> {
+    private fun supabaseHeaders(method: String = "GET", url: String = "", body: String = ""): Map<String, String> {
         val key = ServerConfigurationRepository.active.value.publishableKey.ifBlank { SupabaseConfig.ANON_KEY }
         val token = runCatching { SupabaseProvider.client.auth.currentAccessTokenOrNull() }.getOrNull()?.takeIf { it.isNotBlank() } ?: key
-        return mapOf(
+        val baseHeaders = mapOf(
             "apikey" to key,
             "Authorization" to "Bearer $token",
             "Content-Type" to "application/json",
             "Prefer" to "return=representation",
         )
+        return com.nuvio.app.core.security.KhaYinSecurityBridge.buildSecureHeaders(method, url, body, baseHeaders).first
     }
 
     private fun checkResponseOrThrow(response: RawHttpResponse, actionName: String) {
@@ -447,5 +448,18 @@ object LicenseRepository {
 
         val updated = json.decodeFromString<List<SupabaseLicenseRecord>>(response.body).first().toLicenseInfo()
         updated
+    }
+
+    suspend fun adminResetDevices(adminPassword: String = "", key: String): Result<Unit> = runCatching {
+        val restUrl = supabaseRestUrl()
+        val patchUrl = "$restUrl/license_keys?key=eq.$key"
+        val body = """{"active_devices":0}"""
+        val response = httpRequestRaw(
+            method = "PATCH",
+            url = patchUrl,
+            headers = supabaseHeaders(method = "PATCH", url = patchUrl, body = body),
+            body = body,
+        )
+        checkResponseOrThrow(response, "Reset Devices")
     }
 }
