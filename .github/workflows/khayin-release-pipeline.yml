@@ -100,7 +100,7 @@ jobs:
 
       - name: Build macOS Release DMG
         run: |
-          ./gradlew packageReleaseDmg -Pnuvio.android.distribution=full --no-configuration-cache --stacktrace
+          ./gradlew packageReleaseDmg -Pnuvio.client.role=user -Pnuvio.android.distribution=full --no-configuration-cache --stacktrace
 
       - name: Rename and Prepare macOS Artifact
         run: |
@@ -169,6 +169,7 @@ jobs:
         run: |
           & .\gradlew.bat `
             :composeApp:packageReleaseMsi `
+            "-Pnuvio.client.role=user" `
             "-Pnuvio.android.distribution=full" `
             "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" `
             "-Pcompose.desktop.packaging.checkJdkVendor=false" `
