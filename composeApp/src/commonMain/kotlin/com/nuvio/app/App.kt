@@ -4325,7 +4325,7 @@ private fun DesktopHoverSidebar(
         BoxWithConstraints(
             modifier = Modifier.fillMaxSize(),
         ) {
-            val profileStackRows = profiles.size + if (profiles.size < MAX_PROFILES) 1 else 0
+            val profileStackRows = profiles.size + if (AppFeaturePolicy.isAdminClient && profiles.size < MAX_PROFILES) 1 else 0
             val profileStackHeight = if (profileStackRows > 0) {
                 DesktopSidebarProfileStackRowHeight * profileStackRows +
                     DesktopSidebarProfileStackRowGap * (profileStackRows - 1)

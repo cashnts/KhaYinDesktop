@@ -22,4 +22,8 @@ actual object ProfileStorage {
             ?.putString(payloadKey, payload)
             ?.apply()
     }
+
+    actual fun clear() {
+        preferences?.edit()?.remove(payloadKey)?.apply()
+    }
 }

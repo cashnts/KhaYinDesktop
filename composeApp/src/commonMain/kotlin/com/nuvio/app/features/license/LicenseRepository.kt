@@ -8,6 +8,7 @@ import com.nuvio.app.core.network.SupabaseConfig
 import com.nuvio.app.core.network.SupabaseProvider
 import com.nuvio.app.features.addons.RawHttpResponse
 import com.nuvio.app.features.addons.httpRequestRaw
+import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.watchprogress.CurrentDateProvider
 import io.github.jan.supabase.auth.auth
 import kotlin.random.Random
@@ -17,6 +18,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -48,6 +50,8 @@ object LicenseRepository {
         return deviceId
     }
 
+    private var heartbeatJob: Job? = null
+
     fun initialize() {
         if (initialized) return
         initialized = true
@@ -56,7 +60,8 @@ object LicenseRepository {
         if (!cachedPayload.isNullOrBlank()) {
             val cachedInfo = runCatching { json.decodeFromString<LicenseInfo>(cachedPayload) }.getOrNull()
             if (cachedInfo != null) {
-                if (cachedInfo.status == "revoked") {
+                if (cachedInfo.status.equals("revoked", ignoreCase = true)) {
+                    ProfileRepository.clearAll()
                     _state.value = LicenseState.Revoked(cachedInfo)
                 } else if (isExpiredTimestamp(cachedInfo.expiresAt)) {
                     _state.value = LicenseState.Expired(cachedInfo)
@@ -71,10 +76,20 @@ object LicenseRepository {
             _state.value = LicenseState.Unlicensed
         }
 
-        verifyJob?.cancel()
-        verifyJob = scope.launch {
+        startHeartbeat()
+    }
+
+    fun startHeartbeat() {
+        heartbeatJob?.cancel()
+        heartbeatJob = scope.launch {
             if (_state.value is LicenseState.Active) {
                 verifyRemoteLicense()
+            }
+            while (true) {
+                delay(15_000L) // 15s heartbeat interval for fast detection of admin revoking
+                if (_state.value is LicenseState.Active) {
+                    verifyRemoteLicense()
+                }
             }
         }
     }
@@ -144,8 +159,9 @@ object LicenseRepository {
             val record = records.first()
             val info = record.toLicenseInfo()
 
-            if (info.status == "revoked") {
+            if (info.status.equals("revoked", ignoreCase = true)) {
                 LicenseStorage.saveLicensePayload(json.encodeToString(info))
+                ProfileRepository.clearAll()
                 _state.value = LicenseState.Revoked(info)
                 val err = "This license key has been revoked."
                 _error.value = err
@@ -160,6 +176,9 @@ object LicenseRepository {
                 throw IllegalStateException(err)
             }
 
+            // Wipe any previous profile state before initializing new license
+            ProfileRepository.clearAll()
+
             // Increment active device count on Supabase
             runCatching {
                 httpRequestRaw(
@@ -173,6 +192,7 @@ object LicenseRepository {
             LicenseStorage.saveLicensePayload(json.encodeToString(info))
             syncSupabaseIdentity(info.key)
             _state.value = LicenseState.Active(info)
+            startHeartbeat()
 
             info
         }.onFailure { e ->
@@ -199,6 +219,7 @@ object LicenseRepository {
             if (records.isEmpty()) {
                 val revoked = currentInfo.copy(status = "revoked")
                 LicenseStorage.saveLicensePayload(json.encodeToString(revoked))
+                ProfileRepository.clearAll()
                 _state.value = LicenseState.Revoked(revoked)
                 return@runCatching LicenseState.Revoked(revoked)
             }
@@ -206,7 +227,27 @@ object LicenseRepository {
             val updated = records.first().toLicenseInfo()
             LicenseStorage.saveLicensePayload(json.encodeToString(updated))
 
-            val newState = if (updated.status == "revoked") {
+            // Analytics Heartbeat Ping to register device heartbeat and telemetry
+            val todayIso = CurrentDateProvider.todayIsoDate()
+            val devId = getOrCreateDeviceId()
+            runCatching {
+                httpRequestRaw(
+                    method = "POST",
+                    url = "$restUrl/license_analytics",
+                    headers = supabaseHeaders(),
+                    body = json.encodeToString(mapOf(
+                        "license_key" to currentInfo.key,
+                        "device_id" to devId,
+                        "platform" to "KhaYin-Client",
+                        "version" to "1.1.20",
+                        "event" to "heartbeat",
+                        "last_seen_at" to todayIso,
+                    )),
+                )
+            }
+
+            val newState = if (updated.status.equals("revoked", ignoreCase = true)) {
+                ProfileRepository.clearAll()
                 LicenseState.Revoked(updated)
             } else if (isExpiredTimestamp(updated.expiresAt)) {
                 LicenseState.Expired(updated)
@@ -222,8 +263,11 @@ object LicenseRepository {
     }
 
     fun deactivate() {
+        heartbeatJob?.cancel()
+        heartbeatJob = null
         LicenseStorage.clearLicensePayload()
         AuthStorage.clearAnonymousUserId()
+        ProfileRepository.clearAll()
         _state.value = LicenseState.Unlicensed
     }
 

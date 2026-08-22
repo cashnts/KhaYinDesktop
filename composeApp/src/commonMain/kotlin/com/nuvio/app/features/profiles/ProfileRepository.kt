@@ -121,6 +121,11 @@ object ProfileRepository {
         _state.value = ProfileState()
     }
 
+    fun clearAll() {
+        clearInMemory()
+        ProfileStorage.clear()
+    }
+
     suspend fun pullProfiles() {
         if (AuthRepository.state.value.isAnonymous) {
             if (!_state.value.isLoaded) {
@@ -158,7 +163,7 @@ object ProfileRepository {
         }
     }
 
-    private fun selectProfile(profileIndex: Int) {
+    fun selectProfile(profileIndex: Int) {
         activeProfileIndex = profileIndex
         val selectedProfile = _state.value.profiles.find { it.profileIndex == profileIndex }
         _state.value = _state.value.copy(

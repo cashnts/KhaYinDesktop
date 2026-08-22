@@ -10,4 +10,8 @@ internal actual object ProfileStorage {
     actual fun savePayload(payload: String) {
         store.putString("profiles", payload)
     }
+
+    actual fun clear() {
+        store.remove("profiles")
+    }
 }

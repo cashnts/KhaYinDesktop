@@ -11,4 +11,8 @@ actual object ProfileStorage {
     actual fun savePayload(payload: String) {
         NSUserDefaults.standardUserDefaults.setObject(payload, forKey = payloadKey)
     }
+
+    actual fun clear() {
+        NSUserDefaults.standardUserDefaults.removeObjectForKey(payloadKey)
+    }
 }
