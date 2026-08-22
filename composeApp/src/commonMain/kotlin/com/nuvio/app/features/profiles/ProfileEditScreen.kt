@@ -15,10 +15,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Person
@@ -226,45 +232,93 @@ fun ProfileEditScreen(
         item {
             NuvioSurfaceCard {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text(
-                        text = stringResource(Res.string.profile_choose_avatar),
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = selectedAvatarItem?.displayName
-                            ?: if (avatars.isEmpty()) {
-                                stringResource(Res.string.profile_loading_avatars)
-                            } else {
-                                stringResource(Res.string.profile_select_avatar)
-                            },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(Res.string.profile_choose_avatar),
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = selectedAvatarItem?.displayName
+                                ?: if (avatars.isEmpty()) {
+                                    stringResource(Res.string.profile_loading_avatars)
+                                } else {
+                                    stringResource(Res.string.profile_select_avatar)
+                                },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
 
                     if (avatars.isNotEmpty()) {
-                        val avatarSpacing = 10.dp
-                        val minAvatarSize = 58.dp
-                        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                            val columns = (((maxWidth + avatarSpacing) / (minAvatarSize + avatarSpacing)).toInt())
-                                .coerceAtLeast(1)
-                            val avatarSize = (maxWidth - avatarSpacing * (columns - 1)) / columns
+                        var selectedCategory by remember { mutableStateOf("All") }
+                        val categories = remember(avatars) {
+                            listOf("All") + avatars.map { it.category.replaceFirstChar(Char::titlecase) }.distinct().filter { it.isNotBlank() }
+                        }
+                        val filteredAvatars = remember(avatars, selectedCategory) {
+                            if (selectedCategory == "All") avatars else avatars.filter { it.category.equals(selectedCategory, ignoreCase = true) }
+                        }
 
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(avatarSpacing),
-                                verticalArrangement = Arrangement.spacedBy(avatarSpacing),
-                                maxItemsInEachRow = columns,
+                        if (categories.size > 2) {
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth(),
                             ) {
-                                avatars.forEach { avatar ->
-                                    AvatarChoiceItem(
-                                        avatar = avatar,
-                                        size = avatarSize,
-                                        isSelected = customAvatarUrl == null && avatar.id == selectedAvatarId,
-                                        onClick = {
-                                            avatarUrl = ""
-                                            selectedAvatarId = avatar.id
-                                        },
-                                    )
+                                items(categories) { cat ->
+                                    val isCatSelected = selectedCategory == cat
+                                    androidx.compose.material3.Surface(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .clickable { selectedCategory = cat },
+                                        color = if (isCatSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                        shape = RoundedCornerShape(16.dp),
+                                    ) {
+                                        Text(
+                                            text = cat,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = if (isCatSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                            fontWeight = if (isCatSelected) FontWeight.Bold else FontWeight.Medium,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        val avatarSpacing = 10.dp
+                        val minAvatarSize = 54.dp
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 210.dp)
+                                .verticalScroll(rememberScrollState()),
+                        ) {
+                            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                                val columns = (((maxWidth + avatarSpacing) / (minAvatarSize + avatarSpacing)).toInt())
+                                    .coerceAtLeast(1)
+                                val avatarSize = (maxWidth - avatarSpacing * (columns - 1)) / columns
+
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(avatarSpacing),
+                                    verticalArrangement = Arrangement.spacedBy(avatarSpacing),
+                                    maxItemsInEachRow = columns,
+                                ) {
+                                    filteredAvatars.forEach { avatar ->
+                                        AvatarChoiceItem(
+                                            avatar = avatar,
+                                            size = avatarSize,
+                                            isSelected = customAvatarUrl == null && avatar.id == selectedAvatarId,
+                                            onClick = {
+                                                avatarUrl = ""
+                                                selectedAvatarId = avatar.id
+                                            },
+                                        )
+                                    }
                                 }
                             }
                         }
