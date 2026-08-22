@@ -37,9 +37,32 @@ object AuthRepository {
     private var sessionStatusJob: Job? = null
     private var validatedRemoteUserId: String? = null
 
+    @OptIn(ExperimentalUuidApi::class)
     fun initialize() {
         if (initialized) return
         initialized = true
+
+        if (com.nuvio.app.core.build.AppFeaturePolicy.isUserClient) {
+            scope.launch {
+                runCatching {
+                    if (SupabaseProvider.client.auth.currentSessionOrNull() != null) {
+                        SupabaseProvider.client.auth.signOut()
+                    }
+                }
+            }
+            val savedAnonId = AuthStorage.loadAnonymousUserId()
+            val anonId = if (!savedAnonId.isNullOrBlank()) savedAnonId else run {
+                val newId = Uuid.random().toString()
+                AuthStorage.saveAnonymousUserId(newId)
+                newId
+            }
+            _state.value = AuthState.Authenticated(
+                userId = anonId,
+                email = null,
+                isAnonymous = true,
+            )
+            return
+        }
 
         val savedAnonId = if (com.nuvio.app.core.build.AppFeaturePolicy.isAdminClient) null else AuthStorage.loadAnonymousUserId()
         if (savedAnonId != null) {

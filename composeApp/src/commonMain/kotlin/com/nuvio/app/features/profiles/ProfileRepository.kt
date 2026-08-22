@@ -127,7 +127,7 @@ object ProfileRepository {
     }
 
     suspend fun pullProfiles() {
-        if (AuthRepository.state.value.isAnonymous) {
+        if (AuthRepository.state.value.isAnonymous || com.nuvio.app.core.build.AppFeaturePolicy.isUserClient) {
             if (!_state.value.isLoaded) {
                 loadCachedProfiles()
                 _state.value = _state.value.copy(isLoaded = true)
@@ -210,7 +210,7 @@ object ProfileRepository {
 
     suspend fun pushProfiles(profiles: List<ProfilePushPayload>) {
         applyPayloadsLocally(profiles)
-        if (AuthRepository.state.value.isAnonymous) {
+        if (AuthRepository.state.value.isAnonymous || com.nuvio.app.core.build.AppFeaturePolicy.isUserClient) {
             return
         }
         try {
@@ -302,7 +302,7 @@ object ProfileRepository {
     }
 
     suspend fun deleteProfile(profileIndex: Int) {
-        if (AuthRepository.state.value.isAnonymous) {
+        if (AuthRepository.state.value.isAnonymous || com.nuvio.app.core.build.AppFeaturePolicy.isUserClient) {
             val remaining = _state.value.profiles.filter { it.profileIndex != profileIndex }
             ProfilePinCacheStorage.removePayload(profileIndex)
             _state.value = _state.value.copy(
@@ -329,7 +329,7 @@ object ProfileRepository {
     }
 
     suspend fun verifyPin(profileIndex: Int, pin: String): PinVerifyResult {
-        if (AuthRepository.state.value !is AuthState.Authenticated) {
+        if (AuthRepository.state.value !is AuthState.Authenticated || com.nuvio.app.core.build.AppFeaturePolicy.isUserClient) {
             return verifyPinLocally(profileIndex, pin)
         }
 
@@ -352,7 +352,7 @@ object ProfileRepository {
     }
 
     suspend fun setPin(profileIndex: Int, pin: String, currentPin: String? = null): PinVerifyResult {
-        if (AuthRepository.state.value !is AuthState.Authenticated) {
+        if (AuthRepository.state.value !is AuthState.Authenticated || com.nuvio.app.core.build.AppFeaturePolicy.isUserClient) {
             return PinVerifyResult(unlocked = false, message = getString(Res.string.profile_pin_set_requires_internet))
         }
 
@@ -374,7 +374,7 @@ object ProfileRepository {
     }
 
     suspend fun clearPin(profileIndex: Int, currentPin: String? = null): PinVerifyResult {
-        if (AuthRepository.state.value !is AuthState.Authenticated) {
+        if (AuthRepository.state.value !is AuthState.Authenticated || com.nuvio.app.core.build.AppFeaturePolicy.isUserClient) {
             return PinVerifyResult(unlocked = false, message = getString(Res.string.profile_pin_clear_requires_internet))
         }
 
