@@ -12,7 +12,7 @@ data class LicenseInfo(
     val expiresAt: String? = null, // null = Lifetime
     val maxDevices: Int = 1,
     val activeDevices: Int = 1,
-    val presetAddons: List<String> = emptyList(),
+    val nonce: String? = null,
     val profileName: String? = null,
     val createdAt: String? = null,
     val notes: String? = null,
@@ -26,8 +26,9 @@ data class SupabaseLicenseRecord(
     val tier: String? = "standard",
     @SerialName("expires_at") val expiresAt: String? = null,
     @SerialName("max_devices") val maxDevices: Int = 1,
+    @SerialName("max_device") val maxDevice: Int? = null,
     @SerialName("active_devices") val activeDevices: Int = 0,
-    @SerialName("preset_addons") val presetAddons: List<String> = emptyList(),
+    val nonce: String? = null,
     @SerialName("profile_name") val profileName: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
     val notes: String? = null,
@@ -38,9 +39,9 @@ data class SupabaseLicenseRecord(
         customerName = customerName,
         tier = tier,
         expiresAt = expiresAt,
-        maxDevices = maxDevices,
+        maxDevices = maxDevice ?: maxDevices,
         activeDevices = activeDevices,
-        presetAddons = presetAddons,
+        nonce = nonce,
         profileName = profileName,
         createdAt = createdAt,
         notes = notes,
@@ -95,30 +96,32 @@ data class LicenseActivationRequest(
 
 @Serializable
 data class LicenseActivationResponse(
-    val success: Boolean,
+    val success: Boolean = true,
+    @SerialName("expires_at") val expiresAt: String? = null,
+    @SerialName("max_device") val maxDevice: Int? = null,
+    @SerialName("max_devices") val maxDevices: Int? = null,
+    val nonce: String? = null,
     val status: String? = null,
     val key: String? = null,
     val customerName: String? = null,
     val tier: String? = null,
-    val expiresAt: String? = null,
-    val maxDevices: Int? = null,
-    val activeDevices: Int? = null,
-    val presetAddons: List<String> = emptyList(),
-    val profileName: String? = null,
     val error: String? = null,
-)
+) {
+    val resolvedMaxDevices: Int
+        get() = maxDevice ?: maxDevices ?: 1
+}
 
 @Serializable
 data class LicenseVerifyResponse(
-    val success: Boolean,
+    val success: Boolean = true,
+    @SerialName("expires_at") val expiresAt: String? = null,
+    @SerialName("max_device") val maxDevice: Int? = null,
+    @SerialName("max_devices") val maxDevices: Int? = null,
+    val nonce: String? = null,
     val status: String? = null,
     val key: String? = null,
     val customerName: String? = null,
     val tier: String? = null,
-    val expiresAt: String? = null,
-    val maxDevices: Int? = null,
-    val activeDevices: Int? = null,
-    val presetAddons: List<String> = emptyList(),
     val error: String? = null,
 )
 

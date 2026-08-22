@@ -150,15 +150,33 @@ object LicenseRepository {
 
             checkResponseOrThrow(response, "License Activation")
 
-            val records = json.decodeFromString<List<SupabaseLicenseRecord>>(response.body)
-            if (records.isEmpty()) {
-                val err = "License key '$key' was not found."
-                _error.value = err
-                throw IllegalStateException(err)
+            val body = response.body.trim()
+            val info: LicenseInfo = if (body.startsWith("{")) {
+                val resp = json.decodeFromString<LicenseActivationResponse>(body)
+                if (!resp.success && resp.error != null) {
+                    val err = resp.error
+                    _error.value = err
+                    throw IllegalStateException(err)
+                }
+                LicenseInfo(
+                    key = resp.key ?: key,
+                    status = resp.status ?: "active",
+                    customerName = resp.customerName,
+                    tier = resp.tier ?: "standard",
+                    expiresAt = resp.expiresAt,
+                    maxDevices = resp.resolvedMaxDevices,
+                    activeDevices = 1,
+                    nonce = resp.nonce,
+                )
+            } else {
+                val records = json.decodeFromString<List<SupabaseLicenseRecord>>(body)
+                if (records.isEmpty()) {
+                    val err = "License key '$key' was not found."
+                    _error.value = err
+                    throw IllegalStateException(err)
+                }
+                records.first().toLicenseInfo()
             }
-
-            val record = records.first()
-            val info = record.toLicenseInfo()
 
             if (info.status.equals("revoked", ignoreCase = true)) {
                 LicenseStorage.saveLicensePayload(json.encodeToString(info))
@@ -227,15 +245,33 @@ object LicenseRepository {
 
             checkResponseOrThrow(response, "License Verification")
 
-            val records = json.decodeFromString<List<SupabaseLicenseRecord>>(response.body)
-            if (records.isEmpty()) {
+            val body = response.body.trim()
+            val updated: LicenseInfo? = if (body.startsWith("{")) {
+                val resp = json.decodeFromString<LicenseVerifyResponse>(body)
+                if (resp.success) {
+                    LicenseInfo(
+                        key = resp.key ?: currentInfo.key,
+                        status = resp.status ?: "active",
+                        customerName = resp.customerName ?: currentInfo.customerName,
+                        tier = resp.tier ?: currentInfo.tier,
+                        expiresAt = resp.expiresAt,
+                        maxDevices = resp.maxDevice ?: resp.maxDevices ?: currentInfo.maxDevices,
+                        activeDevices = currentInfo.activeDevices,
+                        nonce = resp.nonce ?: currentInfo.nonce,
+                    )
+                } else null
+            } else {
+                val records = json.decodeFromString<List<SupabaseLicenseRecord>>(body)
+                records.firstOrNull()?.toLicenseInfo()
+            }
+
+            if (updated == null) {
                 val revoked = currentInfo.copy(status = "revoked")
                 LicenseStorage.saveLicensePayload(json.encodeToString(revoked))
                 _state.value = LicenseState.Revoked(revoked)
                 return@runCatching LicenseState.Revoked(revoked)
             }
 
-            val updated = records.first().toLicenseInfo()
             LicenseStorage.saveLicensePayload(json.encodeToString(updated))
 
             // Analytics Heartbeat Ping to register device heartbeat and telemetry

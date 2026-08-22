@@ -23,14 +23,27 @@ val localProps = Properties().apply {
     val propsFile = rootProject.file("local.properties")
     if (propsFile.exists()) propsFile.inputStream().use { load(it) }
 }
-val releaseStoreFile = localProps.getProperty("NUVIO_RELEASE_STORE_FILE")?.takeIf { it.isNotBlank() }
-val releaseStorePassword = localProps.getProperty("NUVIO_RELEASE_STORE_PASSWORD")?.takeIf { it.isNotBlank() }
-val releaseKeyAlias = localProps.getProperty("NUVIO_RELEASE_KEY_ALIAS")?.takeIf { it.isNotBlank() }
-val releaseKeyPassword = localProps.getProperty("NUVIO_RELEASE_KEY_PASSWORD")?.takeIf { it.isNotBlank() }
-val releaseKeystore = releaseStoreFile?.let(rootProject::file)
 fun envOrLocalProperty(key: String): String? =
     providers.environmentVariable(key).orNull?.trim()?.takeIf { it.isNotBlank() }
         ?: localProps.getProperty(key)?.trim()?.takeIf { it.isNotBlank() }
+        ?: (findProperty(key) as? String)?.trim()?.takeIf { it.isNotBlank() }
+
+val releaseStoreFile = envOrLocalProperty("NUVIO_RELEASE_STORE_FILE")
+    ?: envOrLocalProperty("RELEASE_STORE_FILE")
+val releaseStorePassword = envOrLocalProperty("NUVIO_RELEASE_STORE_PASSWORD")
+    ?: envOrLocalProperty("RELEASE_STORE_PASSWORD")
+val releaseKeyAlias = envOrLocalProperty("NUVIO_RELEASE_KEY_ALIAS")
+    ?: envOrLocalProperty("RELEASE_KEY_ALIAS")
+val releaseKeyPassword = envOrLocalProperty("NUVIO_RELEASE_KEY_PASSWORD")
+    ?: envOrLocalProperty("RELEASE_KEY_PASSWORD")
+val releaseKeystore = releaseStoreFile?.let { path ->
+    val f = file(path)
+    if (f.isAbsolute) f else rootProject.file(path)
+}
+val hasReleaseSigning = releaseKeystore != null && releaseKeystore.isFile &&
+    !releaseStorePassword.isNullOrBlank() &&
+    !releaseKeyAlias.isNullOrBlank() &&
+    !releaseKeyPassword.isNullOrBlank()
 
 val sentryAuthToken = envOrLocalProperty("SENTRY_AUTH_TOKEN")
 val sentryOrg = envOrLocalProperty("SENTRY_ORG")
@@ -53,8 +66,8 @@ android {
     compileSdkMinor = libs.versions.android.compileSdkMinor.get().toInt()
 
     signingConfigs {
-        create("release") {
-            if (releaseKeystore != null && releaseStorePassword != null && releaseKeyAlias != null && releaseKeyPassword != null) {
+        if (hasReleaseSigning) {
+            create("release") {
                 storeFile = releaseKeystore
                 storePassword = releaseStorePassword
                 keyAlias = releaseKeyAlias
@@ -102,12 +115,13 @@ android {
         }
     }
 
+    val enableSplits = (findProperty("nuvio.android.enableSplits") as? String)?.toBoolean() ?: false
     splits {
         abi {
-            isEnable = buildsReleaseApks
+            isEnable = enableSplits
             reset()
             include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-            isUniversalApk = false
+            isUniversalApk = true
         }
     }
 
@@ -119,9 +133,14 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "../composeApp/proguard-rules.pro",
             )
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             ndk {
-                debugSymbolLevel = "FULL"
+                val symbolLevel = envOrLocalProperty("NUVIO_NDK_DEBUG_SYMBOL_LEVEL") ?: "NONE"
+                debugSymbolLevel = symbolLevel
             }
         }
     }
