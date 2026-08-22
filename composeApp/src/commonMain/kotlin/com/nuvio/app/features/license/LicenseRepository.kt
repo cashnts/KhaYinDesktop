@@ -139,22 +139,29 @@ object LicenseRepository {
 
         _error.value = null
         val restUrl = supabaseRestUrl()
+        val deviceId = getOrCreateDeviceId()
 
         return runCatching {
-            val response = httpRequestRaw(
-                method = "GET",
-                url = "$restUrl/license_keys?key=eq.$key&select=*",
-                headers = supabaseHeaders(),
-                body = "",
+            // First attempt: call Postgres activate_license RPC with nonce support
+            val rpcPayload = json.encodeToString(
+                mapOf(
+                    "p_key" to key,
+                    "p_device_id" to deviceId,
+                    "p_device_name" to "Desktop Client",
+                )
+            )
+            val rpcUrl = "$restUrl/rpc/activate_license"
+            val rpcResponse = httpRequestRaw(
+                method = "POST",
+                url = rpcUrl,
+                headers = supabaseHeaders(method = "POST", url = rpcUrl, body = rpcPayload),
+                body = rpcPayload,
             )
 
-            checkResponseOrThrow(response, "License Activation")
-
-            val body = response.body.trim()
-            val info: LicenseInfo = if (body.startsWith("{")) {
-                val resp = json.decodeFromString<LicenseActivationResponse>(body)
-                if (!resp.success && resp.error != null) {
-                    val err = resp.error
+            val info: LicenseInfo = if (rpcResponse.status in 200..299 && rpcResponse.body.trim().startsWith("{")) {
+                val resp = json.decodeFromString<LicenseActivationResponse>(rpcResponse.body.trim())
+                if (!resp.success) {
+                    val err = resp.error ?: "License activation failed."
                     _error.value = err
                     throw IllegalStateException(err)
                 }
@@ -169,13 +176,43 @@ object LicenseRepository {
                     nonce = resp.nonce,
                 )
             } else {
-                val records = json.decodeFromString<List<SupabaseLicenseRecord>>(body)
-                if (records.isEmpty()) {
-                    val err = "License key '$key' was not found."
-                    _error.value = err
-                    throw IllegalStateException(err)
+                // Fallback to table query if RPC is not deployed
+                val response = httpRequestRaw(
+                    method = "GET",
+                    url = "$restUrl/license_keys?key=eq.$key&select=*",
+                    headers = supabaseHeaders(),
+                    body = "",
+                )
+
+                checkResponseOrThrow(response, "License Activation")
+
+                val body = response.body.trim()
+                if (body.startsWith("{")) {
+                    val resp = json.decodeFromString<LicenseActivationResponse>(body)
+                    if (!resp.success && resp.error != null) {
+                        val err = resp.error
+                        _error.value = err
+                        throw IllegalStateException(err)
+                    }
+                    LicenseInfo(
+                        key = resp.key ?: key,
+                        status = resp.status ?: "active",
+                        customerName = resp.customerName,
+                        tier = resp.tier ?: "standard",
+                        expiresAt = resp.expiresAt,
+                        maxDevices = resp.resolvedMaxDevices,
+                        activeDevices = 1,
+                        nonce = resp.nonce,
+                    )
+                } else {
+                    val records = json.decodeFromString<List<SupabaseLicenseRecord>>(body)
+                    if (records.isEmpty()) {
+                        val err = "License key '$key' was not found."
+                        _error.value = err
+                        throw IllegalStateException(err)
+                    }
+                    records.first().toLicenseInfo()
                 }
-                records.first().toLicenseInfo()
             }
 
             if (info.status.equals("revoked", ignoreCase = true)) {
@@ -206,8 +243,8 @@ object LicenseRepository {
                 throw IllegalStateException(err)
             }
 
-            // If new device, increment active device count on Supabase up to maxDevices
-            if (!isReactivationOnSameDevice) {
+            // If new device, increment active device count on Supabase up to maxDevices (for table query fallback)
+            if (!isReactivationOnSameDevice && info.nonce == null) {
                 val newActiveCount = minOf(info.activeDevices + 1, info.maxDevices)
                 runCatching {
                     httpRequestRaw(
@@ -234,35 +271,73 @@ object LicenseRepository {
     suspend fun verifyRemoteLicense(): LicenseState {
         val currentInfo = state.value.activeInfo ?: return LicenseState.Unlicensed
         val restUrl = supabaseRestUrl()
+        val deviceId = getOrCreateDeviceId()
 
         return runCatching {
-            val response = httpRequestRaw(
-                method = "GET",
-                url = "$restUrl/license_keys?key=eq.${currentInfo.key}&select=*",
-                headers = supabaseHeaders(),
-                body = "",
-            )
+            var updated: LicenseInfo? = null
 
-            checkResponseOrThrow(response, "License Verification")
-
-            val body = response.body.trim()
-            val updated: LicenseInfo? = if (body.startsWith("{")) {
-                val resp = json.decodeFromString<LicenseVerifyResponse>(body)
-                if (resp.success) {
-                    LicenseInfo(
-                        key = resp.key ?: currentInfo.key,
-                        status = resp.status ?: "active",
-                        customerName = resp.customerName ?: currentInfo.customerName,
-                        tier = resp.tier ?: currentInfo.tier,
-                        expiresAt = resp.expiresAt,
+            // If session nonce is present, call verify_license RPC to ensure device slot is still valid
+            if (currentInfo.nonce != null) {
+                val rpcPayload = json.encodeToString(
+                    mapOf(
+                        "p_key" to currentInfo.key,
+                        "p_device_id" to deviceId,
+                        "p_nonce" to currentInfo.nonce,
+                    )
+                )
+                val rpcUrl = "$restUrl/rpc/verify_license"
+                val rpcResponse = httpRequestRaw(
+                    method = "POST",
+                    url = rpcUrl,
+                    headers = supabaseHeaders(method = "POST", url = rpcUrl, body = rpcPayload),
+                    body = rpcPayload,
+                )
+                if (rpcResponse.status in 200..299 && rpcResponse.body.trim().startsWith("{")) {
+                    val resp = json.decodeFromString<LicenseVerifyResponse>(rpcResponse.body.trim())
+                    if (!resp.success) {
+                        val revoked = currentInfo.copy(status = "revoked")
+                        LicenseStorage.saveLicensePayload(json.encodeToString(revoked))
+                        _state.value = LicenseState.Revoked(revoked)
+                        return@runCatching LicenseState.Revoked(revoked)
+                    }
+                    updated = currentInfo.copy(
+                        expiresAt = resp.expiresAt ?: currentInfo.expiresAt,
                         maxDevices = resp.maxDevice ?: resp.maxDevices ?: currentInfo.maxDevices,
-                        activeDevices = currentInfo.activeDevices,
                         nonce = resp.nonce ?: currentInfo.nonce,
                     )
-                } else null
-            } else {
-                val records = json.decodeFromString<List<SupabaseLicenseRecord>>(body)
-                records.firstOrNull()?.toLicenseInfo()
+                }
+            }
+
+            // Fallback to table query if RPC was not used
+            if (updated == null) {
+                val response = httpRequestRaw(
+                    method = "GET",
+                    url = "$restUrl/license_keys?key=eq.${currentInfo.key}&select=*",
+                    headers = supabaseHeaders(),
+                    body = "",
+                )
+
+                checkResponseOrThrow(response, "License Verification")
+
+                val body = response.body.trim()
+                updated = if (body.startsWith("{")) {
+                    val resp = json.decodeFromString<LicenseVerifyResponse>(body)
+                    if (resp.success) {
+                        LicenseInfo(
+                            key = resp.key ?: currentInfo.key,
+                            status = resp.status ?: "active",
+                            customerName = resp.customerName ?: currentInfo.customerName,
+                            tier = resp.tier ?: currentInfo.tier,
+                            expiresAt = resp.expiresAt,
+                            maxDevices = resp.maxDevice ?: resp.maxDevices ?: currentInfo.maxDevices,
+                            activeDevices = currentInfo.activeDevices,
+                            nonce = resp.nonce ?: currentInfo.nonce,
+                        )
+                    } else null
+                } else {
+                    val records = json.decodeFromString<List<SupabaseLicenseRecord>>(body)
+                    records.firstOrNull()?.toLicenseInfo()
+                }
             }
 
             if (updated == null) {
