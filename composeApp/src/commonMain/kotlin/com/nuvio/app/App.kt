@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -729,7 +730,7 @@ fun App(
         val licenseState by LicenseRepository.state.collectAsStateWithLifecycle()
 
         LaunchedEffect(Unit) {
-            AdminControlRepository.fetchConfig()
+            AdminControlRepository.startPolling()
             if (AppFeaturePolicy.isUserClient) {
                 LicenseRepository.initialize()
             }
@@ -768,25 +769,29 @@ fun App(
                     is AuthState.Authenticated -> {
                         val authenticatedState = authState as AuthState.Authenticated
                         ProfileRepository.ensureLoaded(authenticatedState.userId)
-                        val profiles = ProfileRepository.state.value.profiles
+                        var profiles = ProfileRepository.state.value.profiles
+                        if (profiles.isEmpty()) {
+                            ProfileRepository.loadCachedProfiles()
+                            profiles = ProfileRepository.state.value.profiles
+                        }
                         if (profiles.isNotEmpty()) {
                             val active = profileState.activeProfile ?: profiles.first()
                             if (profileState.activeProfile == null) {
                                 requestProfileSwitch(active, syncOnEnter = true)
-                            } else {
+                            } else if (gateScreen != AppGateScreen.Main.name && gateScreen != AppGateScreen.ProfileEdit.name) {
                                 gateScreen = AppGateScreen.Main.name
                             }
                         } else {
-                            ProfileRepository.pullProfiles()
-                            val pulled = ProfileRepository.state.value.profiles
-                            if (pulled.isNotEmpty()) {
-                                val act = ProfileRepository.state.value.activeProfile ?: pulled.first()
-                                requestProfileSwitch(act, syncOnEnter = true)
+                            // Automatically seed default admin profile so user doesn't get trapped on Add Profile screen
+                            scope.launch {
+                                ProfileRepository.createProfile(
+                                    name = "Admin",
+                                    avatarColorHex = "#00E699",
+                                    usesPrimaryAddons = true,
+                                )
+                            }
+                            if (gateScreen != AppGateScreen.Main.name) {
                                 gateScreen = AppGateScreen.Main.name
-                            } else {
-                                editingProfile = null
-                                isNewProfile = true
-                                gateScreen = AppGateScreen.ProfileEdit.name
                             }
                         }
                     }
@@ -2346,40 +2351,41 @@ private fun MainAppContent(
                                     Surface(
                                         modifier = Modifier
                                             .align(Alignment.TopCenter)
-                                            .padding(top = (topChromePadding ?: 0.dp) + 8.dp, start = if (useDesktopSidebar) 80.dp else 16.dp, end = 16.dp)
-                                            .fillMaxWidth()
+                                            .padding(top = (topChromePadding ?: 0.dp) + 12.dp, start = if (useDesktopSidebar) 80.dp else 16.dp, end = 16.dp)
+                                            .widthIn(min = 280.dp, max = 560.dp)
                                             .zIndex(NuvioTokens.Z.toast),
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = Color(0xFF1E1611),
-                                        border = BorderStroke(1.dp, Color(0xFFFF9800)),
-                                        shadowElevation = 8.dp,
+                                        shape = RoundedCornerShape(20.dp),
+                                        color = Color(0xFF1E1611).copy(alpha = 0.95f),
+                                        border = BorderStroke(1.dp, Color(0xFFFF9800).copy(alpha = 0.6f)),
+                                        shadowElevation = 6.dp,
                                     ) {
                                         Row(
-                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                                             verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center,
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Rounded.Campaign,
                                                 contentDescription = "Alert",
                                                 tint = Color(0xFFFF9800),
-                                                modifier = Modifier.size(22.dp),
+                                                modifier = Modifier.size(18.dp),
                                             )
-                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Spacer(modifier = Modifier.width(10.dp))
                                             Text(
                                                 text = adminConfig.broadcastMessage,
-                                                style = MaterialTheme.typography.bodyMedium.copy(color = Color.White, fontWeight = FontWeight.SemiBold),
-                                                modifier = Modifier.weight(1f),
+                                                style = MaterialTheme.typography.bodyMedium.copy(color = Color.White, fontWeight = FontWeight.Medium),
+                                                modifier = Modifier.weight(1f, fill = false),
                                             )
-                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Spacer(modifier = Modifier.width(10.dp))
                                             IconButton(
                                                 onClick = { AdminControlRepository.dismissBroadcast(adminConfig.broadcastTimestamp) },
-                                                modifier = Modifier.size(28.dp),
+                                                modifier = Modifier.size(24.dp),
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Rounded.Close,
                                                     contentDescription = "Dismiss",
                                                     tint = Color(0xFFAAAAAA),
-                                                    modifier = Modifier.size(16.dp),
+                                                    modifier = Modifier.size(14.dp),
                                                 )
                                             }
                                         }

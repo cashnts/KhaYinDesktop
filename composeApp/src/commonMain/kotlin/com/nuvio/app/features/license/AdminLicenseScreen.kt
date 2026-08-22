@@ -71,9 +71,10 @@ import kotlinx.coroutines.launch
 
 private enum class AdminHubTab(val label: String) {
     Licenses("License Keys"),
-    MassAddons("Mass-Addon Push"),
+    Analytics("Analytics & Telemetry"),
     ServiceControls("Service Controls"),
     UserDevices("User Devices"),
+    MassAddons("Mass-Addon Push"),
 }
 
 @Composable
@@ -90,6 +91,10 @@ fun AdminLicenseScreen(
     var licenses by remember { mutableStateOf<List<LicenseInfo>>(emptyList()) }
     var isLoadingList by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+
+    // Analytics State
+    var analyticsRecords by remember { mutableStateOf<List<LicenseAnalyticsRecord>>(emptyList()) }
+    var isLoadingAnalytics by remember { mutableStateOf(false) }
 
     // Generator Form State
     var customerName by remember { mutableStateOf("") }
@@ -119,6 +124,21 @@ fun AdminLicenseScreen(
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
 
+    fun loadAnalytics() {
+        isLoadingAnalytics = true
+        scope.launch {
+            AdminControlRepository.fetchAnalytics(100).fold(
+                onSuccess = { list ->
+                    isLoadingAnalytics = false
+                    analyticsRecords = list
+                },
+                onFailure = {
+                    isLoadingAnalytics = false
+                },
+            )
+        }
+    }
+
     fun refreshList() {
         isLoadingList = true
         scope.launch {
@@ -137,6 +157,7 @@ fun AdminLicenseScreen(
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
         refreshList()
+        loadAnalytics()
         val cfg = AdminControlRepository.fetchConfig()
         maintenanceModeEnabled = cfg.maintenanceMode
         streamingDisabled = cfg.streamingDisabled
@@ -399,6 +420,13 @@ fun AdminLicenseScreen(
                                 }
                             }
                         },
+                    )
+                }
+                AdminHubTab.Analytics -> {
+                    AnalyticsTabContent(
+                        analytics = analyticsRecords,
+                        isLoading = isLoadingAnalytics,
+                        onRefresh = { loadAnalytics() },
                     )
                 }
                 AdminHubTab.UserDevices -> {
@@ -1054,5 +1082,187 @@ private fun LicenseCardItem(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AnalyticsTabContent(
+    analytics: List<LicenseAnalyticsRecord>,
+    isLoading: Boolean,
+    onRefresh: () -> Unit,
+) {
+    val totalHeartbeats = analytics.size
+    val uniqueKeys = analytics.mapNotNull { it.license_key }.distinct().size
+    val uniqueDevices = analytics.mapNotNull { it.device_id }.distinct().size
+    val activePlatforms = analytics.mapNotNull { it.platform }.distinct()
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column {
+                    Text(
+                        text = "LIVE TELEMETRY & ANALYTICS",
+                        style = MaterialTheme.typography.titleMedium.copy(color = Color.White, fontWeight = FontWeight.Bold),
+                    )
+                    Text(
+                        text = "Real-time heartbeat logs, connected devices, and license activity streams.",
+                        style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF888899)),
+                    )
+                }
+
+                Button(
+                    onClick = onRefresh,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222230), contentColor = Color(0xFF00E699)),
+                    modifier = Modifier.height(36.dp),
+                ) {
+                    Icon(imageVector = Icons.Rounded.Refresh, contentDescription = "Refresh", modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Refresh", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        // Summary Metric Cards
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                AnalyticsMetricCard(
+                    title = "Telemetry Events",
+                    value = "$totalHeartbeats",
+                    subtitle = "Heartbeat & pings recorded",
+                    accentColor = Color(0xFF00E699),
+                    modifier = Modifier.weight(1f),
+                )
+                AnalyticsMetricCard(
+                    title = "Active Keys",
+                    value = "$uniqueKeys",
+                    subtitle = "Unique licenses seen",
+                    accentColor = Color(0xFF3399FF),
+                    modifier = Modifier.weight(1f),
+                )
+                AnalyticsMetricCard(
+                    title = "Active Devices",
+                    value = "$uniqueDevices",
+                    subtitle = "Distinct hardware IDs",
+                    accentColor = Color(0xFFFF9900),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+
+        item {
+            Text(
+                text = "RECENT TELEMETRY STREAM (${analytics.size} Records)",
+                style = MaterialTheme.typography.labelMedium.copy(color = Color.White, fontWeight = FontWeight.Bold),
+            )
+        }
+
+        if (isLoading && analytics.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    NuvioLoadingIndicator()
+                }
+            }
+        } else if (analytics.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF16161E))
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "No analytics telemetry records recorded yet. User client heartbeat logs will appear here.",
+                        style = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFF888899)),
+                    )
+                }
+            }
+        } else {
+            items(analytics) { record ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF16161E))
+                        .border(1.dp, Color(0xFF262633), RoundedCornerShape(10.dp))
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0x2200E699))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                            ) {
+                                Text(
+                                    text = record.event?.uppercase() ?: "HEARTBEAT",
+                                    style = TextStyle(color = Color(0xFF00E699), fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = record.license_key ?: "UNKNOWN KEY",
+                                style = TextStyle(color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 13.sp),
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Device: ${record.device_id?.take(16) ?: "N/A"} • Platform: ${record.platform ?: "Client"} • Version: ${record.version ?: "1.1.20"}",
+                            style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp),
+                        )
+                    }
+
+                    Text(
+                        text = record.created_at?.take(19)?.replace("T", " ") ?: record.last_seen_at ?: "Just now",
+                        style = TextStyle(color = Color(0xFF666677), fontSize = 11.sp, fontFamily = FontFamily.Monospace),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AnalyticsMetricCard(
+    title: String,
+    value: String,
+    subtitle: String,
+    accentColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF16161E))
+            .border(1.dp, Color(0xFF262633), RoundedCornerShape(12.dp))
+            .padding(16.dp),
+    ) {
+        Text(text = title, style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFF888899)))
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(text = value, style = MaterialTheme.typography.headlineMedium.copy(color = accentColor, fontWeight = FontWeight.Bold))
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(text = subtitle, style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF666677), fontSize = 11.sp))
     }
 }

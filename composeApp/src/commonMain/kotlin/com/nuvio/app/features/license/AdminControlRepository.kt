@@ -6,9 +6,15 @@ import com.nuvio.app.core.network.SupabaseProvider
 import com.nuvio.app.features.addons.RawHttpResponse
 import com.nuvio.app.features.addons.httpRequestRaw
 import io.github.jan.supabase.auth.auth
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -22,7 +28,21 @@ data class SystemServiceConfig(
     val presetAddons: List<String> = emptyList(),
 )
 
+@Serializable
+data class LicenseAnalyticsRecord(
+    val id: Long? = null,
+    val license_key: String? = null,
+    val device_id: String? = null,
+    val platform: String? = null,
+    val version: String? = null,
+    val event: String? = null,
+    val last_seen_at: String? = null,
+    val created_at: String? = null,
+)
+
 object AdminControlRepository {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var pollingJob: Job? = null
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true }
     private val _config = MutableStateFlow(SystemServiceConfig())
     val config: StateFlow<SystemServiceConfig> = _config.asStateFlow()
@@ -32,6 +52,17 @@ object AdminControlRepository {
 
     fun dismissBroadcast(timestamp: Long) {
         _dismissedBroadcastTimestamp.value = timestamp
+    }
+
+    fun startPolling() {
+        if (pollingJob != null) return
+        pollingJob = scope.launch {
+            fetchConfig()
+            while (true) {
+                delay(12_000L) // poll service config every 12s
+                fetchConfig()
+            }
+        }
     }
 
     private fun supabaseRestUrl(): String {
@@ -102,6 +133,21 @@ object AdminControlRepository {
             }
             _config.value = newConfig
             newConfig
+        }
+    }
+
+    suspend fun fetchAnalytics(limit: Int = 100): Result<List<LicenseAnalyticsRecord>> = runCatching {
+        val restUrl = supabaseRestUrl()
+        val response = httpRequestRaw(
+            method = "GET",
+            url = "$restUrl/license_analytics?order=created_at.desc&limit=$limit",
+            headers = supabaseHeaders(),
+            body = "",
+        )
+        if (response.status in 200..299 && !response.body.startsWith("<")) {
+            json.decodeFromString<List<LicenseAnalyticsRecord>>(response.body)
+        } else {
+            emptyList()
         }
     }
 }

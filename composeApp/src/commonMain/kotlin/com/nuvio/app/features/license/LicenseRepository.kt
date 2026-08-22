@@ -161,7 +161,6 @@ object LicenseRepository {
 
             if (info.status.equals("revoked", ignoreCase = true)) {
                 LicenseStorage.saveLicensePayload(json.encodeToString(info))
-                ProfileRepository.clearAll()
                 _state.value = LicenseState.Revoked(info)
                 val err = "This license key has been revoked."
                 _error.value = err
@@ -176,17 +175,29 @@ object LicenseRepository {
                 throw IllegalStateException(err)
             }
 
-            // Wipe any previous profile state before initializing new license
-            ProfileRepository.clearAll()
+            // Check if device limit reached for new activations
+            val currentCachedKey = LicenseStorage.loadLicensePayload()?.let {
+                runCatching { json.decodeFromString<LicenseInfo>(it).key }.getOrNull()
+            }
+            val isReactivationOnSameDevice = currentCachedKey.equals(info.key, ignoreCase = true)
 
-            // Increment active device count on Supabase
-            runCatching {
-                httpRequestRaw(
-                    method = "PATCH",
-                    url = "$restUrl/license_keys?key=eq.$key",
-                    headers = supabaseHeaders(),
-                    body = json.encodeToString(mapOf("active_devices" to (info.activeDevices + 1))),
-                )
+            if (!isReactivationOnSameDevice && info.activeDevices >= info.maxDevices) {
+                val err = "Maximum active devices limit reached (${info.activeDevices}/${info.maxDevices}). Please disconnect an existing device or upgrade your tier."
+                _error.value = err
+                throw IllegalStateException(err)
+            }
+
+            // If new device, increment active device count on Supabase up to maxDevices
+            if (!isReactivationOnSameDevice) {
+                val newActiveCount = minOf(info.activeDevices + 1, info.maxDevices)
+                runCatching {
+                    httpRequestRaw(
+                        method = "PATCH",
+                        url = "$restUrl/license_keys?key=eq.$key",
+                        headers = supabaseHeaders(),
+                        body = json.encodeToString(mapOf("active_devices" to newActiveCount)),
+                    )
+                }
             }
 
             LicenseStorage.saveLicensePayload(json.encodeToString(info))
@@ -219,7 +230,6 @@ object LicenseRepository {
             if (records.isEmpty()) {
                 val revoked = currentInfo.copy(status = "revoked")
                 LicenseStorage.saveLicensePayload(json.encodeToString(revoked))
-                ProfileRepository.clearAll()
                 _state.value = LicenseState.Revoked(revoked)
                 return@runCatching LicenseState.Revoked(revoked)
             }
@@ -247,7 +257,6 @@ object LicenseRepository {
             }
 
             val newState = if (updated.status.equals("revoked", ignoreCase = true)) {
-                ProfileRepository.clearAll()
                 LicenseState.Revoked(updated)
             } else if (isExpiredTimestamp(updated.expiresAt)) {
                 LicenseState.Expired(updated)
@@ -263,11 +272,25 @@ object LicenseRepository {
     }
 
     fun deactivate() {
+        val currentInfo = state.value.activeInfo
+        if (currentInfo != null) {
+            val restUrl = supabaseRestUrl()
+            val newCount = maxOf(0, currentInfo.activeDevices - 1)
+            scope.launch {
+                runCatching {
+                    httpRequestRaw(
+                        method = "PATCH",
+                        url = "$restUrl/license_keys?key=eq.${currentInfo.key}",
+                        headers = supabaseHeaders(),
+                        body = json.encodeToString(mapOf("active_devices" to newCount)),
+                    )
+                }
+            }
+        }
         heartbeatJob?.cancel()
         heartbeatJob = null
         LicenseStorage.clearLicensePayload()
         AuthStorage.clearAnonymousUserId()
-        ProfileRepository.clearAll()
         _state.value = LicenseState.Unlicensed
     }
 

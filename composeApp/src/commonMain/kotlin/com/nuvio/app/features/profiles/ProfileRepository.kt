@@ -129,6 +129,7 @@ object ProfileRepository {
     suspend fun pullProfiles() {
         if (AuthRepository.state.value.isAnonymous) {
             if (!_state.value.isLoaded) {
+                loadCachedProfiles()
                 _state.value = _state.value.copy(isLoaded = true)
             }
             return
@@ -136,19 +137,24 @@ object ProfileRepository {
         try {
             val result = SupabaseProvider.client.postgrest.rpc("sync_pull_profiles")
             val profiles = result.decodeList<NuvioProfile>()
-            _state.value = _state.value.copy(
-                profiles = profiles.sortedBy { it.profileIndex },
-                isLoaded = true,
-                activeProfile = profiles.find { it.profileIndex == activeProfileIndex }
-                    ?: profiles.firstOrNull(),
-            )
-            if (_state.value.activeProfile != null) {
-                activeProfileIndex = _state.value.activeProfile!!.profileIndex
+            if (profiles.isNotEmpty()) {
+                _state.value = _state.value.copy(
+                    profiles = profiles.sortedBy { it.profileIndex },
+                    isLoaded = true,
+                    activeProfile = profiles.find { it.profileIndex == activeProfileIndex }
+                        ?: profiles.firstOrNull(),
+                )
+                if (_state.value.activeProfile != null) {
+                    activeProfileIndex = _state.value.activeProfile!!.profileIndex
+                }
+                persist()
+            } else {
+                loadCachedProfiles()
             }
-            persist()
         } catch (e: Throwable) {
             if (AuthRepository.signOutIfSessionInvalid(e, "Profile pull")) return
-            log.e(e) { "Failed to pull profiles" }
+            log.e(e) { "Failed to pull profiles: ${e.message}" }
+            loadCachedProfiles()
             if (!_state.value.isLoaded) {
                 _state.value = _state.value.copy(isLoaded = true)
             }
@@ -203,8 +209,8 @@ object ProfileRepository {
     }
 
     suspend fun pushProfiles(profiles: List<ProfilePushPayload>) {
+        applyPayloadsLocally(profiles)
         if (AuthRepository.state.value.isAnonymous) {
-            applyPayloadsLocally(profiles)
             return
         }
         try {
@@ -217,7 +223,7 @@ object ProfileRepository {
             pullProfiles()
         } catch (e: Throwable) {
             if (AuthRepository.signOutIfSessionInvalid(e, "Profile push")) return
-            log.e(e) { "Failed to push profiles" }
+            log.e(e) { "Failed to push profiles to cloud: ${e.message}" }
         }
     }
 
@@ -413,11 +419,11 @@ object ProfileRepository {
     }
 
     private fun applyPayloadsLocally(payloads: List<ProfilePushPayload>) {
-        val authState = AuthRepository.state.value as? AuthState.Authenticated ?: return
+        val currentUserId = (AuthRepository.state.value as? AuthState.Authenticated)?.userId ?: loadedCacheForUserId ?: "local_user"
         val profiles = payloads.map { p ->
             NuvioProfile(
                 id = "",
-                userId = authState.userId,
+                userId = currentUserId,
                 profileIndex = p.profileIndex,
                 name = p.name,
                 avatarColorHex = p.avatarColorHex,
