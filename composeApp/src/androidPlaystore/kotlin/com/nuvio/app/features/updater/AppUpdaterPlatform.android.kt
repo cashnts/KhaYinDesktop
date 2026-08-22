@@ -8,6 +8,7 @@ import org.jetbrains.compose.resources.getString
 
 actual object AppUpdaterPlatform {
     actual val isSupported: Boolean = false
+    actual val platformId: String = "android"
     actual val isDebugBuild: Boolean = false
 
     actual val releaseSource: AppUpdateReleaseSource = AppUpdateReleaseSource(

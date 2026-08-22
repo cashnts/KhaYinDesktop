@@ -22,7 +22,7 @@ import kotlinx.coroutines.runBlocking
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.getString
 
-private const val gitHubApiBase = "https://api.github.com"
+private const val downloadsFeedUrl = "https://dl.khayin.net/downloads.json"
 
 data class AppUpdate(
     val tag: String,
@@ -48,23 +48,24 @@ data class AppUpdaterUiState(
 )
 
 @Serializable
-private data class GitHubReleaseDto(
-    @SerialName("tag_name") val tagName: String? = null,
-    val name: String? = null,
-    val body: String? = null,
-    val draft: Boolean = false,
-    val prerelease: Boolean = false,
-    @SerialName("html_url") val htmlUrl: String? = null,
-    @SerialName("target_commitish") val targetCommitish: String? = null,
-    val assets: List<GitHubAssetDto> = emptyList(),
+private data class KhayinDownloadsDto(
+    val baseUrl: String = "https://file.dl.khayin.net",
+    val appPrefix: String = "khayin",
+    val version: String = "",
+    val portalUrl: String = "https://dl.khayin.net",
+    val platforms: Map<String, KhayinPlatformDto> = emptyMap(),
 )
 
 @Serializable
-private data class GitHubAssetDto(
-    val name: String,
-    @SerialName("browser_download_url") val browserDownloadUrl: String,
-    val size: Long? = null,
-    @SerialName("content_type") val contentType: String? = null,
+private data class KhayinPlatformDto(
+    val id: String = "",
+    val name: String? = null,
+    val tag: String? = null,
+    val detail: String? = null,
+    val suffix: String? = null,
+    val ext: String? = null,
+    val pattern: String? = null,
+    val badge: String? = null,
 )
 
 private val appUpdaterJson = Json {
@@ -76,7 +77,7 @@ private class NoChannelReleaseException : IllegalStateException(
     runBlocking { getString(Res.string.updates_no_channel_release) },
 )
 
-private object VersionUtils {
+internal object VersionUtils {
     fun normalize(raw: String?): String {
         if (raw.isNullOrBlank()) return ""
         return raw.trim().removePrefix("v").removePrefix("V")
@@ -115,13 +116,12 @@ private object VersionUtils {
 
 private object AppUpdaterRepository {
     suspend fun getLatestChannelUpdate(): Result<AppUpdate> = runCatching {
-        val source = AppUpdaterPlatform.releaseSource
         val response = httpRequestRaw(
             method = "GET",
-            url = "$gitHubApiBase/repos/${source.owner}/${source.repo}/releases?per_page=20",
+            url = downloadsFeedUrl,
             headers = mapOf(
-                "Accept" to "application/vnd.github+json",
-                "User-Agent" to source.userAgent,
+                "Accept" to "application/json",
+                "User-Agent" to "KhaYin/${AppUpdaterPlatform.currentVersionName}",
             ),
             body = "",
         )
@@ -129,55 +129,37 @@ private object AppUpdaterRepository {
             error(getString(Res.string.updates_github_api_error, response.status))
         }
 
-        val releases = appUpdaterJson.decodeFromString<List<GitHubReleaseDto>>(response.body)
-        val release = releases.firstOrNull { release ->
-            release.matchesRequestedChannel() &&
-                !release.draft &&
-                (source.includePrereleases || !release.prerelease)
-        }
+        val downloads = appUpdaterJson.decodeFromString<KhayinDownloadsDto>(response.body)
+        val platformKey = AppUpdaterPlatform.platformId
+        val platform = downloads.platforms[platformKey]
+            ?: downloads.platforms.values.firstOrNull { it.id.equals(platformKey, ignoreCase = true) }
             ?: throw NoChannelReleaseException()
 
-        val tag = release.tagName?.takeIf { it.isNotBlank() }
-            ?: release.name?.takeIf { it.isNotBlank() }
-            ?: error(getString(Res.string.updates_release_missing_title))
-
-        val asset = selectBestUpdateAsset(
-            assets = release.assets.map { asset ->
-                AppUpdateAssetCandidate(
-                    name = asset.name,
-                    downloadUrl = asset.browserDownloadUrl,
-                    size = asset.size,
-                    contentType = asset.contentType,
-                )
-            },
-            selector = AppUpdaterPlatform.assetSelector,
-        )
-            ?: error(getString(Res.string.updates_update_asset_missing))
-
-        AppUpdate(
-            tag = tag,
-            title = release.name?.takeIf { it.isNotBlank() } ?: tag,
-            notes = release.body.orEmpty(),
-            releaseUrl = release.htmlUrl,
-            assetName = asset.name,
-            assetUrl = asset.downloadUrl,
-            assetSizeBytes = asset.size,
-        )
-    }
-
-    private fun GitHubReleaseDto.matchesRequestedChannel(): Boolean {
-        val channel = AppUpdaterPlatform.releaseSource.channelBranch
-            ?.takeIf { it.isNotBlank() }
-            ?: return true
-        if (targetCommitish?.trim()?.equals(channel, ignoreCase = true) == true) {
-            return true
+        val rawVersion = downloads.version.trim()
+        if (rawVersion.isBlank()) {
+            error(getString(Res.string.updates_release_missing_title))
         }
 
-        return listOf(tagName, name)
-            .filterNotNull()
-            .any { value -> value.contains(channel, ignoreCase = true) }
-    }
+        val fileName = if (!platform.pattern.isNullOrBlank()) {
+            platform.pattern.replace("{version}", rawVersion)
+        } else {
+            val suffix = platform.suffix ?: platformKey
+            val ext = platform.ext ?: "bin"
+            "${downloads.appPrefix}-$suffix-v$rawVersion.$ext"
+        }
 
+        val downloadUrl = "${downloads.baseUrl.trimEnd('/')}/v$rawVersion/$fileName"
+
+        AppUpdate(
+            tag = rawVersion,
+            title = "KhaYin v$rawVersion",
+            notes = platform.detail ?: "KhaYin v$rawVersion is available.",
+            releaseUrl = downloads.portalUrl,
+            assetName = fileName,
+            assetUrl = downloadUrl,
+            assetSizeBytes = null,
+        )
+    }
 }
 
 internal data class AppUpdateAssetCandidate(
@@ -261,8 +243,6 @@ class AppUpdaterController internal constructor(
                         isChecking = false,
                         update = update.takeIf { remoteNewer },
                         isUpdateAvailable = remoteNewer,
-                        isDownloading = false,
-                        downloadProgress = null,
                         downloadedUpdatePath = state.downloadedUpdatePath.takeIf { remoteNewer },
                         showDialog = shouldShowDialog,
                         showInstallPermissionDialog = false,
@@ -272,6 +252,10 @@ class AppUpdaterController internal constructor(
 
                 if (showNoUpdateFeedback && !remoteNewer) {
                     NuvioToastController.show(getString(Res.string.updates_latest_version))
+                }
+
+                if (remoteNewer && !ignored && !_uiState.value.isDownloading && _uiState.value.downloadedUpdatePath == null) {
+                    downloadUpdate()
                 }
             }.onFailure { error ->
                 _uiState.update { state ->
@@ -322,6 +306,8 @@ class AppUpdaterController internal constructor(
             return
         }
 
+        if (_uiState.value.isDownloading) return
+
         scope.launch {
             _uiState.update { state ->
                 state.copy(
@@ -350,7 +336,6 @@ class AppUpdaterController internal constructor(
                         errorMessage = null,
                     )
                 }
-                installDownloadedUpdate()
             }.onFailure { error ->
                 _uiState.update { state ->
                     state.copy(
@@ -366,7 +351,12 @@ class AppUpdaterController internal constructor(
     }
 
     fun installDownloadedUpdate() {
-        val updatePath = _uiState.value.downloadedUpdatePath ?: return
+        val updatePath = _uiState.value.downloadedUpdatePath
+        if (updatePath == null) {
+            downloadUpdate()
+            return
+        }
+
         if (!AppUpdaterPlatform.canInstallDownloadedUpdate()) {
             _uiState.update { state -> state.copy(showInstallPermissionDialog = true, showDialog = true) }
             return

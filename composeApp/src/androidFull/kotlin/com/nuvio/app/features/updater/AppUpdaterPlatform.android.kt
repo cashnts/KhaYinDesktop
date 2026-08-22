@@ -4,6 +4,7 @@ import com.nuvio.app.core.build.AppVersionConfig
 
 actual object AppUpdaterPlatform {
     actual val isSupported: Boolean = true
+    actual val platformId: String = "android"
     actual val isDebugBuild: Boolean
         get() = AndroidAppUpdaterPlatform.isDebugBuild()
 

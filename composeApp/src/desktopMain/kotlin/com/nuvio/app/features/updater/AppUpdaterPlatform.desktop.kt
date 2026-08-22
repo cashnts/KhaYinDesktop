@@ -37,6 +37,14 @@ actual object AppUpdaterPlatform {
 
     actual val isSupported: Boolean = currentOs != DesktopUpdaterOs.UNKNOWN
 
+    actual val platformId: String
+        get() = when (currentOs) {
+            DesktopUpdaterOs.MACOS -> "mac"
+            DesktopUpdaterOs.WINDOWS -> "windows"
+            DesktopUpdaterOs.LINUX -> "linux"
+            DesktopUpdaterOs.UNKNOWN -> "mac"
+        }
+
     actual val releaseSource: AppUpdateReleaseSource = AppUpdateReleaseSource(
         owner = "NuvioMedia",
         repo = "NuvioDesktop",
