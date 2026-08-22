@@ -48,8 +48,12 @@ import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.rounded.Campaign
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 
 import androidx.compose.material3.Scaffold
@@ -78,6 +82,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -224,6 +229,8 @@ import com.nuvio.app.features.license.LicenseInfo
 import com.nuvio.app.features.license.LicenseActivationScreen
 import com.nuvio.app.features.license.LicenseExpiredScreen
 import com.nuvio.app.features.license.AdminLicenseScreen
+import com.nuvio.app.features.license.AdminControlRepository
+import com.nuvio.app.features.license.MaintenanceModeScreen
 import com.nuvio.app.features.license.isActive
 import com.nuvio.app.features.license.isExpired
 import com.nuvio.app.features.license.activeInfo
@@ -463,6 +470,7 @@ private enum class AppGateScreen {
     Loading,
     LicenseActivation,
     LicenseExpired,
+    Maintenance,
     AdminPanel,
     Auth,
     ProfileSelection,
@@ -622,6 +630,8 @@ fun App(
         var isNewProfile by remember { mutableStateOf(false) }
         var autoSkipProfileSelection by rememberSaveable { mutableStateOf(false) }
         var pendingProfileSwitch by remember { mutableStateOf<PendingProfileSwitch?>(null) }
+        val adminConfig by AdminControlRepository.config.collectAsStateWithLifecycle()
+        val scope = rememberCoroutineScope()
 
         // Use the incoming profile's color during a switch so the loading overlay
         // already shows the correct hue before MainAppContent's own overlay takes over.
@@ -719,13 +729,21 @@ fun App(
         val licenseState by LicenseRepository.state.collectAsStateWithLifecycle()
 
         LaunchedEffect(Unit) {
+            AdminControlRepository.fetchConfig()
             if (AppFeaturePolicy.isUserClient) {
                 LicenseRepository.initialize()
             }
         }
 
-        LaunchedEffect(licenseState, authState, profileState.profiles, gateScreen) {
+        LaunchedEffect(licenseState, authState, profileState.profiles, adminConfig.maintenanceMode, gateScreen) {
             if (gateScreen == AppGateScreen.ProfileSwitching.name || gateScreen == AppGateScreen.AdminPanel.name) return@LaunchedEffect
+
+            if (AppFeaturePolicy.isUserClient && adminConfig.maintenanceMode) {
+                if (gateScreen != AppGateScreen.Maintenance.name) {
+                    gateScreen = AppGateScreen.Maintenance.name
+                }
+                return@LaunchedEffect
+            }
 
             if (AppFeaturePolicy.isAdminClient) {
                 // Admin client uses normal account system
@@ -861,6 +879,19 @@ fun App(
                         },
                         onOpenAdminPanel = {
                             gateScreen = AppGateScreen.AdminPanel.name
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                AppGateScreen.Maintenance.name -> {
+                    MaintenanceModeScreen(
+                        onCheckAgain = {
+                            scope.launch {
+                                val cfg = AdminControlRepository.fetchConfig()
+                                if (!cfg.maintenanceMode) {
+                                    gateScreen = if (licenseState.isActive) AppGateScreen.Main.name else AppGateScreen.LicenseActivation.name
+                                }
+                            }
                         },
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -2307,6 +2338,52 @@ private fun MainAppContent(
                                         },
                                         onInitialHomeContentRendered = { initialHomeReady = true },
                                     )
+                                }
+
+                                val adminConfig by AdminControlRepository.config.collectAsStateWithLifecycle()
+                                val dismissedTimestamp by AdminControlRepository.dismissedBroadcastTimestamp.collectAsStateWithLifecycle()
+                                if (adminConfig.broadcastMessage.isNotBlank() && adminConfig.broadcastTimestamp > dismissedTimestamp) {
+                                    Surface(
+                                        modifier = Modifier
+                                            .align(Alignment.TopCenter)
+                                            .padding(top = (topChromePadding ?: 0.dp) + 8.dp, start = if (useDesktopSidebar) 80.dp else 16.dp, end = 16.dp)
+                                            .fillMaxWidth()
+                                            .zIndex(NuvioTokens.Z.toast),
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = Color(0xFF1E1611),
+                                        border = BorderStroke(1.dp, Color(0xFFFF9800)),
+                                        shadowElevation = 8.dp,
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Campaign,
+                                                contentDescription = "Alert",
+                                                tint = Color(0xFFFF9800),
+                                                modifier = Modifier.size(22.dp),
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Text(
+                                                text = adminConfig.broadcastMessage,
+                                                style = MaterialTheme.typography.bodyMedium.copy(color = Color.White, fontWeight = FontWeight.SemiBold),
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            IconButton(
+                                                onClick = { AdminControlRepository.dismissBroadcast(adminConfig.broadcastTimestamp) },
+                                                modifier = Modifier.size(28.dp),
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Close,
+                                                    contentDescription = "Dismiss",
+                                                    tint = Color(0xFFAAAAAA),
+                                                    modifier = Modifier.size(16.dp),
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
 
                                 if (useDesktopSidebar) {

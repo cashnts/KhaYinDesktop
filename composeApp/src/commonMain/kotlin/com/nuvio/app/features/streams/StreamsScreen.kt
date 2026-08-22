@@ -1380,6 +1380,11 @@ private fun EmptyStateBlock(
             message = stringResource(Res.string.streams_empty_load_failed_message)
         }
 
+        StreamsEmptyStateReason.StreamingDisabled -> {
+            title = "Streaming Temporarily Disabled"
+            message = "Media streaming is currently paused during scheduled maintenance or upgrades."
+        }
+
         StreamsEmptyStateReason.NoStreamsFound, null -> {
             title = stringResource(Res.string.compose_player_no_streams_found)
             message = stringResource(Res.string.streams_empty_no_streams_message)

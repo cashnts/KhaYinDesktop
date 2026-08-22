@@ -1,5 +1,6 @@
 package com.nuvio.app.features.profiles
 
+import com.nuvio.app.core.build.AppFeaturePolicy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -87,7 +88,9 @@ fun ProfileEditScreen(
     var avatarUrl by rememberSaveable { mutableStateOf(currentProfile?.avatarUrl.orEmpty()) }
     var selectedBackgroundId by rememberSaveable { mutableStateOf(currentProfile?.profileBackgroundId) }
     var selectedBackgroundUrl by rememberSaveable { mutableStateOf(currentProfile?.profileBackgroundUrl) }
-    var usesPrimaryAddons by rememberSaveable { mutableStateOf(currentProfile?.usesPrimaryAddons ?: false) }
+    var usesPrimaryAddons by rememberSaveable {
+        mutableStateOf(if (AppFeaturePolicy.isUserClient) true else (currentProfile?.usesPrimaryAddons ?: false))
+    }
     var isSaving by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showPinSetup by remember { mutableStateOf(false) }
@@ -539,12 +542,14 @@ private fun ProfileIdentityCard(
                 placeholder = stringResource(Res.string.profile_name_placeholder),
             )
 
-            ProfileOptionRow(
-                title = stringResource(Res.string.profile_use_primary_addons),
-                description = stringResource(Res.string.profile_use_primary_addons_description),
-                checked = usesPrimaryAddons,
-                onCheckedChange = onUsesPrimaryAddonsChange,
-            )
+            if (AppFeaturePolicy.isAdminClient) {
+                ProfileOptionRow(
+                    title = stringResource(Res.string.profile_use_primary_addons),
+                    description = stringResource(Res.string.profile_use_primary_addons_description),
+                    checked = usesPrimaryAddons,
+                    onCheckedChange = onUsesPrimaryAddonsChange,
+                )
+            }
         }
     }
 }

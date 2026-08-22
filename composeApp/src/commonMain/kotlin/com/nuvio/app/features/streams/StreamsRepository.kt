@@ -2,6 +2,7 @@ package com.nuvio.app.features.streams
 
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.build.AppFeaturePolicy
+import com.nuvio.app.features.license.AdminControlRepository
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.buildAddonResourceUrl
 import com.nuvio.app.features.addons.enabledAddons
@@ -98,6 +99,15 @@ object StreamsRepository {
 
         activeRequestKey = requestKey
         activeJob?.cancel()
+
+        if (AdminControlRepository.config.value.streamingDisabled) {
+            _uiState.value = StreamsUiState(
+                requestToken = requestToken,
+                emptyStateReason = StreamsEmptyStateReason.StreamingDisabled,
+            )
+            return
+        }
+
         _uiState.value = StreamsUiState(requestToken = requestToken)
 
         PlayerSettingsRepository.ensureLoaded()

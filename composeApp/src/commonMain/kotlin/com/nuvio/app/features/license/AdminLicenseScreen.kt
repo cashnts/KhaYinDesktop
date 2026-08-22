@@ -137,6 +137,13 @@ fun AdminLicenseScreen(
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
         refreshList()
+        val cfg = AdminControlRepository.fetchConfig()
+        maintenanceModeEnabled = cfg.maintenanceMode
+        streamingDisabled = cfg.streamingDisabled
+        broadcastAlertMessage = cfg.broadcastMessage
+        if (cfg.presetAddons.isNotEmpty()) {
+            addonManifestUrls = cfg.presetAddons.joinToString("\n")
+        }
     }
 
     // Unlocked Admin Management UI
@@ -326,9 +333,19 @@ fun AdminLicenseScreen(
                         onPush = {
                             isPushingAddons = true
                             scope.launch {
-                                // Save & Push global preset bundles
-                                isPushingAddons = false
-                                addonPushStatus = "Successfully broadcasted addon manifest bundle to all user clients!"
+                                val urls = addonManifestUrls.lines().map { it.trim() }.filter { it.isNotBlank() }
+                                AdminControlRepository.updateConfig(
+                                    AdminControlRepository.config.value.copy(presetAddons = urls),
+                                ).fold(
+                                    onSuccess = {
+                                        isPushingAddons = false
+                                        addonPushStatus = "Successfully broadcasted ${urls.size} addon manifest(s) to all clients!"
+                                    },
+                                    onFailure = { err ->
+                                        isPushingAddons = false
+                                        addonPushStatus = "Error: ${err.message}"
+                                    },
+                                )
                             }
                         },
                     )
@@ -336,14 +353,51 @@ fun AdminLicenseScreen(
                 AdminHubTab.ServiceControls -> {
                     ServiceControlsTabContent(
                         maintenanceMode = maintenanceModeEnabled,
-                        onMaintenanceToggle = { maintenanceModeEnabled = it },
+                        onMaintenanceToggle = { toggle ->
+                            maintenanceModeEnabled = toggle
+                            scope.launch {
+                                AdminControlRepository.updateConfig(
+                                    AdminControlRepository.config.value.copy(maintenanceMode = toggle),
+                                )
+                                serviceStatusMessage = if (toggle) {
+                                    "Maintenance mode ENABLED. Client apps frozen."
+                                } else {
+                                    "Maintenance mode DISABLED."
+                                }
+                            }
+                        },
                         streamingDisabled = streamingDisabled,
-                        onStreamingDisabledToggle = { streamingDisabled = it },
+                        onStreamingDisabledToggle = { toggle ->
+                            streamingDisabled = toggle
+                            scope.launch {
+                                AdminControlRepository.updateConfig(
+                                    AdminControlRepository.config.value.copy(streamingDisabled = toggle),
+                                )
+                                serviceStatusMessage = if (toggle) {
+                                    "Streaming DISABLED on client apps."
+                                } else {
+                                    "Streaming ENABLED."
+                                }
+                            }
+                        },
                         broadcastMessage = broadcastAlertMessage,
                         onBroadcastMessageChange = { broadcastAlertMessage = it },
                         statusMessage = serviceStatusMessage,
                         onPublishBroadcast = {
-                            serviceStatusMessage = "Broadcast alert published to all active client apps."
+                            scope.launch {
+                                val ts = if (broadcastAlertMessage.isNotBlank()) 1000L else 0L
+                                AdminControlRepository.updateConfig(
+                                    AdminControlRepository.config.value.copy(
+                                        broadcastMessage = broadcastAlertMessage.trim(),
+                                        broadcastTimestamp = ts,
+                                    ),
+                                )
+                                serviceStatusMessage = if (broadcastAlertMessage.isNotBlank()) {
+                                    "Broadcast alert published to all active client apps."
+                                } else {
+                                    "Broadcast alert cleared."
+                                }
+                            }
                         },
                     )
                 }

@@ -1,5 +1,6 @@
 package com.nuvio.app.features.profiles
 
+import com.nuvio.app.core.build.AppFeaturePolicy
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -315,7 +316,7 @@ fun ProfileSwitcherTab(
                                 )
                             }
 
-                            if (profiles.size < MAX_PROFILES) {
+                            if (AppFeaturePolicy.isAdminClient && profiles.size < MAX_PROFILES) {
                                 PopupAddProfileBubble(
                                     delayMs = profiles.size * 50,
                                     onClick = {
@@ -403,7 +404,7 @@ fun SidebarProfileSwitcherStack(
                     )
                 }
 
-                if (profiles.size < MAX_PROFILES) {
+                if (AppFeaturePolicy.isAdminClient && profiles.size < MAX_PROFILES) {
                     SidebarAddProfileRow(
                         onClick = {
                             onDismissRequest()
@@ -887,7 +888,7 @@ fun NativeProfileSwitcherPopup(
                                     )
                                 }
 
-                                if (profiles.size < MAX_PROFILES) {
+                                if (AppFeaturePolicy.isAdminClient && profiles.size < MAX_PROFILES) {
                                     PopupAddProfileBubble(
                                         delayMs = profiles.size * 50,
                                         onClick = {

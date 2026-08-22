@@ -97,10 +97,20 @@ private fun SubscriptionSettingsBody(
             Spacer(modifier = Modifier.height(14.dp))
 
             if (licenseInfo != null) {
+                val statusText = when {
+                    licenseInfo.status.equals("revoked", ignoreCase = true) -> "Revoked"
+                    licenseInfo.status.equals("active", ignoreCase = true) -> "Active"
+                    else -> "Expired"
+                }
+                val statusColor = when (statusText) {
+                    "Active" -> MaterialTheme.colorScheme.primary
+                    "Revoked" -> MaterialTheme.colorScheme.error
+                    else -> Color(0xFFFFB300)
+                }
                 AccountInfoRow(
                     label = "Status",
-                    value = if (licenseInfo.status.equals("active", ignoreCase = true)) "Active" else licenseInfo.status.replaceFirstChar { it.uppercase() },
-                    valueColor = if (licenseInfo.status.equals("active", ignoreCase = true)) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    value = statusText,
+                    valueColor = statusColor,
                 )
                 Spacer(modifier = Modifier.height(10.dp))
 
@@ -178,16 +188,16 @@ private fun SubscriptionSettingsBody(
         }
 
         NuvioPrimaryButton(
-            text = "Switch / Deactivate License",
+            text = "Log Out",
             onClick = { showDeactivateConfirm = true },
         )
     }
 
     NuvioStatusModal(
-        title = "Deactivate License",
-        message = "Are you sure you want to deactivate this license key on this device? You can re-enter a key at any time.",
+        title = "Log Out",
+        message = "Are you sure you want to log out from KhaYin on this device? You can re-enter your license key at any time.",
         isVisible = showDeactivateConfirm,
-        confirmText = "Deactivate",
+        confirmText = "Log Out",
         dismissText = stringResource(Res.string.action_cancel),
         onConfirm = {
             showDeactivateConfirm = false

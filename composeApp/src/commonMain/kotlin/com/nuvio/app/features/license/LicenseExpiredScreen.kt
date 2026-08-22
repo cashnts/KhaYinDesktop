@@ -48,7 +48,7 @@ fun LicenseExpiredScreen(
     onOpenAdminPanel: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val isRevoked = licenseInfo.status == "revoked"
+    val isRevoked = licenseInfo.status.equals("revoked", ignoreCase = true)
 
     Box(
         modifier = modifier
@@ -127,6 +127,30 @@ fun LicenseExpiredScreen(
                     .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
                     .padding(18.dp),
             ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "STATUS",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = Color(0xFF888899),
+                            fontWeight = FontWeight.Bold,
+                        ),
+                    )
+                    Text(
+                        text = if (isRevoked) "REVOKED" else "EXPIRED",
+                        style = TextStyle(
+                            color = if (isRevoked) Color(0xFFFF5252) else Color(0xFFFFB300),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                        ),
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,

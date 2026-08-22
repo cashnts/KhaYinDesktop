@@ -174,14 +174,16 @@ internal fun LazyListScope.settingsRootContent(
                         isTablet = isTablet,
                         onClick = onAppearanceClick,
                     )
-                    SettingsGroupDivider(isTablet = isTablet)
-                    SettingsNavigationRow(
-                        title = stringResource(Res.string.compose_settings_page_content_discovery),
-                        description = stringResource(Res.string.compose_settings_root_content_discovery_description),
-                        icon = Icons.Rounded.Extension,
-                        isTablet = isTablet,
-                        onClick = onContentDiscoveryClick,
-                    )
+                    if (AppFeaturePolicy.isAdminClient) {
+                        SettingsGroupDivider(isTablet = isTablet)
+                        SettingsNavigationRow(
+                            title = stringResource(Res.string.compose_settings_page_content_discovery),
+                            description = stringResource(Res.string.compose_settings_root_content_discovery_description),
+                            icon = Icons.Rounded.Extension,
+                            isTablet = isTablet,
+                            onClick = onContentDiscoveryClick,
+                        )
+                    }
                     if (showDownloadsEntry) {
                         SettingsGroupDivider(isTablet = isTablet)
                         SettingsNavigationRow(
