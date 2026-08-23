@@ -108,8 +108,9 @@ object ProfileRepository {
 
         val stored = decodeStoredPayload()
         loadedCacheForUserId = userId
-        if (stored != null && (stored.userId == userId || stored.userId == "license_user" || stored.userId == "default_user" || stored.userId.isBlank())) {
-            applyStoredPayload(stored)
+        if (stored != null && (stored.userId == userId || stored.userId == "license_user" || stored.userId == "default_user" || stored.userId.isBlank() || stored.profiles.isNotEmpty())) {
+            applyStoredPayload(stored.copy(userId = userId))
+            persist()
             return
         }
 

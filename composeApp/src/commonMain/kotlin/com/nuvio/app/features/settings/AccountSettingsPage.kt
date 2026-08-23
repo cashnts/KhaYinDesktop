@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -475,38 +477,44 @@ private fun SubscriptionPlansCard(
 
         if (isTablet) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(androidx.compose.foundation.layout.IntrinsicSize.Max),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Box(modifier = Modifier.weight(1f)) {
-                    PlanTierCard(
-                        title = "STANDARD",
-                        isCurrentPlan = !isPlusActive,
-                        accentColor = Color(0xFF9E9EA7),
-                        features = listOf(
-                            "Multi-language subtitle" to true,
-                            "On demand streaming" to true,
-                            "4K HDR Movies" to true,
-                            "Fast Customer Support" to true,
-                            "Up to 3 devices" to true,
-                            "Download Speed Limit" to false,
-                        ),
-                    )
-                }
-                Box(modifier = Modifier.weight(1f)) {
-                    PlanTierCard(
-                        title = "PLUS",
-                        isCurrentPlan = isPlusActive,
-                        accentColor = MaterialTheme.colorScheme.primary,
-                        highlightBadge = "RECOMMENDED",
-                        features = listOf(
-                            "Everything from standard" to true,
-                            "On-demand myanmar subtitle" to true,
-                            "24/7 Customer Support" to true,
-                            "Up to 6 devices" to true,
-                        ),
-                    )
-                }
+                PlanTierCard(
+                    title = "STANDARD",
+                    isCurrentPlan = !isPlusActive,
+                    accentColor = Color(0xFF9E9EA7),
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    features = listOf(
+                        "English & Chinese subtitles" to true,
+                        "On-demand streaming" to true,
+                        "4K HDR playback" to true,
+                        "Standard customer support" to true,
+                        "Up to 3 devices" to true,
+                        "Standard download speed" to false,
+                    ),
+                )
+                PlanTierCard(
+                    title = "PLUS",
+                    isCurrentPlan = isPlusActive,
+                    accentColor = MaterialTheme.colorScheme.primary,
+                    highlightBadge = "RECOMMENDED",
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    features = listOf(
+                        "Everything in Standard" to true,
+                        "Exclusive Myanmar (Burmese) subtitles" to true,
+                        "Priority 24/7 customer support" to true,
+                        "Up to 6 devices" to true,
+                        "Uncapped high-speed downloads" to true,
+                        "Early access to new features" to true,
+                    ),
+                )
             }
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -515,12 +523,12 @@ private fun SubscriptionPlansCard(
                     isCurrentPlan = !isPlusActive,
                     accentColor = Color(0xFF9E9EA7),
                     features = listOf(
-                        "Multi-language subtitle" to true,
-                        "On demand streaming" to true,
-                        "4K HDR Movies" to true,
-                        "Fast Customer Support" to true,
+                        "English & Chinese subtitles" to true,
+                        "On-demand streaming" to true,
+                        "4K HDR playback" to true,
+                        "Standard customer support" to true,
                         "Up to 3 devices" to true,
-                        "Download Speed Limit" to false,
+                        "Standard download speed" to false,
                     ),
                 )
                 PlanTierCard(
@@ -529,10 +537,12 @@ private fun SubscriptionPlansCard(
                     accentColor = MaterialTheme.colorScheme.primary,
                     highlightBadge = "RECOMMENDED",
                     features = listOf(
-                        "Everything from standard" to true,
-                        "On-demand myanmar subtitle" to true,
-                        "24/7 Customer Support" to true,
+                        "Everything in Standard" to true,
+                        "Exclusive Myanmar (Burmese) subtitles" to true,
+                        "Priority 24/7 customer support" to true,
                         "Up to 6 devices" to true,
+                        "Uncapped high-speed downloads" to true,
+                        "Early access to new features" to true,
                     ),
                 )
             }
@@ -545,6 +555,7 @@ private fun PlanTierCard(
     title: String,
     isCurrentPlan: Boolean,
     accentColor: Color,
+    modifier: Modifier = Modifier,
     highlightBadge: String? = null,
     features: List<Pair<String, Boolean>>,
 ) {
@@ -552,7 +563,7 @@ private fun PlanTierCard(
     val bgColor = if (isCurrentPlan) accentColor.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(bgColor)

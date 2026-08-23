@@ -555,9 +555,53 @@ private fun LicensesTabContent(
                     ),
                 )
 
+                Text("Quick Preset Templates", style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFFAAAAAA)))
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF1E1E2A))
+                            .border(1.dp, if (tier == "standard" && maxDevices == 3) Color(0xFF00E699) else Color(0xFF323248), RoundedCornerShape(8.dp))
+                            .clickable {
+                                onTierChange("standard")
+                                onMaxDevicesChange(3)
+                            }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Standard Template", style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp))
+                            Text("Standard Tier • 3 Devices", style = TextStyle(color = Color(0xFF888899), fontSize = 11.sp))
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF1E1E2A))
+                            .border(1.dp, if (tier == "plus" && maxDevices == 6) Color(0xFF00E699) else Color(0xFF323248), RoundedCornerShape(8.dp))
+                            .clickable {
+                                onTierChange("plus")
+                                onMaxDevicesChange(6)
+                            }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Plus Template", style = TextStyle(color = Color(0xFF00E699), fontWeight = FontWeight.Bold, fontSize = 13.sp))
+                            Text("Plus Tier • 6 Devices", style = TextStyle(color = Color(0xFF888899), fontSize = 11.sp))
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(14.dp))
 
-                Text("Package / Plan", style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFFAAAAAA)))
+                Text("Package / Plan (Customizable)", style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFFAAAAAA)))
                 Spacer(modifier = Modifier.height(6.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -574,7 +618,9 @@ private fun LicensesTabContent(
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(if (selected) Color(0xFF00E699) else Color(0xFF0F0F16))
                                 .border(1.dp, if (selected) Color(0xFF00E699) else Color(0xFF323244), RoundedCornerShape(8.dp))
-                                .clickable { onTierChange(pkgKey) }
+                                .clickable {
+                                    onTierChange(pkgKey)
+                                }
                                 .padding(horizontal = 14.dp, vertical = 12.dp),
                             contentAlignment = Alignment.Center,
                         ) {
@@ -660,7 +706,7 @@ private fun LicensesTabContent(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    listOf(1, 2, 3, 5, 10).forEach { devs ->
+                    listOf(1, 2, 3, 5, 6, 10).forEach { devs ->
                         val selected = maxDevices == devs
                         Box(
                             modifier = Modifier

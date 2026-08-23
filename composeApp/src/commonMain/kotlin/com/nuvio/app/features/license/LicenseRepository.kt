@@ -31,7 +31,17 @@ object LicenseRepository {
     private val log = Logger.withTag("LicenseRepository")
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true }
 
-    private val _state = MutableStateFlow<LicenseState>(LicenseState.Loading)
+    private val _state = MutableStateFlow<LicenseState>(
+        loadSecureLicensePayload()?.let { cached ->
+            if (cached.key.isNotBlank()) {
+                if (isExpiredTimestamp(cached.expiresAt)) {
+                    LicenseState.Expired(cached)
+                } else {
+                    LicenseState.Active(cached.copy(status = "active"))
+                }
+            } else null
+        } ?: LicenseState.Loading
+    )
     val state: StateFlow<LicenseState> = _state.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
@@ -61,8 +71,8 @@ object LicenseRepository {
 
     private fun saveSecureLicensePayload(info: LicenseInfo) {
         val jsonStr = json.encodeToString(info)
-        val nonce = info.nonce ?: info.key
-        val encrypted = com.nuvio.app.core.security.KhaYinSecurityBridge.encryptPayload(jsonStr, nonce)
+        LicenseStorage.saveLastKnownKey(info.key)
+        val encrypted = com.nuvio.app.core.security.KhaYinSecurityBridge.encryptPayload(jsonStr, info.key)
         LicenseStorage.saveLicensePayload(encrypted)
     }
 
@@ -73,9 +83,12 @@ object LicenseRepository {
             return runCatching { json.decodeFromString<LicenseInfo>(raw) }.getOrNull()
         }
         val lastKey = LicenseStorage.loadLastKnownKey() ?: ""
-        val decrypted = com.nuvio.app.core.security.KhaYinSecurityBridge.decryptPayload(raw, lastKey)
-        if (decrypted.startsWith("{")) {
-            return runCatching { json.decodeFromString<LicenseInfo>(decrypted) }.getOrNull()
+        if (lastKey.isNotBlank()) {
+            val decrypted = com.nuvio.app.core.security.KhaYinSecurityBridge.decryptPayload(raw, lastKey)
+            if (decrypted.startsWith("{")) {
+                val parsed = runCatching { json.decodeFromString<LicenseInfo>(decrypted) }.getOrNull()
+                if (parsed != null) return parsed
+            }
         }
         return runCatching { json.decodeFromString<LicenseInfo>(raw) }.getOrNull()
     }

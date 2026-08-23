@@ -119,6 +119,14 @@ internal actual object DownloadsPlatformDownloader {
                     var downloadedBytes = startingBytes
                     onProgress(downloadedBytes, totalBytes)
 
+                    val maxBytesPerSec = if (com.nuvio.app.features.license.LicenseRepository.isPlusMember) {
+                        Long.MAX_VALUE
+                    } else {
+                        1_500 * 1024L // 1.5 MB/s limit for Standard tier
+                    }
+                    var windowStart = System.currentTimeMillis()
+                    var windowBytes = 0L
+
                     body.byteStream().use { input ->
                         FileOutputStream(tempFile, appendToTemp).use { output ->
                             val buffer = ByteArray(16 * 1024)
@@ -128,7 +136,22 @@ internal actual object DownloadsPlatformDownloader {
                                 if (read <= 0) break
                                 output.write(buffer, 0, read)
                                 downloadedBytes += read.toLong()
+                                windowBytes += read.toLong()
                                 onProgress(downloadedBytes, totalBytes)
+
+                                if (maxBytesPerSec < Long.MAX_VALUE) {
+                                    val now = System.currentTimeMillis()
+                                    val elapsed = (now - windowStart).coerceAtLeast(1L)
+                                    val expectedTimeMs = (windowBytes * 1000L) / maxBytesPerSec
+                                    if (expectedTimeMs > elapsed) {
+                                        val sleepMs = (expectedTimeMs - elapsed).coerceIn(5L, 1000L)
+                                        kotlinx.coroutines.delay(sleepMs)
+                                    }
+                                    if (System.currentTimeMillis() - windowStart >= 1000L) {
+                                        windowStart = System.currentTimeMillis()
+                                        windowBytes = 0L
+                                    }
+                                }
                             }
                             output.flush()
                         }
