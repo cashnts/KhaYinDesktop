@@ -27,8 +27,6 @@ data class SupabaseLicenseRecord(
     @SerialName("expires_at") val expiresAt: String? = null,
     @SerialName("max_devices") val maxDevices: Int = 1,
     @SerialName("active_devices") val activeDevices: Int = 0,
-    val nonce: String? = null,
-    @SerialName("profile_name") val profileName: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
     val notes: String? = null,
 ) {
@@ -40,8 +38,6 @@ data class SupabaseLicenseRecord(
         expiresAt = expiresAt,
         maxDevices = maxDevices,
         activeDevices = activeDevices,
-        nonce = nonce,
-        profileName = profileName,
         createdAt = createdAt,
         notes = notes,
     )
