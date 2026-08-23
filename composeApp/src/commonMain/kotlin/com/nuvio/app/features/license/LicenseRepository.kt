@@ -330,84 +330,51 @@ object LicenseRepository {
         val currentInfo = state.value.activeInfo ?: return LicenseState.Unlicensed
         val restUrl = supabaseRestUrl()
         val deviceId = getOrCreateDeviceId()
-        val verifyNonce = currentInfo.nonce ?: com.nuvio.app.core.security.KhaYinSecurityBridge.generateNonce()
+
+        Logger.i("LicenseRepo") { "Starting remote license verification for key=${currentInfo.key}, deviceId=$deviceId" }
 
         return runCatching {
             var updated: LicenseInfo? = null
 
-            // If session nonce is present, call verify_license RPC to ensure device slot is still valid
-            if (currentInfo.nonce != null) {
-                val rpcPayload = json.encodeToString(
-                    mapOf(
-                        "p_key" to currentInfo.key,
-                        "p_device_id" to deviceId,
-                        "p_nonce" to verifyNonce,
-                    )
-                )
-                val rpcUrl = "$restUrl/rpc/verify_license"
-                val rawRpcResponse = httpRequestRaw(
-                    method = "POST",
-                    url = rpcUrl,
-                    headers = supabaseHeaders(method = "POST", url = rpcUrl, body = rpcPayload),
-                    body = rpcPayload,
-                )
-                val rpcResponse = com.nuvio.app.core.security.KhaYinSecurityBridge.decryptResponse(rawRpcResponse, verifyNonce)
-                if (rpcResponse.status in 200..299 && rpcResponse.body.trim().startsWith("{")) {
-                    val resp = json.decodeFromString<LicenseVerifyResponse>(rpcResponse.body.trim())
-                    if (!resp.success) {
-                        if (resp.status.equals("revoked", ignoreCase = true) || resp.error?.contains("revoked", ignoreCase = true) == true) {
-                            val revoked = currentInfo.copy(status = "revoked")
-                            saveSecureLicensePayload(revoked)
-                            _state.value = LicenseState.Revoked(revoked)
-                            return@runCatching LicenseState.Revoked(revoked)
-                        }
-                    } else {
-                        updated = currentInfo.copy(
-                            expiresAt = resp.expiresAt ?: currentInfo.expiresAt,
+            // 1. Primary Source of Truth: Direct table query on license_keys
+            val queryUrl = "$restUrl/license_keys?key=eq.${currentInfo.key}&select=*"
+            val response = httpRequestRaw(
+                method = "GET",
+                url = queryUrl,
+                headers = supabaseHeaders(method = "GET", url = queryUrl),
+                body = "",
+            )
+
+            Logger.i("LicenseRepo") { "Table query status=${response.status}, body=${response.body}" }
+
+            if (response.status in 200..299 && !response.body.startsWith("<")) {
+                val body = response.body.trim()
+                if (body.startsWith("[")) {
+                    val records = json.decodeFromString<List<SupabaseLicenseRecord>>(body)
+                    if (records.isNotEmpty()) {
+                        val record = records.first()
+                        Logger.i("LicenseRepo") { "Found license record in DB: status=${record.status}, tier=${record.tier}, expiresAt=${record.expiresAt}" }
+                        updated = record.toLicenseInfo().copy(nonce = currentInfo.nonce)
+                    }
+                } else if (body.startsWith("{")) {
+                    val resp = json.decodeFromString<LicenseVerifyResponse>(body)
+                    if (resp.success) {
+                        updated = LicenseInfo(
+                            key = resp.key ?: currentInfo.key,
+                            status = resp.status ?: "active",
+                            customerName = resp.customerName ?: currentInfo.customerName,
+                            tier = resp.tier ?: currentInfo.tier,
+                            expiresAt = resp.expiresAt,
                             maxDevices = resp.maxDevices ?: currentInfo.maxDevices,
+                            activeDevices = currentInfo.activeDevices,
                             nonce = resp.nonce ?: currentInfo.nonce,
                         )
                     }
                 }
             }
 
-            // Fallback to table query if RPC was not used or did not return definitive status
             if (updated == null) {
-                val queryUrl = "$restUrl/license_keys?key=eq.${currentInfo.key}&select=*"
-                val response = httpRequestRaw(
-                    method = "GET",
-                    url = queryUrl,
-                    headers = supabaseHeaders(method = "GET", url = queryUrl),
-                    body = "",
-                )
-
-                if (response.status in 200..299 && !response.body.startsWith("<")) {
-                    val body = response.body.trim()
-                    if (body.startsWith("{")) {
-                        val resp = json.decodeFromString<LicenseVerifyResponse>(body)
-                        if (resp.success) {
-                            updated = LicenseInfo(
-                                key = resp.key ?: currentInfo.key,
-                                status = resp.status ?: "active",
-                                customerName = resp.customerName ?: currentInfo.customerName,
-                                tier = resp.tier ?: currentInfo.tier,
-                                expiresAt = resp.expiresAt,
-                                maxDevices = resp.maxDevices ?: currentInfo.maxDevices,
-                                activeDevices = currentInfo.activeDevices,
-                                nonce = resp.nonce ?: currentInfo.nonce,
-                            )
-                        }
-                    } else if (body.startsWith("[")) {
-                        val records = json.decodeFromString<List<SupabaseLicenseRecord>>(body)
-                        if (records.isNotEmpty()) {
-                            updated = records.first().toLicenseInfo()
-                        }
-                    }
-                }
-            }
-
-            if (updated == null) {
-                // If remote query failed or network issue, maintain current cached license and do NOT revoke
+                Logger.w("LicenseRepo") { "Remote verification query did not return records, retaining current active state" }
                 return@runCatching state.value
             }
 
@@ -442,6 +409,7 @@ object LicenseRepository {
             }
 
             val newState = if (updated.status.equals("revoked", ignoreCase = true)) {
+                Logger.w("LicenseRepo") { "License key explicitly marked as revoked in DB" }
                 LicenseState.Revoked(updated)
             } else if (isExpiredTimestamp(updated.expiresAt)) {
                 LicenseState.Expired(updated)
@@ -450,8 +418,8 @@ object LicenseRepository {
             }
             _state.value = newState
             newState
-        }.getOrElse { e ->
-            log.w(e) { "Remote license verification error: ${e.message}" }
+        }.getOrElse { err ->
+            Logger.e("LicenseRepo", err) { "Error during remote license verification: ${err.message}" }
             state.value
         }
     }
