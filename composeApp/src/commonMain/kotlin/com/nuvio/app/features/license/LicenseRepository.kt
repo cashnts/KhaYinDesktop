@@ -296,8 +296,8 @@ object LicenseRepository {
             val deviceMeta = runCatching { com.nuvio.app.core.auth.currentDeviceClientMetadata() }.getOrNull()
             val appVer = com.nuvio.app.core.build.AppVersionConfig.VERSION_NAME
             val devName = deviceMeta?.deviceName?.ifBlank { null } ?: getOrCreateDeviceId()
-            val platformDesc = deviceMeta?.platform?.ifBlank { null } ?: "Desktop Client"
-            val todayIso = CurrentDateProvider.todayIsoDate()
+            val platformDesc = deviceMeta?.platform?.ifBlank { null } ?: "Desktop"
+            val nowMs = com.nuvio.app.features.watchprogress.WatchProgressClock.nowEpochMs().toString()
             val actNonce = com.nuvio.app.core.security.KhaYinSecurityBridge.generateNonce()
             val actTimestamp = com.nuvio.app.core.security.KhaYinSecurityBridge.generateTimestamp()
             runCatching {
@@ -310,7 +310,7 @@ object LicenseRepository {
                     "event" to "activation",
                     "nonce" to actNonce,
                     "timestamp" to actTimestamp.toString(),
-                    "last_seen_at" to todayIso,
+                    "last_seen_at" to nowMs,
                 ))
                 httpRequestRaw(
                     method = "POST",
@@ -417,8 +417,8 @@ object LicenseRepository {
             val deviceMeta = runCatching { com.nuvio.app.core.auth.currentDeviceClientMetadata() }.getOrNull()
             val appVer = com.nuvio.app.core.build.AppVersionConfig.VERSION_NAME
             val devName = deviceMeta?.deviceName?.ifBlank { null } ?: getOrCreateDeviceId()
-            val platformDesc = deviceMeta?.platform?.ifBlank { null } ?: "Desktop Client"
-            val todayIso = CurrentDateProvider.todayIsoDate()
+            val platformDesc = deviceMeta?.platform?.ifBlank { null } ?: "Desktop"
+            val nowMs = com.nuvio.app.features.watchprogress.WatchProgressClock.nowEpochMs().toString()
             val hbNonce = com.nuvio.app.core.security.KhaYinSecurityBridge.generateNonce()
             val hbTimestamp = com.nuvio.app.core.security.KhaYinSecurityBridge.generateTimestamp()
             runCatching {
@@ -431,7 +431,7 @@ object LicenseRepository {
                     "event" to "heartbeat",
                     "nonce" to hbNonce,
                     "timestamp" to hbTimestamp.toString(),
-                    "last_seen_at" to todayIso,
+                    "last_seen_at" to nowMs,
                 ))
                 httpRequestRaw(
                     method = "POST",

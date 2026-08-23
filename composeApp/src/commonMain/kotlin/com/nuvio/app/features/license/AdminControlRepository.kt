@@ -157,7 +157,7 @@ object AdminControlRepository {
             }
         }
 
-        // Fallback to synthesizing real status from active license registry
+        // Fallback to synthesizing status from license registry when analytics is unavailable
         val licUrl = "$restUrl/license_keys?select=*&order=created_at.desc&limit=$limit"
         val licResponse = httpRequestRaw(
             method = "GET",
@@ -172,22 +172,16 @@ object AdminControlRepository {
                 .filter { it.key != "SYSTEM_CONFIG" }
                 .mapIndexed { idx, lic ->
                     val isRevoked = lic.status.equals("revoked", ignoreCase = true)
-                    val activeCount = lic.activeDevices ?: 0
-                    val isActive = !isRevoked && activeCount > 0
-                    val deviceName = lic.customerName?.takeIf { it.isNotBlank() } ?: "Registered Device"
+                    val shortKey = lic.key.takeLast(6)
                     LicenseAnalyticsRecord(
                         id = idx.toLong() + 1,
                         license_key = lic.key,
-                        device_id = deviceName,
-                        platform = if (isActive) "Active Client" else "Offline",
+                        device_id = "Device-$shortKey",
+                        platform = "Desktop / Mobile",
                         version = currentAppVersion,
-                        event = when {
-                            isRevoked -> "revoked"
-                            isActive -> "heartbeat"
-                            else -> "offline"
-                        },
-                        last_seen_at = if (isActive) "Active Now" else "Offline",
-                        created_at = if (isActive) "Active" else "Offline",
+                        event = if (isRevoked) "revoked" else "offline",
+                        last_seen_at = lic.createdAt ?: "Offline",
+                        created_at = lic.createdAt ?: "Offline",
                     )
                 }
             return@runCatching mapped

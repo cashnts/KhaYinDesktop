@@ -552,10 +552,9 @@ private fun LicensesTabContent(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     listOf(
-                        "standard" to ("Standard" to "Normal streaming (Up to 3 devices)"),
-                        "plus" to ("Plus" to "Standard + Myanmar Subtitles (Up to 6 devices)"),
-                    ).forEach { (pkgKey, info) ->
-                        val (pkgTitle, pkgSubtitle) = info
+                        "standard" to "Standard",
+                        "plus" to "Plus",
+                    ).forEach { (pkgKey, pkgTitle) ->
                         val selected = tier.equals(pkgKey, ignoreCase = true)
                         Box(
                             modifier = Modifier
@@ -564,26 +563,17 @@ private fun LicensesTabContent(
                                 .background(if (selected) Color(0xFF00E699) else Color(0xFF0F0F16))
                                 .border(1.dp, if (selected) Color(0xFF00E699) else Color(0xFF323244), RoundedCornerShape(8.dp))
                                 .clickable { onTierChange(pkgKey) }
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            contentAlignment = Alignment.Center,
                         ) {
-                            Column {
-                                Text(
-                                    text = pkgTitle,
-                                    style = TextStyle(
-                                        color = if (selected) Color.Black else Color.White,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                    ),
-                                )
-                                Spacer(modifier = Modifier.height(3.dp))
-                                Text(
-                                    text = pkgSubtitle,
-                                    style = TextStyle(
-                                        color = if (selected) Color(0xFF1B2E24) else Color(0xFF888899),
-                                        fontSize = 11.sp,
-                                    ),
-                                )
-                            }
+                            Text(
+                                text = pkgTitle,
+                                style = TextStyle(
+                                    color = if (selected) Color.Black else Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                ),
+                            )
                         }
                     }
                 }
@@ -1552,23 +1542,21 @@ private fun AnalyticsTabContent(
         } else {
             items(filteredAnalytics) { record ->
                 val isRevoked = record.event.equals("revoked", ignoreCase = true) || record.event.equals("error", ignoreCase = true)
-                val isOffline = record.event.equals("offline", ignoreCase = true) ||
-                    record.created_at.equals("Offline", ignoreCase = true) ||
-                    record.last_seen_at.equals("Offline", ignoreCase = true)
-                val isHeartbeat = !isRevoked && !isOffline
+                val isLive = isTelemetryLiveActive(record)
+                val isOffline = !isLive && !isRevoked
 
                 val eventName = when {
                     isRevoked -> "REVOKED"
-                    isOffline -> "OFFLINE"
+                    isLive -> "ACTIVE"
                     record.event.equals("activation", ignoreCase = true) -> "ACTIVATION"
                     record.event.equals("login", ignoreCase = true) -> "LOGIN"
-                    else -> "HEARTBEAT"
+                    else -> "OFFLINE"
                 }
                 val eventColor = when {
                     isRevoked -> Color(0xFFFF5252)
-                    isOffline -> Color(0xFF888899)
+                    isLive -> Color(0xFF00E699)
                     eventName == "ACTIVATION" || eventName == "LOGIN" -> Color(0xFF3399FF)
-                    else -> Color(0xFF00E699)
+                    else -> Color(0xFF888899)
                 }
 
                 Row(
@@ -1602,38 +1590,104 @@ private fun AnalyticsTabContent(
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         val currentAppVersion = com.nuvio.app.core.build.AppVersionPolicy.displayVersionName
-                        val versionDisplay = record.version?.takeIf { it.isNotBlank() && it != "1.1.20" } ?: currentAppVersion
-                        val deviceDisplay = record.device_id?.takeIf { it.isNotBlank() && !it.startsWith("Device-") } ?: "Client Device"
-                        val platformDisplay = record.platform?.takeIf { it.isNotBlank() && it != "Client" && it != "KhaYin Media Client" } ?: "Desktop / Mobile"
 
                         Text(
-                            text = "Hardware: $deviceDisplay • $platformDisplay • v$versionDisplay",
+                            text = formatTelemetryHardware(record, currentAppVersion),
                             style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp),
                         )
                     }
 
                     val statusBadgeText = when {
-                        isOffline -> "Offline"
                         isRevoked -> "Revoked"
-                        record.created_at != null && record.created_at != "Active Session" && record.created_at != "Active" && record.created_at != "Offline" ->
-                            record.created_at.take(19).replace("T", " ")
-                        record.last_seen_at != null && record.last_seen_at != "Active" && record.last_seen_at != "Active Now" && record.last_seen_at != "Offline" ->
+                        isLive -> "Active Now"
+                        record.last_seen_at != null && record.last_seen_at.contains("T") ->
                             record.last_seen_at.take(19).replace("T", " ")
-                        else -> "Active Session"
+                        record.created_at != null && record.created_at.contains("T") ->
+                            record.created_at.take(19).replace("T", " ")
+                        else -> "Offline"
                     }
                     Text(
                         text = statusBadgeText,
                         style = TextStyle(
-                            color = if (isHeartbeat) Color(0xFF00E699) else Color(0xFF666677),
+                            color = if (isLive) Color(0xFF00E699) else Color(0xFF666677),
                             fontSize = 11.sp,
                             fontFamily = FontFamily.Monospace,
-                            fontWeight = if (isHeartbeat) FontWeight.Bold else FontWeight.Normal,
+                            fontWeight = if (isLive) FontWeight.Bold else FontWeight.Normal,
                         ),
                     )
                 }
             }
         }
     }
+}
+
+private fun isTelemetryLiveActive(record: LicenseAnalyticsRecord, nowMs: Long = com.nuvio.app.features.watchprogress.WatchProgressClock.nowEpochMs()): Boolean {
+    val evt = record.event.orEmpty()
+    if (evt.equals("revoked", ignoreCase = true) || evt.equals("offline", ignoreCase = true) || evt.equals("error", ignoreCase = true)) {
+        return false
+    }
+    if (!evt.equals("heartbeat", ignoreCase = true)) {
+        return false
+    }
+
+    val epochMs = record.last_seen_at?.toLongOrNull()
+    if (epochMs != null && epochMs > 1_000_000_000_000L) {
+        val diffMs = nowMs - epochMs
+        return diffMs in -15_000L..(5 * 60 * 1000L)
+    }
+
+    val timeStr = record.last_seen_at?.takeIf { it.contains("T") } ?: record.created_at?.takeIf { it.contains("T") }
+    if (timeStr != null) {
+        val parsed = runCatching { kotlinx.datetime.Instant.parse(timeStr) }.getOrNull()
+        if (parsed != null) {
+            val diffMs = nowMs - parsed.toEpochMilliseconds()
+            return diffMs in -15_000L..(5 * 60 * 1000L)
+        }
+    }
+
+    return false
+}
+
+private fun formatTelemetryHardware(record: LicenseAnalyticsRecord, defaultVersion: String): String {
+    val rawPlatform = record.platform?.trim().orEmpty()
+    val rawDevice = record.device_id?.trim().orEmpty()
+    val version = record.version?.takeIf { it.isNotBlank() && it != "1.1.20" } ?: defaultVersion
+
+    val osName = when {
+        rawPlatform.contains("Mac", ignoreCase = true) || rawPlatform.contains("Darwin", ignoreCase = true) -> "macOS"
+        rawPlatform.contains("Windows", ignoreCase = true) || rawPlatform.contains("Win", ignoreCase = true) -> "Windows"
+        rawPlatform.contains("Android", ignoreCase = true) -> "Android"
+        rawPlatform.contains("iOS", ignoreCase = true) || rawPlatform.contains("iPad", ignoreCase = true) -> "iOS"
+        rawPlatform.contains("Linux", ignoreCase = true) -> "Linux"
+        else -> null
+    }
+
+    val cleanDevice = when {
+        rawDevice.isBlank() ||
+            rawDevice.equals("Active Client", ignoreCase = true) ||
+            rawDevice.equals("Offline", ignoreCase = true) ||
+            rawDevice.equals("Client", ignoreCase = true) ||
+            rawDevice.equals("Desktop Client", ignoreCase = true) ||
+            rawDevice.equals("Mobile Client", ignoreCase = true) ||
+            rawDevice.equals("Registered Device", ignoreCase = true) -> null
+        rawDevice.length > 24 && rawDevice.contains("-") -> "ID: " + rawDevice.take(8).uppercase()
+        else -> rawDevice
+    }
+
+    val hardwareLabel = when {
+        osName != null && cleanDevice != null && !cleanDevice.contains(osName, ignoreCase = true) ->
+            "$cleanDevice ($osName)"
+        osName != null && cleanDevice != null ->
+            cleanDevice
+        osName != null ->
+            osName
+        cleanDevice != null ->
+            cleanDevice
+        else ->
+            "Desktop / Mobile"
+    }
+
+    return "Hardware: $hardwareLabel • v$version"
 }
 
 private fun isDateExpired(expiresAt: String?): Boolean {
