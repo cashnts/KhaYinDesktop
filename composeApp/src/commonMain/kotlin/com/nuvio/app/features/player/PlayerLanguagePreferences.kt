@@ -618,6 +618,118 @@ fun resolveContentLanguage(language: String?, country: String?): String? {
     return null
 }
 
+fun isAllowedAudioTrack(track: AudioTrack): Boolean {
+    val code = track.language?.trim().orEmpty()
+    val lbl = track.label.trim()
+    val combined = "$code $lbl".trim()
+
+    val normalizedCode = normalizeLanguageCode(code)?.lowercase()?.substringBefore('-')
+    val normalizedLabel = normalizeLanguageCode(lbl)?.lowercase()?.substringBefore('-')
+
+    val isEnglish = normalizedCode == "en" || normalizedCode == "eng" ||
+                    normalizedLabel == "en" || normalizedLabel == "eng" ||
+                    combined.contains("english", ignoreCase = true) ||
+                    code.equals("en", ignoreCase = true) ||
+                    code.equals("eng", ignoreCase = true)
+
+    val isChinese = normalizedCode == "zh" || normalizedCode == "zho" || normalizedCode == "chi" || normalizedCode == "cmn" || normalizedCode == "yue" ||
+                    normalizedLabel == "zh" || normalizedLabel == "zho" || normalizedLabel == "chi" ||
+                    combined.contains("chinese", ignoreCase = true) ||
+                    combined.contains("mandarin", ignoreCase = true) ||
+                    combined.contains("cantonese", ignoreCase = true) ||
+                    combined.contains("中文", ignoreCase = true) ||
+                    code.equals("zh", ignoreCase = true) ||
+                    code.equals("chi", ignoreCase = true) ||
+                    code.equals("zho", ignoreCase = true)
+
+    val isGenericOrBlank = (code.isBlank() || code == "und" || code == "unknown") &&
+                           (lbl.isBlank() || lbl.matches(Regex("(?i)track\\s*\\d*|audio\\s*\\d*|default|stereo|surround|5\\.1|7\\.1|aac|ac3|eac3|dts|mp3|flac|pcm")))
+
+    return isEnglish || isChinese || isGenericOrBlank
+}
+
+fun isAllowedSubtitleTrack(track: SubtitleTrack, isPlus: Boolean): Boolean {
+    val code = track.language?.trim().orEmpty()
+    val lbl = track.label.trim()
+    val combined = "$code $lbl".trim()
+
+    val normalizedCode = normalizeLanguageCode(code)?.lowercase()?.substringBefore('-')
+    val normalizedLabel = normalizeLanguageCode(lbl)?.lowercase()?.substringBefore('-')
+
+    val isEnglish = normalizedCode == "en" || normalizedCode == "eng" ||
+                    normalizedLabel == "en" || normalizedLabel == "eng" ||
+                    combined.contains("english", ignoreCase = true) ||
+                    code.equals("en", ignoreCase = true) ||
+                    code.equals("eng", ignoreCase = true)
+
+    val isChinese = normalizedCode == "zh" || normalizedCode == "zho" || normalizedCode == "chi" || normalizedCode == "cmn" || normalizedCode == "yue" ||
+                    normalizedLabel == "zh" || normalizedLabel == "zho" || normalizedLabel == "chi" ||
+                    combined.contains("chinese", ignoreCase = true) ||
+                    combined.contains("mandarin", ignoreCase = true) ||
+                    combined.contains("cantonese", ignoreCase = true) ||
+                    combined.contains("中文", ignoreCase = true) ||
+                    code.equals("zh", ignoreCase = true) ||
+                    code.equals("chi", ignoreCase = true) ||
+                    code.equals("zho", ignoreCase = true)
+
+    val isBurmese = normalizedCode == "my" || normalizedCode == "mya" || normalizedCode == "bur" ||
+                    normalizedLabel == "my" || normalizedLabel == "mya" || normalizedLabel == "bur" ||
+                    combined.contains("burmese", ignoreCase = true) ||
+                    combined.contains("myanmar", ignoreCase = true) ||
+                    combined.contains("mmsub", ignoreCase = true) ||
+                    combined.contains("မြန်မာ", ignoreCase = true) ||
+                    code.equals("my", ignoreCase = true) ||
+                    code.equals("bur", ignoreCase = true) ||
+                    code.equals("mya", ignoreCase = true)
+
+    return when {
+        isPlus -> isEnglish || isChinese || isBurmese
+        else -> isEnglish || isChinese
+    }
+}
+
+fun isAllowedAddonSubtitle(subtitle: AddonSubtitle, isPlus: Boolean): Boolean {
+    val code = subtitle.language.trim()
+    val lbl = subtitle.display.trim()
+    val addon = subtitle.addonName?.trim().orEmpty()
+    val combined = "$code $lbl $addon ${subtitle.url}".trim()
+
+    val normalizedCode = normalizeLanguageCode(code)?.lowercase()?.substringBefore('-')
+    val normalizedLabel = normalizeLanguageCode(lbl)?.lowercase()?.substringBefore('-')
+
+    val isEnglish = normalizedCode == "en" || normalizedCode == "eng" ||
+                    normalizedLabel == "en" || normalizedLabel == "eng" ||
+                    combined.contains("english", ignoreCase = true) ||
+                    code.equals("en", ignoreCase = true) ||
+                    code.equals("eng", ignoreCase = true)
+
+    val isChinese = normalizedCode == "zh" || normalizedCode == "zho" || normalizedCode == "chi" || normalizedCode == "cmn" || normalizedCode == "yue" ||
+                    normalizedLabel == "zh" || normalizedLabel == "zho" || normalizedLabel == "chi" ||
+                    combined.contains("chinese", ignoreCase = true) ||
+                    combined.contains("mandarin", ignoreCase = true) ||
+                    combined.contains("cantonese", ignoreCase = true) ||
+                    combined.contains("中文", ignoreCase = true) ||
+                    code.equals("zh", ignoreCase = true) ||
+                    code.equals("chi", ignoreCase = true) ||
+                    code.equals("zho", ignoreCase = true)
+
+    val isBurmese = normalizedCode == "my" || normalizedCode == "mya" || normalizedCode == "bur" ||
+                    normalizedLabel == "my" || normalizedLabel == "mya" || normalizedLabel == "bur" ||
+                    combined.contains("burmese", ignoreCase = true) ||
+                    combined.contains("myanmar", ignoreCase = true) ||
+                    combined.contains("mmsub", ignoreCase = true) ||
+                    combined.contains("မြန်မာ", ignoreCase = true) ||
+                    subtitle.url.contains("stream.khayin.net", ignoreCase = true) ||
+                    code.equals("my", ignoreCase = true) ||
+                    code.equals("bur", ignoreCase = true) ||
+                    code.equals("mya", ignoreCase = true)
+
+    return when {
+        isPlus -> isEnglish || isChinese || isBurmese
+        else -> isEnglish || isChinese
+    }
+}
+
 private val COUNTRY_TO_LANGUAGE_MAP = mapOf(
     // ISO 3166-1 alpha-2
     "jp" to "ja", "kr" to "ko", "cn" to "zh", "tw" to "zh",

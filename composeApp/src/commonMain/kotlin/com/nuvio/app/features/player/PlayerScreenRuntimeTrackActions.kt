@@ -149,8 +149,9 @@ internal fun PlayerScreenRuntime.restorePersistedTrackPreferenceIfNeeded() {
 
 internal fun PlayerScreenRuntime.refreshTracks() {
     val ctrl = playerController ?: return
-    audioTracks = ctrl.getAudioTracks()
-    subtitleTracks = ctrl.getSubtitleTracks()
+    val isPlus = com.nuvio.app.features.license.LicenseRepository.isPlusMember
+    audioTracks = ctrl.getAudioTracks().filter { isAllowedAudioTrack(it) }
+    subtitleTracks = ctrl.getSubtitleTracks().filter { isAllowedSubtitleTrack(it, isPlus) }
     val selectedAudio = audioTracks.firstOrNull { it.isSelected }
     if (selectedAudio != null) selectedAudioIndex = selectedAudio.index
     val selectedSub = subtitleTracks.firstOrNull { it.isSelected }

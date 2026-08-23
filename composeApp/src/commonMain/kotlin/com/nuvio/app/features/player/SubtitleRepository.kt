@@ -91,19 +91,20 @@ object SubtitleRepository {
                         val rawLang = obj.subtitleLanguage() ?: "unknown"
                         val normalizedLang = normalizeLanguageCode(rawLang) ?: rawLang
 
-                        allSubs.add(
-                            AddonSubtitle(
-                                id = id,
-                                url = url,
-                                language = normalizedLang,
-                                display = getString(
-                                    Res.string.player_addon_subtitle_display_format,
-                                    getLanguageLabelForCode(rawLang),
-                                    addon.displayTitle,
-                                ),
-                                addonName = addon.displayTitle,
-                            )
+                        val sub = AddonSubtitle(
+                            id = id,
+                            url = url,
+                            language = normalizedLang,
+                            display = getString(
+                                Res.string.player_addon_subtitle_display_format,
+                                getLanguageLabelForCode(rawLang),
+                                addon.displayTitle,
+                            ),
+                            addonName = addon.displayTitle,
                         )
+                        if (isAllowedAddonSubtitle(sub, isPlus)) {
+                            allSubs.add(sub)
+                        }
                     }
                 } catch (error: Throwable) {
                     if (error is CancellationException) throw error

@@ -38,12 +38,16 @@ internal fun buildSubtitleLanguageItems(
     showOnlyPreferredLanguages: Boolean,
     selectedLanguageKey: String,
 ): List<SubtitleLanguageItem> {
+    val isPlus = com.nuvio.app.features.license.LicenseRepository.isPlusMember
+    val validSubtitleTracks = subtitleTracks.filter { isAllowedSubtitleTrack(it, isPlus) }
+    val validAddonSubtitles = addonSubtitles.filter { isAllowedAddonSubtitle(it, isPlus) }
+
     val counts = linkedMapOf<String, Int>()
-    subtitleTracks.forEach { track ->
+    validSubtitleTracks.forEach { track ->
         val key = track.subtitleLanguageKey()
         counts[key] = (counts[key] ?: 0) + 1
     }
-    addonSubtitles.forEach { subtitle ->
+    validAddonSubtitles.forEach { subtitle ->
         val key = subtitleLanguageKey(subtitle.language)
         counts[key] = (counts[key] ?: 0) + 1
     }
@@ -74,12 +78,13 @@ internal fun buildSubtitleSelectionOptions(
 ): List<SubtitleSelectionOption> {
     if (languageKey == SubtitleOffLanguageKey) return emptyList()
 
+    val isPlus = com.nuvio.app.features.license.LicenseRepository.isPlusMember
     val builtInOptions = subtitleTracks
-        .filter { it.subtitleLanguageKey() == languageKey }
+        .filter { isAllowedSubtitleTrack(it, isPlus) && it.subtitleLanguageKey() == languageKey }
         .map { SubtitleSelectionOption.BuiltIn(it) }
     val seenAddonIds = mutableSetOf<String>()
     val addonOptions = addonSubtitles
-        .filter { subtitleLanguageKey(it.language) == languageKey }
+        .filter { isAllowedAddonSubtitle(it, isPlus) && subtitleLanguageKey(it.language) == languageKey }
         .map(SubtitleSelectionOption::Addon)
         .filter { seenAddonIds.add(it.id) }
 

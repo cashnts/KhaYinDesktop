@@ -149,10 +149,11 @@ actual fun PlatformPlayerSurface(
                         language = bridge.getAudioTrackLang(i),
                         isSelected = bridge.isAudioTrackSelected(i),
                     )
-                }
+                }.filter { isAllowedAudioTrack(it) }
             }
 
             override fun getSubtitleTracks(): List<SubtitleTrack> {
+                val isPlus = com.nuvio.app.features.license.LicenseRepository.isPlusMember
                 val count = bridge.getSubtitleTrackCount()
                 val tracks = (0 until count).map { i ->
                     val trackId = bridge.getSubtitleTrackId(i)
@@ -170,7 +171,7 @@ actual fun PlatformPlayerSurface(
                             trackId = trackId,
                         ),
                     )
-                }
+                }.filter { isAllowedSubtitleTrack(it, isPlus) }
                 Logger.d(TAG) { "getSubtitleTracks: found ${tracks.size} tracks" }
                 return tracks
             }

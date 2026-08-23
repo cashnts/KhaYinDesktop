@@ -24,6 +24,8 @@ import com.nuvio.app.features.player.SubtitleOutlineColorSwatches
 import com.nuvio.app.features.player.SubtitleStyleState
 import com.nuvio.app.features.player.SubtitleTrack
 import com.nuvio.app.features.player.inferForcedSubtitleTrack
+import com.nuvio.app.features.player.isAllowedAudioTrack
+import com.nuvio.app.features.player.isAllowedSubtitleTrack
 import com.nuvio.app.features.player.toStorageHexString
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -471,31 +473,37 @@ internal class NativePlayerController(
     }
 
     override fun getAudioTracks(): List<AudioTrack> =
-        decodeTracks { NativePlayerBridge.audioTracksJson(it) }.map { track ->
-            AudioTrack(
-                index = track.index,
-                id = track.id,
-                label = track.label,
-                language = track.language.takeUnless(String::isBlank),
-                isSelected = track.selected,
-            )
-        }
-
-    override fun getSubtitleTracks(): List<SubtitleTrack> =
-        decodeTracks { NativePlayerBridge.subtitleTracksJson(it) }.map { track ->
-            SubtitleTrack(
-                index = track.index,
-                id = track.id,
-                label = track.label,
-                language = track.language.takeUnless(String::isBlank),
-                isSelected = track.selected,
-                isForced = track.forced || inferForcedSubtitleTrack(
+        decodeTracks { NativePlayerBridge.audioTracksJson(it) }
+            .map { track ->
+                AudioTrack(
+                    index = track.index,
+                    id = track.id,
                     label = track.label,
-                    language = track.language,
-                    trackId = track.id,
-                ),
-            )
-        }
+                    language = track.language.takeUnless(String::isBlank),
+                    isSelected = track.selected,
+                )
+            }
+            .filter { isAllowedAudioTrack(it) }
+
+    override fun getSubtitleTracks(): List<SubtitleTrack> {
+        val isPlus = com.nuvio.app.features.license.LicenseRepository.isPlusMember
+        return decodeTracks { NativePlayerBridge.subtitleTracksJson(it) }
+            .map { track ->
+                SubtitleTrack(
+                    index = track.index,
+                    id = track.id,
+                    label = track.label,
+                    language = track.language.takeUnless(String::isBlank),
+                    isSelected = track.selected,
+                    isForced = track.forced || inferForcedSubtitleTrack(
+                        label = track.label,
+                        language = track.language,
+                        trackId = track.id,
+                    ),
+                )
+            }
+            .filter { isAllowedSubtitleTrack(it, isPlus) }
+    }
 
     override fun selectAudioTrack(index: Int) {
         val current = handle.takeIf { it != 0L } ?: return
