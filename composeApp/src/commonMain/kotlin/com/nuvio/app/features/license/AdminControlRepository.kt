@@ -140,10 +140,11 @@ object AdminControlRepository {
 
     suspend fun fetchAnalytics(limit: Int = 100): Result<List<LicenseAnalyticsRecord>> = runCatching {
         val restUrl = supabaseRestUrl()
+        val analyticsUrl = "$restUrl/license_analytics?select=*&order=id.desc&limit=$limit"
         val response = httpRequestRaw(
             method = "GET",
-            url = "$restUrl/license_analytics?select=*&limit=$limit",
-            headers = supabaseHeaders(method = "GET", url = "$restUrl/license_analytics?select=*&limit=$limit"),
+            url = analyticsUrl,
+            headers = supabaseHeaders(method = "GET", url = analyticsUrl),
             body = "",
         )
         if (response.status in 200..299 && !response.body.startsWith("<")) {
@@ -153,29 +154,37 @@ object AdminControlRepository {
             }
         }
 
-        // Fallback to synthesizing live telemetry from active license registry
+        // Fallback to synthesizing real status from active license registry
+        val licUrl = "$restUrl/license_keys?select=*&order=created_at.desc&limit=$limit"
         val licResponse = httpRequestRaw(
             method = "GET",
-            url = "$restUrl/license_keys?select=*&limit=$limit",
-            headers = supabaseHeaders(method = "GET", url = "$restUrl/license_keys?select=*&limit=$limit"),
+            url = licUrl,
+            headers = supabaseHeaders(method = "GET", url = licUrl),
             body = "",
         )
         if (licResponse.status in 200..299 && !licResponse.body.startsWith("<")) {
             val licRecords = json.decodeFromString<List<SupabaseLicenseRecord>>(licResponse.body)
+            val currentAppVersion = com.nuvio.app.core.build.AppVersionPolicy.displayVersionName
             val mapped = licRecords
                 .filter { it.key != "SYSTEM_CONFIG" }
                 .mapIndexed { idx, lic ->
                     val isRevoked = lic.status.equals("revoked", ignoreCase = true)
-                    val activeCount = lic.activeDevices ?: 1
+                    val activeCount = lic.activeDevices ?: 0
+                    val isActive = !isRevoked && activeCount > 0
+                    val deviceName = lic.customerName?.takeIf { it.isNotBlank() } ?: "Registered Device"
                     LicenseAnalyticsRecord(
                         id = idx.toLong() + 1,
                         license_key = lic.key,
-                        device_id = "Device-${lic.key.takeLast(6).uppercase()}",
-                        platform = "KhaYin Media Client",
-                        version = "1.1.20",
-                        event = if (isRevoked) "revoked" else "heartbeat",
-                        last_seen_at = lic.expiresAt?.take(10) ?: "Active",
-                        created_at = "Active Session",
+                        device_id = deviceName,
+                        platform = if (isActive) "Active Client" else "Offline",
+                        version = currentAppVersion,
+                        event = when {
+                            isRevoked -> "revoked"
+                            isActive -> "heartbeat"
+                            else -> "offline"
+                        },
+                        last_seen_at = if (isActive) "Active Now" else "Offline",
+                        created_at = if (isActive) "Active" else "Offline",
                     )
                 }
             return@runCatching mapped

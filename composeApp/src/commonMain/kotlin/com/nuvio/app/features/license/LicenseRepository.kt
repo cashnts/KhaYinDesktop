@@ -273,6 +273,31 @@ object LicenseRepository {
             LicenseStorage.saveLastKnownKey(info.key)
             syncSupabaseIdentity(info.key)
             _state.value = LicenseState.Active(info)
+
+            // Record activation telemetry event
+            val deviceMeta = runCatching { com.nuvio.app.core.auth.currentDeviceClientMetadata() }.getOrNull()
+            val appVer = com.nuvio.app.core.build.AppVersionPolicy.displayVersionName
+            val devName = deviceMeta?.deviceName?.ifBlank { null } ?: getOrCreateDeviceId()
+            val platformDesc = deviceMeta?.platform?.ifBlank { null } ?: "Desktop Client"
+            val todayIso = CurrentDateProvider.todayIsoDate()
+            runCatching {
+                val analyticsUrl = "$restUrl/license_analytics"
+                val payload = json.encodeToString(mapOf(
+                    "license_key" to info.key,
+                    "device_id" to devName,
+                    "platform" to platformDesc,
+                    "version" to appVer,
+                    "event" to "activation",
+                    "last_seen_at" to todayIso,
+                ))
+                httpRequestRaw(
+                    method = "POST",
+                    url = analyticsUrl,
+                    headers = supabaseHeaders(method = "POST", url = analyticsUrl, body = payload),
+                    body = payload,
+                )
+            }
+
             startHeartbeat()
 
             info
@@ -364,21 +389,26 @@ object LicenseRepository {
             LicenseStorage.saveLicensePayload(json.encodeToString(updated))
 
             // Analytics Heartbeat Ping to register device heartbeat and telemetry
+            val deviceMeta = runCatching { com.nuvio.app.core.auth.currentDeviceClientMetadata() }.getOrNull()
+            val appVer = com.nuvio.app.core.build.AppVersionPolicy.displayVersionName
+            val devName = deviceMeta?.deviceName?.ifBlank { null } ?: getOrCreateDeviceId()
+            val platformDesc = deviceMeta?.platform?.ifBlank { null } ?: "Desktop Client"
             val todayIso = CurrentDateProvider.todayIsoDate()
-            val devId = getOrCreateDeviceId()
             runCatching {
+                val analyticsUrl = "$restUrl/license_analytics"
+                val payload = json.encodeToString(mapOf(
+                    "license_key" to currentInfo.key,
+                    "device_id" to devName,
+                    "platform" to platformDesc,
+                    "version" to appVer,
+                    "event" to "heartbeat",
+                    "last_seen_at" to todayIso,
+                ))
                 httpRequestRaw(
                     method = "POST",
-                    url = "$restUrl/license_analytics",
-                    headers = supabaseHeaders(),
-                    body = json.encodeToString(mapOf(
-                        "license_key" to currentInfo.key,
-                        "device_id" to devId,
-                        "platform" to "KhaYin-Client",
-                        "version" to "1.1.20",
-                        "event" to "heartbeat",
-                        "last_seen_at" to todayIso,
-                    )),
+                    url = analyticsUrl,
+                    headers = supabaseHeaders(method = "POST", url = analyticsUrl, body = payload),
+                    body = payload,
                 )
             }
 

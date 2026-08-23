@@ -1551,6 +1551,26 @@ private fun AnalyticsTabContent(
             }
         } else {
             items(filteredAnalytics) { record ->
+                val isRevoked = record.event.equals("revoked", ignoreCase = true) || record.event.equals("error", ignoreCase = true)
+                val isOffline = record.event.equals("offline", ignoreCase = true) ||
+                    record.created_at.equals("Offline", ignoreCase = true) ||
+                    record.last_seen_at.equals("Offline", ignoreCase = true)
+                val isHeartbeat = !isRevoked && !isOffline
+
+                val eventName = when {
+                    isRevoked -> "REVOKED"
+                    isOffline -> "OFFLINE"
+                    record.event.equals("activation", ignoreCase = true) -> "ACTIVATION"
+                    record.event.equals("login", ignoreCase = true) -> "LOGIN"
+                    else -> "HEARTBEAT"
+                }
+                val eventColor = when {
+                    isRevoked -> Color(0xFFFF5252)
+                    isOffline -> Color(0xFF888899)
+                    eventName == "ACTIVATION" || eventName == "LOGIN" -> Color(0xFF3399FF)
+                    else -> Color(0xFF00E699)
+                }
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1563,12 +1583,6 @@ private fun AnalyticsTabContent(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            val eventName = record.event?.uppercase() ?: "HEARTBEAT"
-                            val eventColor = when (eventName) {
-                                "ACTIVATION", "LOGIN" -> Color(0xFF3399FF)
-                                "REVOKED", "ERROR" -> Color(0xFFFF5252)
-                                else -> Color(0xFF00E699)
-                            }
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(4.dp))
@@ -1587,15 +1601,34 @@ private fun AnalyticsTabContent(
                             )
                         }
                         Spacer(modifier = Modifier.height(4.dp))
+                        val currentAppVersion = com.nuvio.app.core.build.AppVersionPolicy.displayVersionName
+                        val versionDisplay = record.version?.takeIf { it.isNotBlank() && it != "1.1.20" } ?: currentAppVersion
+                        val deviceDisplay = record.device_id?.takeIf { it.isNotBlank() && !it.startsWith("Device-") } ?: "Client Device"
+                        val platformDisplay = record.platform?.takeIf { it.isNotBlank() && it != "Client" && it != "KhaYin Media Client" } ?: "Desktop / Mobile"
+
                         Text(
-                            text = "Hardware: ${record.device_id?.take(18) ?: "N/A"} • ${record.platform ?: "Client"} • v${record.version ?: "1.1.20"}",
+                            text = "Hardware: $deviceDisplay • $platformDisplay • v$versionDisplay",
                             style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp),
                         )
                     }
 
+                    val statusBadgeText = when {
+                        isOffline -> "Offline"
+                        isRevoked -> "Revoked"
+                        record.created_at != null && record.created_at != "Active Session" && record.created_at != "Active" && record.created_at != "Offline" ->
+                            record.created_at.take(19).replace("T", " ")
+                        record.last_seen_at != null && record.last_seen_at != "Active" && record.last_seen_at != "Active Now" && record.last_seen_at != "Offline" ->
+                            record.last_seen_at.take(19).replace("T", " ")
+                        else -> "Active Session"
+                    }
                     Text(
-                        text = record.created_at?.take(19)?.replace("T", " ") ?: record.last_seen_at ?: "Just now",
-                        style = TextStyle(color = Color(0xFF666677), fontSize = 11.sp, fontFamily = FontFamily.Monospace),
+                        text = statusBadgeText,
+                        style = TextStyle(
+                            color = if (isHeartbeat) Color(0xFF00E699) else Color(0xFF666677),
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = if (isHeartbeat) FontWeight.Bold else FontWeight.Normal,
+                        ),
                     )
                 }
             }
