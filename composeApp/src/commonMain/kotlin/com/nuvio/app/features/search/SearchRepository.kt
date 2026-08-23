@@ -133,7 +133,7 @@ object SearchRepository {
             try {
                 for (result in resultChannel) {
                     results[result.index] = result
-                    val sections = results.orderedSections()
+                    val sections = results.orderedSections(normalizedQuery)
                     if (sections.isNotEmpty()) {
                         _uiState.value = SearchUiState(
                             isLoading = true,
@@ -147,7 +147,7 @@ object SearchRepository {
             }
 
             val completedResults = results.filterNotNull()
-            val sections = results.orderedSections()
+            val sections = results.orderedSections(normalizedQuery)
             val firstFailure = completedResults.firstNotNullOfOrNull { it.error?.message }
             val allFailed = completedResults.isNotEmpty() && completedResults.all { it.error != null }
 
@@ -399,11 +399,19 @@ object SearchRepository {
         require(items.isNotEmpty()) {
             getString(Res.string.search_error_no_results_for_catalog, catalogName)
         }
+        val sortedItems = if (query.isNotBlank()) {
+            items.sortedWith(
+                compareByDescending<MetaPreview> { calculateSearchRelevanceScore(it.name, query) }
+                    .thenBy { it.name.length }
+            )
+        } else {
+            items
+        }
 
         return HomeCatalogSection(
             key = "${manifest.id}:search:$type:$catalogId:${query.lowercase()}",
             title = getString(Res.string.discover_catalog_context, catalogName, type.displayLabel()),
-            subtitle = addon.displayTitle,
+            subtitle = "",
             addonName = addon.displayTitle,
             target = CatalogTarget.Addon(
                 manifestUrl = manifest.transportUrl,
@@ -411,7 +419,7 @@ object SearchRepository {
                 catalogId = catalogId,
                 supportsPagination = supportsPagination,
             ),
-            items = items,
+            items = sortedItems,
             availableItemCount = page.rawItemCount,
             hasMore = supportsPagination && page.nextSkip != null,
         )
@@ -531,8 +539,57 @@ private data class IndexedSearchResult(
     val error: Throwable? = null,
 )
 
-private fun Array<IndexedSearchResult?>.orderedSections(): List<HomeCatalogSection> =
-    mapNotNull { result -> result?.section }
+private fun Array<IndexedSearchResult?>.orderedSections(query: String = ""): List<HomeCatalogSection> {
+    val nonNullSections = mapNotNull { result -> result?.section }
+    if (query.isBlank()) return nonNullSections
+
+    return nonNullSections.sortedWith(
+        compareByDescending<HomeCatalogSection> { section ->
+            section.items.maxOfOrNull { calculateSearchRelevanceScore(it.name, query) } ?: 0
+        }.thenByDescending { section ->
+            section.items.take(3).map { calculateSearchRelevanceScore(it.name, query) }.average()
+        }
+    )
+}
+
+private fun calculateSearchRelevanceScore(name: String, query: String): Int {
+    val cleanName = name.trim().lowercase()
+    val cleanQuery = query.trim().lowercase()
+    if (cleanName.isEmpty() || cleanQuery.isEmpty()) return 0
+
+    // 1. Exact match (e.g., "Loki" == "Loki")
+    if (cleanName == cleanQuery) return 10000
+
+    // 2. Exact match ignoring punctuation
+    val strippedName = cleanName.filter { it.isLetterOrDigit() || it.isWhitespace() }
+    val strippedQuery = cleanQuery.filter { it.isLetterOrDigit() || it.isWhitespace() }
+    if (strippedName == strippedQuery && strippedName.isNotEmpty()) return 9000
+
+    // 3. Exact word boundary match: title is "Loki: Season 1" or "Loki (2021)"
+    if (cleanName.startsWith("$cleanQuery ") || cleanName.startsWith("$cleanQuery:") || cleanName.startsWith("$cleanQuery-")) {
+        return 7000 - (cleanName.length - cleanQuery.length).coerceAtMost(1000)
+    }
+
+    // 4. Starts with query prefix (e.g. "Loki 7")
+    if (cleanName.startsWith(cleanQuery)) {
+        return 5000 - (cleanName.length - cleanQuery.length).coerceAtMost(1000)
+    }
+
+    // 5. Query matches a standalone word in the title (e.g. "Thor & Loki" or "Marvel's Loki")
+    val words = cleanName.split(Regex("[^a-zA-Z0-9]+")).filter { it.isNotBlank() }
+    if (words.any { it == cleanQuery }) return 3000
+
+    // 6. Word starts with query
+    if (words.any { it.startsWith(cleanQuery) }) return 2000
+
+    // 7. Substring match (e.g. "Lokita")
+    val index = cleanName.indexOf(cleanQuery)
+    if (index >= 0) {
+        return 1000 - index.coerceAtMost(500)
+    }
+
+    return 0
+}
 
 private fun CatalogPage.withUnreleasedFilter(): CatalogPage {
     if (!HomeCatalogSettingsRepository.snapshot().hideUnreleasedContent) return this
