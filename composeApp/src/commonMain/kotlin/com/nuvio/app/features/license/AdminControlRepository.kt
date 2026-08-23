@@ -87,10 +87,11 @@ object AdminControlRepository {
     suspend fun fetchConfig(): SystemServiceConfig {
         return runCatching {
             val restUrl = supabaseRestUrl()
+            val url = "$restUrl/license_keys?key=eq.SYSTEM_CONFIG&select=*"
             val response = httpRequestRaw(
                 method = "GET",
-                url = "$restUrl/license_keys?key=eq.SYSTEM_CONFIG&select=*",
-                headers = supabaseHeaders(),
+                url = url,
+                headers = supabaseHeaders(method = "GET", url = url),
                 body = "",
             )
             if (response.status in 200..299 && !response.body.startsWith("<")) {
@@ -119,17 +120,19 @@ object AdminControlRepository {
                 notes = json.encodeToString(newConfig),
             )
             val body = json.encodeToString(payload)
+            val postUrl = "$restUrl/license_keys"
             val response = httpRequestRaw(
                 method = "POST",
-                url = "$restUrl/license_keys",
-                headers = supabaseHeaders(),
+                url = postUrl,
+                headers = supabaseHeaders(method = "POST", url = postUrl, body = body),
                 body = body,
             )
             if (response.status !in 200..299) {
+                val patchUrl = "$restUrl/license_keys?key=eq.SYSTEM_CONFIG"
                 httpRequestRaw(
                     method = "PATCH",
-                    url = "$restUrl/license_keys?key=eq.SYSTEM_CONFIG",
-                    headers = supabaseHeaders(),
+                    url = patchUrl,
+                    headers = supabaseHeaders(method = "PATCH", url = patchUrl, body = body),
                     body = body,
                 )
             }

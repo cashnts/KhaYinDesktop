@@ -1,13 +1,13 @@
 package com.nuvio.app.core.security
 
 import com.nuvio.app.core.build.AppFeaturePolicy
+import com.nuvio.app.features.addons.RawHttpResponse
 import com.nuvio.app.features.profiles.ProfilePinCrypto
 import com.nuvio.app.features.watchprogress.WatchProgressClock
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 @OptIn(ExperimentalEncodingApi::class, ExperimentalUuidApi::class)
@@ -30,6 +30,18 @@ object KhaYinSecurityBridge {
     ): String {
         val canonicalPayload = "$nonce:$timestamp:${method.uppercase()}:$url:$body:$APP_HMAC_SECRET"
         return ProfilePinCrypto.sha256Hex(canonicalPayload)
+    }
+
+    fun verifySignature(
+        method: String,
+        url: String,
+        body: String,
+        nonce: String,
+        timestamp: Long,
+        signature: String,
+    ): Boolean {
+        val expected = computeSignature(method, url, body, nonce, timestamp)
+        return expected.equals(signature, ignoreCase = true)
     }
 
     /**
@@ -69,7 +81,21 @@ object KhaYinSecurityBridge {
     }
 
     /**
-     * Generates headers for user client network requests with nonce, timestamp, signature, and encryption flag.
+     * Decrypts response body if encrypted flag is present in headers or payload format.
+     */
+    fun decryptResponse(response: RawHttpResponse, requestNonce: String? = null): RawHttpResponse {
+        val isEncryptedHeader = response.headers["x-khayin-encrypted"] == "1" ||
+            response.headers["x-encrypted"] == "1"
+        val responseNonce = response.headers["x-khayin-nonce"] ?: requestNonce
+        if (!isEncryptedHeader || responseNonce.isNullOrBlank()) {
+            return response
+        }
+        val decryptedBody = decryptPayload(response.body, responseNonce)
+        return response.copy(body = decryptedBody)
+    }
+
+    /**
+     * Generates headers for all network requests with nonce, timestamp, signature, and encryption flag.
      */
     fun buildSecureHeaders(
         method: String,
@@ -78,9 +104,7 @@ object KhaYinSecurityBridge {
         baseHeaders: Map<String, String> = emptyMap(),
     ): Pair<Map<String, String>, String> {
         val headers = baseHeaders.toMutableMap()
-        if (!AppFeaturePolicy.isUserClient) {
-            return Pair(headers, body)
-        }
+        val clientRole = if (AppFeaturePolicy.isAdminClient) "admin" else "user"
 
         val nonce = generateNonce()
         val timestamp = generateTimestamp()
@@ -89,7 +113,7 @@ object KhaYinSecurityBridge {
         headers["X-KhaYin-Nonce"] = nonce
         headers["X-KhaYin-Timestamp"] = timestamp.toString()
         headers["X-KhaYin-Signature"] = signature
-        headers["X-KhaYin-Client"] = "user"
+        headers["X-KhaYin-Client"] = clientRole
         headers["X-KhaYin-Encrypted"] = "1"
 
         return Pair(headers, body)

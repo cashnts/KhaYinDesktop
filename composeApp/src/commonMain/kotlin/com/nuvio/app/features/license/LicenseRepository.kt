@@ -59,25 +59,41 @@ object LicenseRepository {
 
     private var heartbeatJob: Job? = null
 
+    private fun saveSecureLicensePayload(info: LicenseInfo) {
+        val jsonStr = json.encodeToString(info)
+        val nonce = info.nonce ?: info.key
+        val encrypted = com.nuvio.app.core.security.KhaYinSecurityBridge.encryptPayload(jsonStr, nonce)
+        LicenseStorage.saveLicensePayload(encrypted)
+    }
+
+    private fun loadSecureLicensePayload(): LicenseInfo? {
+        val raw = LicenseStorage.loadLicensePayload() ?: return null
+        if (raw.isBlank()) return null
+        if (raw.startsWith("{")) {
+            return runCatching { json.decodeFromString<LicenseInfo>(raw) }.getOrNull()
+        }
+        val lastKey = LicenseStorage.loadLastKnownKey() ?: ""
+        val decrypted = com.nuvio.app.core.security.KhaYinSecurityBridge.decryptPayload(raw, lastKey)
+        if (decrypted.startsWith("{")) {
+            return runCatching { json.decodeFromString<LicenseInfo>(decrypted) }.getOrNull()
+        }
+        return runCatching { json.decodeFromString<LicenseInfo>(raw) }.getOrNull()
+    }
+
     fun initialize() {
         if (initialized) return
         initialized = true
 
-        val cachedPayload = LicenseStorage.loadLicensePayload()
-        if (!cachedPayload.isNullOrBlank()) {
-            val cachedInfo = runCatching { json.decodeFromString<LicenseInfo>(cachedPayload) }.getOrNull()
-            if (cachedInfo != null) {
-                if (cachedInfo.status.equals("revoked", ignoreCase = true)) {
-                    ProfileRepository.clearAll()
-                    _state.value = LicenseState.Revoked(cachedInfo)
-                } else if (isExpiredTimestamp(cachedInfo.expiresAt)) {
-                    _state.value = LicenseState.Expired(cachedInfo)
-                } else {
-                    _state.value = LicenseState.Active(cachedInfo)
-                    syncSupabaseIdentity(cachedInfo.key)
-                }
+        val cachedInfo = loadSecureLicensePayload()
+        if (cachedInfo != null) {
+            if (cachedInfo.status.equals("revoked", ignoreCase = true)) {
+                ProfileRepository.clearAll()
+                _state.value = LicenseState.Revoked(cachedInfo)
+            } else if (isExpiredTimestamp(cachedInfo.expiresAt)) {
+                _state.value = LicenseState.Expired(cachedInfo)
             } else {
-                _state.value = LicenseState.Unlicensed
+                _state.value = LicenseState.Active(cachedInfo)
+                syncSupabaseIdentity(cachedInfo.key)
             }
         } else {
             _state.value = LicenseState.Unlicensed
@@ -147,6 +163,7 @@ object LicenseRepository {
         _error.value = null
         val restUrl = supabaseRestUrl()
         val deviceId = getOrCreateDeviceId()
+        val activationNonce = com.nuvio.app.core.security.KhaYinSecurityBridge.generateNonce()
 
         return runCatching {
             // First attempt: call Postgres activate_license RPC with nonce support
@@ -155,15 +172,17 @@ object LicenseRepository {
                     "p_key" to key,
                     "p_device_id" to deviceId,
                     "p_device_name" to "Desktop Client",
+                    "p_nonce" to activationNonce,
                 )
             )
             val rpcUrl = "$restUrl/rpc/activate_license"
-            val rpcResponse = httpRequestRaw(
+            val rawRpcResponse = httpRequestRaw(
                 method = "POST",
                 url = rpcUrl,
                 headers = supabaseHeaders(method = "POST", url = rpcUrl, body = rpcPayload),
                 body = rpcPayload,
             )
+            val rpcResponse = com.nuvio.app.core.security.KhaYinSecurityBridge.decryptResponse(rawRpcResponse, activationNonce)
 
             val info: LicenseInfo = if (rpcResponse.status in 200..299 && rpcResponse.body.trim().startsWith("{")) {
                 val resp = json.decodeFromString<LicenseActivationResponse>(rpcResponse.body.trim())
@@ -180,14 +199,15 @@ object LicenseRepository {
                     expiresAt = resp.expiresAt,
                     maxDevices = resp.resolvedMaxDevices,
                     activeDevices = 1,
-                    nonce = resp.nonce,
+                    nonce = resp.nonce ?: activationNonce,
                 )
             } else {
                 // Fallback to table query if RPC is not deployed
+                val fallbackUrl = "$restUrl/license_keys?key=eq.$key&select=*"
                 val response = httpRequestRaw(
                     method = "GET",
-                    url = "$restUrl/license_keys?key=eq.$key&select=*",
-                    headers = supabaseHeaders(),
+                    url = fallbackUrl,
+                    headers = supabaseHeaders(method = "GET", url = fallbackUrl),
                     body = "",
                 )
 
@@ -209,7 +229,7 @@ object LicenseRepository {
                         expiresAt = resp.expiresAt,
                         maxDevices = resp.resolvedMaxDevices,
                         activeDevices = 1,
-                        nonce = resp.nonce,
+                        nonce = resp.nonce ?: activationNonce,
                     )
                 } else {
                     val records = json.decodeFromString<List<SupabaseLicenseRecord>>(body)
@@ -218,12 +238,12 @@ object LicenseRepository {
                         _error.value = err
                         throw IllegalStateException(err)
                     }
-                    records.first().toLicenseInfo()
+                    records.first().toLicenseInfo().copy(nonce = activationNonce)
                 }
             }
 
             if (info.status.equals("revoked", ignoreCase = true)) {
-                LicenseStorage.saveLicensePayload(json.encodeToString(info))
+                saveSecureLicensePayload(info)
                 _state.value = LicenseState.Revoked(info)
                 val err = "This license key has been revoked."
                 _error.value = err
@@ -231,7 +251,7 @@ object LicenseRepository {
             }
 
             if (isExpiredTimestamp(info.expiresAt)) {
-                LicenseStorage.saveLicensePayload(json.encodeToString(info))
+                saveSecureLicensePayload(info)
                 _state.value = LicenseState.Expired(info)
                 val err = "This license key has expired."
                 _error.value = err
@@ -240,9 +260,7 @@ object LicenseRepository {
 
             // Check if device limit reached for new activations
             val lastKnownKey = LicenseStorage.loadLastKnownKey()
-            val currentCachedKey = LicenseStorage.loadLicensePayload()?.let {
-                runCatching { json.decodeFromString<LicenseInfo>(it).key }.getOrNull()
-            }
+            val currentCachedKey = loadSecureLicensePayload()?.key
             val isReactivationOnSameDevice = currentCachedKey.equals(info.key, ignoreCase = true) ||
                 lastKnownKey.equals(info.key, ignoreCase = true)
 
@@ -269,17 +287,19 @@ object LicenseRepository {
                 )
             }
 
-            LicenseStorage.saveLicensePayload(json.encodeToString(info))
+            saveSecureLicensePayload(info)
             LicenseStorage.saveLastKnownKey(info.key)
             syncSupabaseIdentity(info.key)
             _state.value = LicenseState.Active(info)
 
             // Record activation telemetry event
             val deviceMeta = runCatching { com.nuvio.app.core.auth.currentDeviceClientMetadata() }.getOrNull()
-            val appVer = com.nuvio.app.core.build.AppVersionPolicy.displayVersionName
+            val appVer = com.nuvio.app.core.build.AppVersionConfig.VERSION_NAME
             val devName = deviceMeta?.deviceName?.ifBlank { null } ?: getOrCreateDeviceId()
             val platformDesc = deviceMeta?.platform?.ifBlank { null } ?: "Desktop Client"
             val todayIso = CurrentDateProvider.todayIsoDate()
+            val actNonce = com.nuvio.app.core.security.KhaYinSecurityBridge.generateNonce()
+            val actTimestamp = com.nuvio.app.core.security.KhaYinSecurityBridge.generateTimestamp()
             runCatching {
                 val analyticsUrl = "$restUrl/license_analytics"
                 val payload = json.encodeToString(mapOf(
@@ -288,6 +308,8 @@ object LicenseRepository {
                     "platform" to platformDesc,
                     "version" to appVer,
                     "event" to "activation",
+                    "nonce" to actNonce,
+                    "timestamp" to actTimestamp.toString(),
                     "last_seen_at" to todayIso,
                 ))
                 httpRequestRaw(
@@ -311,6 +333,7 @@ object LicenseRepository {
         val currentInfo = state.value.activeInfo ?: return LicenseState.Unlicensed
         val restUrl = supabaseRestUrl()
         val deviceId = getOrCreateDeviceId()
+        val verifyNonce = currentInfo.nonce ?: com.nuvio.app.core.security.KhaYinSecurityBridge.generateNonce()
 
         return runCatching {
             var updated: LicenseInfo? = null
@@ -321,21 +344,22 @@ object LicenseRepository {
                     mapOf(
                         "p_key" to currentInfo.key,
                         "p_device_id" to deviceId,
-                        "p_nonce" to currentInfo.nonce,
+                        "p_nonce" to verifyNonce,
                     )
                 )
                 val rpcUrl = "$restUrl/rpc/verify_license"
-                val rpcResponse = httpRequestRaw(
+                val rawRpcResponse = httpRequestRaw(
                     method = "POST",
                     url = rpcUrl,
                     headers = supabaseHeaders(method = "POST", url = rpcUrl, body = rpcPayload),
                     body = rpcPayload,
                 )
+                val rpcResponse = com.nuvio.app.core.security.KhaYinSecurityBridge.decryptResponse(rawRpcResponse, verifyNonce)
                 if (rpcResponse.status in 200..299 && rpcResponse.body.trim().startsWith("{")) {
                     val resp = json.decodeFromString<LicenseVerifyResponse>(rpcResponse.body.trim())
                     if (!resp.success) {
                         val revoked = currentInfo.copy(status = "revoked")
-                        LicenseStorage.saveLicensePayload(json.encodeToString(revoked))
+                        saveSecureLicensePayload(revoked)
                         _state.value = LicenseState.Revoked(revoked)
                         return@runCatching LicenseState.Revoked(revoked)
                     }
@@ -349,10 +373,11 @@ object LicenseRepository {
 
             // Fallback to table query if RPC was not used
             if (updated == null) {
+                val queryUrl = "$restUrl/license_keys?key=eq.${currentInfo.key}&select=*"
                 val response = httpRequestRaw(
                     method = "GET",
-                    url = "$restUrl/license_keys?key=eq.${currentInfo.key}&select=*",
-                    headers = supabaseHeaders(),
+                    url = queryUrl,
+                    headers = supabaseHeaders(method = "GET", url = queryUrl),
                     body = "",
                 )
 
@@ -381,19 +406,21 @@ object LicenseRepository {
 
             if (updated == null) {
                 val revoked = currentInfo.copy(status = "revoked")
-                LicenseStorage.saveLicensePayload(json.encodeToString(revoked))
+                saveSecureLicensePayload(revoked)
                 _state.value = LicenseState.Revoked(revoked)
                 return@runCatching LicenseState.Revoked(revoked)
             }
 
-            LicenseStorage.saveLicensePayload(json.encodeToString(updated))
+            saveSecureLicensePayload(updated)
 
             // Analytics Heartbeat Ping to register device heartbeat and telemetry
             val deviceMeta = runCatching { com.nuvio.app.core.auth.currentDeviceClientMetadata() }.getOrNull()
-            val appVer = com.nuvio.app.core.build.AppVersionPolicy.displayVersionName
+            val appVer = com.nuvio.app.core.build.AppVersionConfig.VERSION_NAME
             val devName = deviceMeta?.deviceName?.ifBlank { null } ?: getOrCreateDeviceId()
             val platformDesc = deviceMeta?.platform?.ifBlank { null } ?: "Desktop Client"
             val todayIso = CurrentDateProvider.todayIsoDate()
+            val hbNonce = com.nuvio.app.core.security.KhaYinSecurityBridge.generateNonce()
+            val hbTimestamp = com.nuvio.app.core.security.KhaYinSecurityBridge.generateTimestamp()
             runCatching {
                 val analyticsUrl = "$restUrl/license_analytics"
                 val payload = json.encodeToString(mapOf(
@@ -402,6 +429,8 @@ object LicenseRepository {
                     "platform" to platformDesc,
                     "version" to appVer,
                     "event" to "heartbeat",
+                    "nonce" to hbNonce,
+                    "timestamp" to hbTimestamp.toString(),
                     "last_seen_at" to todayIso,
                 ))
                 httpRequestRaw(
@@ -674,6 +703,6 @@ object LicenseRepository {
         )
         val updatedInfo = current.info.copy(profileName = profileName)
         _state.value = LicenseState.Active(updatedInfo)
-        LicenseStorage.saveLicensePayload(json.encodeToString(updatedInfo))
+        saveSecureLicensePayload(updatedInfo)
     }
 }
