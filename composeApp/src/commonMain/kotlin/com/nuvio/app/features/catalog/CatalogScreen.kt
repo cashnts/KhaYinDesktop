@@ -285,17 +285,6 @@ private fun CatalogHeader(
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
-        if (subtitle.isNotBlank()) {
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                ),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
     }
 }
 

@@ -55,23 +55,6 @@ internal fun LazyListScope.discoverContent(
             onGenreSelected = onGenreSelected,
         )
     }
-    state.selectedCatalog?.let { selectedCatalog ->
-        item {
-            Text(
-                text = stringResource(
-                    Res.string.discover_catalog_context,
-                    selectedCatalog.addonName,
-                    selectedCatalog.type.displayTypeLabel(),
-                ),
-                modifier = Modifier.padding(horizontal = 16.dp),
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                ),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
 
     when {
         state.isLoading && state.items.isEmpty() -> {

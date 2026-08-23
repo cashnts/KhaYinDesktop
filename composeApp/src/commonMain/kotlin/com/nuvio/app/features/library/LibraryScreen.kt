@@ -303,14 +303,6 @@ fun LibraryScreen(
                                 }
                             },
                         )
-                        LibrarySourceSwitch(
-                            selectedMode = sourceMode,
-                            onModeSelected = { mode ->
-                                sourceModeName = mode.name
-                            },
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
                     }
                 }
             }
