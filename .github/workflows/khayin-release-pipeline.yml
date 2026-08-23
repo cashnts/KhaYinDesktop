@@ -48,10 +48,18 @@ jobs:
   metadata:
     name: Resolve Version Metadata
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     outputs:
       version: ${{ steps.version_step.outputs.version }}
       clean_version: ${{ steps.version_step.outputs.clean_version }}
     steps:
+      - name: Validate Branch
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/dev" || "${{ github.ref_name }}" == "dev" ]]; then
+            echo "Error: Actions compilation is strictly forbidden on dev branch." >&2
+            exit 1
+          fi
+
       - name: Checkout Code
         uses: actions/checkout@v4
 
