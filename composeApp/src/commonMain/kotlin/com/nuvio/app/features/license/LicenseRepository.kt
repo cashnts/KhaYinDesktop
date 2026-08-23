@@ -87,8 +87,29 @@ object LicenseRepository {
         val cachedInfo = loadSecureLicensePayload()
         if (cachedInfo != null) {
             if (cachedInfo.status.equals("revoked", ignoreCase = true)) {
-                ProfileRepository.clearAll()
                 _state.value = LicenseState.Revoked(cachedInfo)
+                // Check remote in case this was a false positive or key was unrevoked by admin
+                scope.launch {
+                    val restUrl = supabaseRestUrl()
+                    runCatching {
+                        val queryUrl = "$restUrl/license_keys?key=eq.${cachedInfo.key}&select=*"
+                        val response = httpRequestRaw(
+                            method = "GET",
+                            url = queryUrl,
+                            headers = supabaseHeaders(method = "GET", url = queryUrl),
+                            body = "",
+                        )
+                        if (response.status in 200..299 && !response.body.startsWith("<")) {
+                            val records = json.decodeFromString<List<SupabaseLicenseRecord>>(response.body.trim())
+                            if (records.isNotEmpty() && records.first().status.equals("active", ignoreCase = true)) {
+                                val restored = records.first().toLicenseInfo()
+                                saveSecureLicensePayload(restored)
+                                _state.value = LicenseState.Active(restored)
+                                syncSupabaseIdentity(restored.key)
+                            }
+                        }
+                    }
+                }
             } else if (isExpiredTimestamp(cachedInfo.expiresAt)) {
                 _state.value = LicenseState.Expired(cachedInfo)
             } else {
@@ -358,20 +379,23 @@ object LicenseRepository {
                 if (rpcResponse.status in 200..299 && rpcResponse.body.trim().startsWith("{")) {
                     val resp = json.decodeFromString<LicenseVerifyResponse>(rpcResponse.body.trim())
                     if (!resp.success) {
-                        val revoked = currentInfo.copy(status = "revoked")
-                        saveSecureLicensePayload(revoked)
-                        _state.value = LicenseState.Revoked(revoked)
-                        return@runCatching LicenseState.Revoked(revoked)
+                        if (resp.status.equals("revoked", ignoreCase = true) || resp.error?.contains("revoked", ignoreCase = true) == true) {
+                            val revoked = currentInfo.copy(status = "revoked")
+                            saveSecureLicensePayload(revoked)
+                            _state.value = LicenseState.Revoked(revoked)
+                            return@runCatching LicenseState.Revoked(revoked)
+                        }
+                    } else {
+                        updated = currentInfo.copy(
+                            expiresAt = resp.expiresAt ?: currentInfo.expiresAt,
+                            maxDevices = resp.maxDevices ?: currentInfo.maxDevices,
+                            nonce = resp.nonce ?: currentInfo.nonce,
+                        )
                     }
-                    updated = currentInfo.copy(
-                        expiresAt = resp.expiresAt ?: currentInfo.expiresAt,
-                        maxDevices = resp.maxDevice ?: resp.maxDevices ?: currentInfo.maxDevices,
-                        nonce = resp.nonce ?: currentInfo.nonce,
-                    )
                 }
             }
 
-            // Fallback to table query if RPC was not used
+            // Fallback to table query if RPC was not used or did not return definitive status
             if (updated == null) {
                 val queryUrl = "$restUrl/license_keys?key=eq.${currentInfo.key}&select=*"
                 val response = httpRequestRaw(
@@ -381,34 +405,40 @@ object LicenseRepository {
                     body = "",
                 )
 
-                checkResponseOrThrow(response, "License Verification")
-
-                val body = response.body.trim()
-                updated = if (body.startsWith("{")) {
-                    val resp = json.decodeFromString<LicenseVerifyResponse>(body)
-                    if (resp.success) {
-                        LicenseInfo(
-                            key = resp.key ?: currentInfo.key,
-                            status = resp.status ?: "active",
-                            customerName = resp.customerName ?: currentInfo.customerName,
-                            tier = resp.tier ?: currentInfo.tier,
-                            expiresAt = resp.expiresAt,
-                            maxDevices = resp.maxDevice ?: resp.maxDevices ?: currentInfo.maxDevices,
-                            activeDevices = currentInfo.activeDevices,
-                            nonce = resp.nonce ?: currentInfo.nonce,
-                        )
-                    } else null
-                } else {
-                    val records = json.decodeFromString<List<SupabaseLicenseRecord>>(body)
-                    records.firstOrNull()?.toLicenseInfo()
+                if (response.status in 200..299 && !response.body.startsWith("<")) {
+                    val body = response.body.trim()
+                    if (body.startsWith("{")) {
+                        val resp = json.decodeFromString<LicenseVerifyResponse>(body)
+                        if (resp.success) {
+                            updated = LicenseInfo(
+                                key = resp.key ?: currentInfo.key,
+                                status = resp.status ?: "active",
+                                customerName = resp.customerName ?: currentInfo.customerName,
+                                tier = resp.tier ?: currentInfo.tier,
+                                expiresAt = resp.expiresAt,
+                                maxDevices = resp.maxDevices ?: currentInfo.maxDevices,
+                                activeDevices = currentInfo.activeDevices,
+                                nonce = resp.nonce ?: currentInfo.nonce,
+                            )
+                        }
+                    } else if (body.startsWith("[")) {
+                        val records = json.decodeFromString<List<SupabaseLicenseRecord>>(body)
+                        if (records.isNotEmpty()) {
+                            updated = records.first().toLicenseInfo()
+                        } else {
+                            // Key was explicitly deleted from database
+                            val revoked = currentInfo.copy(status = "revoked")
+                            saveSecureLicensePayload(revoked)
+                            _state.value = LicenseState.Revoked(revoked)
+                            return@runCatching LicenseState.Revoked(revoked)
+                        }
+                    }
                 }
             }
 
             if (updated == null) {
-                val revoked = currentInfo.copy(status = "revoked")
-                saveSecureLicensePayload(revoked)
-                _state.value = LicenseState.Revoked(revoked)
-                return@runCatching LicenseState.Revoked(revoked)
+                // If remote query failed or network issue, maintain current cached license and do NOT revoke
+                return@runCatching state.value
             }
 
             saveSecureLicensePayload(updated)
@@ -606,13 +636,28 @@ object LicenseRepository {
 
     suspend fun adminRevokeLicense(adminPassword: String = "", key: String): Result<Unit> = runCatching {
         val restUrl = supabaseRestUrl()
+        val patchUrl = "$restUrl/license_keys?key=eq.$key"
+        val body = """{"status":"revoked"}"""
         val response = httpRequestRaw(
             method = "PATCH",
-            url = "$restUrl/license_keys?key=eq.$key",
-            headers = supabaseHeaders(),
-            body = """{"status":"revoked"}""",
+            url = patchUrl,
+            headers = supabaseHeaders(method = "PATCH", url = patchUrl, body = body),
+            body = body,
         )
         checkResponseOrThrow(response, "Revoke License")
+    }
+
+    suspend fun adminUnrevokeLicense(adminPassword: String = "", key: String): Result<Unit> = runCatching {
+        val restUrl = supabaseRestUrl()
+        val patchUrl = "$restUrl/license_keys?key=eq.$key"
+        val body = """{"status":"active"}"""
+        val response = httpRequestRaw(
+            method = "PATCH",
+            url = patchUrl,
+            headers = supabaseHeaders(method = "PATCH", url = patchUrl, body = body),
+            body = body,
+        )
+        checkResponseOrThrow(response, "Unrevoke License")
     }
 
     suspend fun adminExtendLicense(adminPassword: String = "", key: String, days: Int = 30): Result<LicenseInfo> = runCatching {

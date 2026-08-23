@@ -353,6 +353,17 @@ fun AdminLicenseScreen(
                                 )
                             }
                         },
+                        onUnrevokeKey = { key ->
+                            scope.launch {
+                                LicenseRepository.adminUnrevokeLicense(adminPassword, key).fold(
+                                    onSuccess = {
+                                        actionToast = "Activated $key"
+                                        refreshList()
+                                    },
+                                    onFailure = { err -> actionToast = "Error: ${err.message}" },
+                                )
+                            }
+                        },
                         onDeleteKey = { key ->
                             licenseToDelete = key
                         },
@@ -517,6 +528,7 @@ private fun LicensesTabContent(
     onCopyKey: (String) -> Unit,
     onExtendKey: (String) -> Unit,
     onRevokeKey: (String) -> Unit,
+    onUnrevokeKey: (String) -> Unit,
     onDeleteKey: (String) -> Unit,
 ) {
     LazyColumn(
@@ -806,6 +818,7 @@ private fun LicensesTabContent(
                     onCopy = { onCopyKey(lic.key) },
                     onExtend = { onExtendKey(lic.key) },
                     onRevoke = { onRevokeKey(lic.key) },
+                    onUnrevoke = { onUnrevokeKey(lic.key) },
                     onDelete = { onDeleteKey(lic.key) },
                 )
             }
@@ -1081,6 +1094,7 @@ private fun LicenseCardItem(
     onCopy: () -> Unit,
     onExtend: () -> Unit,
     onRevoke: () -> Unit,
+    onUnrevoke: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val isRevoked = license.status == "revoked"
@@ -1197,6 +1211,15 @@ private fun LicenseCardItem(
                         modifier = Modifier.height(32.dp),
                     ) {
                         Text("Revoke", fontSize = 11.sp)
+                    }
+                } else {
+                    Button(
+                        onClick = onUnrevoke,
+                        shape = RoundedCornerShape(6.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0x2200E699), contentColor = Color(0xFF00E699)),
+                        modifier = Modifier.height(32.dp),
+                    ) {
+                        Text("Activate", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
