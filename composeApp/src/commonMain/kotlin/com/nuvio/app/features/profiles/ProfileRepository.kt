@@ -89,6 +89,10 @@ object ProfileRepository {
 
     fun loadCachedProfiles(): Boolean {
         val stored = decodeStoredPayload() ?: return false
+        val currentUserId = getCurrentUserId()
+        if (stored.userId != currentUserId && stored.userId != "license_user" && stored.userId != "default_user" && stored.userId.isNotBlank()) {
+            return false
+        }
         loadedCacheForUserId = stored.userId
         applyStoredPayload(stored)
         ThemeSettingsRepository.onProfileChanged()
@@ -108,7 +112,7 @@ object ProfileRepository {
 
         val stored = decodeStoredPayload()
         loadedCacheForUserId = userId
-        if (stored != null && (stored.userId == userId || stored.userId == "license_user" || stored.userId == "default_user" || stored.userId.isBlank() || stored.profiles.isNotEmpty())) {
+        if (stored != null && (stored.userId == userId || stored.userId == "license_user" || stored.userId == "default_user" || stored.userId.isBlank())) {
             applyStoredPayload(stored.copy(userId = userId))
             persist()
             return

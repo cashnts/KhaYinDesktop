@@ -6,6 +6,7 @@ import com.nuvio.app.core.auth.AuthStorage
 import com.nuvio.app.core.network.ServerConfigurationRepository
 import com.nuvio.app.core.network.SupabaseConfig
 import com.nuvio.app.core.network.SupabaseProvider
+import com.nuvio.app.core.storage.LocalAccountDataCleaner
 import com.nuvio.app.features.addons.RawHttpResponse
 import com.nuvio.app.features.addons.httpRequestRaw
 import com.nuvio.app.features.profiles.ProfileRepository
@@ -297,6 +298,11 @@ object LicenseRepository {
                 )
             }
 
+            // If activating a different license key than last known, wipe previous account's local cache
+            if (!lastKnownKey.isNullOrBlank() && !lastKnownKey.equals(info.key, ignoreCase = true)) {
+                LocalAccountDataCleaner.wipe()
+            }
+
             saveSecureLicensePayload(info)
             LicenseStorage.saveLastKnownKey(info.key)
             syncSupabaseIdentity(info.key)
@@ -478,6 +484,7 @@ object LicenseRepository {
         heartbeatJob = null
         LicenseStorage.clearLicensePayload()
         AuthStorage.clearAnonymousUserId()
+        LocalAccountDataCleaner.wipe()
         _state.value = LicenseState.Unlicensed
     }
 
