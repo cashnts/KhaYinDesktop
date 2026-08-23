@@ -1,12 +1,18 @@
 package com.nuvio.app.features.settings
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -19,11 +25,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
@@ -52,7 +61,9 @@ import nuvio.composeapp.generated.resources.settings_account_status_anonymous
 import nuvio.composeapp.generated.resources.settings_account_status_signed_in
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.material3.Icon
@@ -150,7 +161,7 @@ private fun SubscriptionSettingsBody(
                 )
                 Spacer(modifier = Modifier.height(10.dp))
 
-                val tierText = if (licenseInfo.isPlus) "Plus (MMSUB)" else "Standard"
+                val tierText = if (licenseInfo.isPlus) "Plus" else "Standard"
                 AccountInfoRow(
                     label = "Package / Tier",
                     value = tierText,
@@ -225,6 +236,11 @@ private fun SubscriptionSettingsBody(
                 )
             }
         }
+
+        SubscriptionPlansCard(
+            isPlusActive = licenseInfo?.isPlus == true,
+            isTablet = isTablet,
+        )
 
         NuvioPrimaryButton(
             text = "Log Out",
@@ -433,5 +449,192 @@ private fun AccountInfoRow(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+@Composable
+private fun SubscriptionPlansCard(
+    isPlusActive: Boolean,
+    isTablet: Boolean,
+) {
+    NuvioSurfaceCard {
+        Text(
+            text = "Subscription Tiers",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Features and privileges available across subscription plans",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (isTablet) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    PlanTierCard(
+                        title = "STANDARD",
+                        isCurrentPlan = !isPlusActive,
+                        accentColor = Color(0xFF9E9EA7),
+                        features = listOf(
+                            "Multi-language subtitle" to true,
+                            "On demand streaming" to true,
+                            "4K HDR Movies" to true,
+                            "Fast Customer Support" to true,
+                            "Up to 3 devices" to true,
+                            "Download Speed Limit" to false,
+                        ),
+                    )
+                }
+                Box(modifier = Modifier.weight(1f)) {
+                    PlanTierCard(
+                        title = "PLUS",
+                        isCurrentPlan = isPlusActive,
+                        accentColor = MaterialTheme.colorScheme.primary,
+                        highlightBadge = "RECOMMENDED",
+                        features = listOf(
+                            "Everything from standard" to true,
+                            "On-demand myanmar subtitle" to true,
+                            "24/7 Customer Support" to true,
+                            "Up to 6 devices" to true,
+                        ),
+                    )
+                }
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                PlanTierCard(
+                    title = "STANDARD",
+                    isCurrentPlan = !isPlusActive,
+                    accentColor = Color(0xFF9E9EA7),
+                    features = listOf(
+                        "Multi-language subtitle" to true,
+                        "On demand streaming" to true,
+                        "4K HDR Movies" to true,
+                        "Fast Customer Support" to true,
+                        "Up to 3 devices" to true,
+                        "Download Speed Limit" to false,
+                    ),
+                )
+                PlanTierCard(
+                    title = "PLUS",
+                    isCurrentPlan = isPlusActive,
+                    accentColor = MaterialTheme.colorScheme.primary,
+                    highlightBadge = "RECOMMENDED",
+                    features = listOf(
+                        "Everything from standard" to true,
+                        "On-demand myanmar subtitle" to true,
+                        "24/7 Customer Support" to true,
+                        "Up to 6 devices" to true,
+                    ),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlanTierCard(
+    title: String,
+    isCurrentPlan: Boolean,
+    accentColor: Color,
+    highlightBadge: String? = null,
+    features: List<Pair<String, Boolean>>,
+) {
+    val borderColor = if (isCurrentPlan) accentColor else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+    val bgColor = if (isCurrentPlan) accentColor.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(bgColor)
+            .border(
+                width = if (isCurrentPlan) 1.5.dp else 1.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(14.dp),
+            )
+            .padding(16.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = if (isCurrentPlan) accentColor else MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (highlightBadge != null && !isCurrentPlan) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(accentColor.copy(alpha = 0.15f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            text = highlightBadge,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = accentColor,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                        )
+                    }
+                }
+                if (isCurrentPlan) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(accentColor.copy(alpha = 0.2f))
+                            .border(1.dp, accentColor, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                    ) {
+                        Text(
+                            text = "ACTIVE PLAN",
+                            style = TextStyle(
+                                color = accentColor,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            features.forEach { (feature, isIncluded) ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = if (isIncluded) Icons.Rounded.CheckCircle else Icons.Rounded.Info,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = if (isIncluded) accentColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    )
+                    Text(
+                        text = feature,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (isIncluded) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                    )
+                }
+            }
+        }
     }
 }

@@ -552,8 +552,8 @@ private fun LicensesTabContent(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     listOf(
-                        "standard" to ("Standard" to "Normal streaming (No MMSUB)"),
-                        "plus" to ("Plus (MMSUB)" to "Standard + Burmese Subtitles"),
+                        "standard" to ("Standard" to "Normal streaming (Up to 3 devices)"),
+                        "plus" to ("Plus" to "Standard + Myanmar Subtitles (Up to 6 devices)"),
                     ).forEach { (pkgKey, info) ->
                         val (pkgTitle, pkgSubtitle) = info
                         val selected = tier.equals(pkgKey, ignoreCase = true)
@@ -1064,7 +1064,7 @@ private fun UserDevicesTabContent(licenses: List<LicenseInfo>) {
                     Text(text = lic.customerName ?: "User Client", style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold))
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "Key: ${lic.key} • Tier: ${if (lic.isPlus) "PLUS (MMSUB)" else "STANDARD"}",
+                        text = "Key: ${lic.key} • Tier: ${if (lic.isPlus) "PLUS" else "STANDARD"}",
                         style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp, fontFamily = FontFamily.Monospace),
                     )
                 }
@@ -1161,7 +1161,7 @@ private fun LicenseCardItem(
                             .padding(horizontal = 6.dp, vertical = 2.dp),
                     ) {
                         Text(
-                            text = if (isPlus) "PLUS (MMSUB)" else "STANDARD",
+                            text = if (isPlus) "PLUS" else "STANDARD",
                             style = TextStyle(
                                 color = if (isPlus) Color(0xFF00E699) else Color(0xFFCCCEDD),
                                 fontSize = 10.sp,
@@ -1174,7 +1174,7 @@ private fun LicenseCardItem(
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = "${license.customerName ?: "Member"} • ${if (isPlus) "Plus (MMSUB)" else "Standard"} • ${if (license.expiresAt != null) "Expires " + license.expiresAt.take(10) else "Lifetime"} • ${license.activeDevices}/${license.maxDevices} device(s)",
+                    text = "${license.customerName ?: "Member"} • ${if (isPlus) "Plus" else "Standard"} • ${if (license.expiresAt != null) "Expires " + license.expiresAt.take(10) else "Lifetime"} • ${license.activeDevices}/${license.maxDevices} device(s)",
                     style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF888899), fontSize = 12.sp),
                 )
             }
