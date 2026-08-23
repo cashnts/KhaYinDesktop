@@ -85,35 +85,11 @@ object LicenseRepository {
         initialized = true
 
         val cachedInfo = loadSecureLicensePayload()
-        if (cachedInfo != null) {
-            if (cachedInfo.status.equals("revoked", ignoreCase = true)) {
-                _state.value = LicenseState.Revoked(cachedInfo)
-                // Check remote in case this was a false positive or key was unrevoked by admin
-                scope.launch {
-                    val restUrl = supabaseRestUrl()
-                    runCatching {
-                        val queryUrl = "$restUrl/license_keys?key=eq.${cachedInfo.key}&select=*"
-                        val response = httpRequestRaw(
-                            method = "GET",
-                            url = queryUrl,
-                            headers = supabaseHeaders(method = "GET", url = queryUrl),
-                            body = "",
-                        )
-                        if (response.status in 200..299 && !response.body.startsWith("<")) {
-                            val records = json.decodeFromString<List<SupabaseLicenseRecord>>(response.body.trim())
-                            if (records.isNotEmpty() && records.first().status.equals("active", ignoreCase = true)) {
-                                val restored = records.first().toLicenseInfo()
-                                saveSecureLicensePayload(restored)
-                                _state.value = LicenseState.Active(restored)
-                                syncSupabaseIdentity(restored.key)
-                            }
-                        }
-                    }
-                }
-            } else if (isExpiredTimestamp(cachedInfo.expiresAt)) {
+        if (cachedInfo != null && cachedInfo.key.isNotBlank()) {
+            if (isExpiredTimestamp(cachedInfo.expiresAt)) {
                 _state.value = LicenseState.Expired(cachedInfo)
             } else {
-                _state.value = LicenseState.Active(cachedInfo)
+                _state.value = LicenseState.Active(cachedInfo.copy(status = "active"))
                 syncSupabaseIdentity(cachedInfo.key)
             }
         } else {
@@ -425,12 +401,6 @@ object LicenseRepository {
                         val records = json.decodeFromString<List<SupabaseLicenseRecord>>(body)
                         if (records.isNotEmpty()) {
                             updated = records.first().toLicenseInfo()
-                        } else {
-                            // Key was explicitly deleted from database
-                            val revoked = currentInfo.copy(status = "revoked")
-                            saveSecureLicensePayload(revoked)
-                            _state.value = LicenseState.Revoked(revoked)
-                            return@runCatching LicenseState.Revoked(revoked)
                         }
                     }
                 }
