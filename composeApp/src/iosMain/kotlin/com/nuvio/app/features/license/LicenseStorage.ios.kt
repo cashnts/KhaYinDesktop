@@ -4,6 +4,7 @@ import platform.Foundation.NSUserDefaults
 
 actual object LicenseStorage {
     private const val payloadKey = "license_payload"
+    private const val lastKnownKey = "last_known_license_key"
     private const val deviceIdKey = "device_unique_id"
     private const val dismissedBroadcastKey = "dismissed_broadcast_timestamp"
 
@@ -16,6 +17,13 @@ actual object LicenseStorage {
 
     actual fun clearLicensePayload() {
         NSUserDefaults.standardUserDefaults.removeObjectForKey(payloadKey)
+    }
+
+    actual fun loadLastKnownKey(): String? =
+        NSUserDefaults.standardUserDefaults.stringForKey(lastKnownKey)
+
+    actual fun saveLastKnownKey(key: String) {
+        NSUserDefaults.standardUserDefaults.setObject(key, forKey = lastKnownKey)
     }
 
     actual fun loadDeviceId(): String? =

@@ -232,31 +232,38 @@ object LicenseRepository {
             }
 
             // Check if device limit reached for new activations
+            val lastKnownKey = LicenseStorage.loadLastKnownKey()
             val currentCachedKey = LicenseStorage.loadLicensePayload()?.let {
                 runCatching { json.decodeFromString<LicenseInfo>(it).key }.getOrNull()
             }
-            val isReactivationOnSameDevice = currentCachedKey.equals(info.key, ignoreCase = true)
+            val isReactivationOnSameDevice = currentCachedKey.equals(info.key, ignoreCase = true) ||
+                lastKnownKey.equals(info.key, ignoreCase = true)
 
-            if (!isReactivationOnSameDevice && info.activeDevices >= info.maxDevices) {
+            if (!isReactivationOnSameDevice && info.activeDevices >= info.maxDevices && info.activeDevices > 0) {
                 val err = "Maximum active devices limit reached (${info.activeDevices}/${info.maxDevices}). Please disconnect an existing device or upgrade your tier."
                 _error.value = err
                 throw IllegalStateException(err)
             }
 
-            // If new device, increment active device count on Supabase up to maxDevices (for table query fallback)
-            if (!isReactivationOnSameDevice && info.nonce == null) {
-                val newActiveCount = minOf(info.activeDevices + 1, info.maxDevices)
-                runCatching {
-                    httpRequestRaw(
-                        method = "PATCH",
-                        url = "$restUrl/license_keys?key=eq.$key",
-                        headers = supabaseHeaders(),
-                        body = json.encodeToString(mapOf("active_devices" to newActiveCount)),
-                    )
-                }
+            // Sync active device count on Supabase
+            val newActiveCount = if (isReactivationOnSameDevice) {
+                maxOf(1, info.activeDevices)
+            } else {
+                minOf(info.activeDevices + 1, info.maxDevices)
+            }
+            runCatching {
+                val patchUrl = "$restUrl/license_keys?key=eq.$key"
+                val body = json.encodeToString(mapOf("active_devices" to newActiveCount))
+                httpRequestRaw(
+                    method = "PATCH",
+                    url = patchUrl,
+                    headers = supabaseHeaders(method = "PATCH", url = patchUrl, body = body),
+                    body = body,
+                )
             }
 
             LicenseStorage.saveLicensePayload(json.encodeToString(info))
+            LicenseStorage.saveLastKnownKey(info.key)
             syncSupabaseIdentity(info.key)
             _state.value = LicenseState.Active(info)
             startHeartbeat()
@@ -385,16 +392,37 @@ object LicenseRepository {
 
     fun deactivate() {
         val currentInfo = state.value.activeInfo
+        val devId = getOrCreateDeviceId()
         if (currentInfo != null) {
             val restUrl = supabaseRestUrl()
-            val newCount = maxOf(0, currentInfo.activeDevices - 1)
+            LicenseStorage.saveLastKnownKey(currentInfo.key)
             scope.launch {
+                // 1. Call deactivate_license RPC if available
                 runCatching {
+                    val rpcPayload = json.encodeToString(
+                        mapOf(
+                            "p_key" to currentInfo.key,
+                            "p_device_id" to devId,
+                        )
+                    )
+                    val rpcUrl = "$restUrl/rpc/deactivate_license"
+                    httpRequestRaw(
+                        method = "POST",
+                        url = rpcUrl,
+                        headers = supabaseHeaders(method = "POST", url = rpcUrl, body = rpcPayload),
+                        body = rpcPayload,
+                    )
+                }
+                // 2. Decrement active_devices in license_keys table
+                val newCount = maxOf(0, currentInfo.activeDevices - 1)
+                runCatching {
+                    val patchUrl = "$restUrl/license_keys?key=eq.${currentInfo.key}"
+                    val body = json.encodeToString(mapOf("active_devices" to newCount))
                     httpRequestRaw(
                         method = "PATCH",
-                        url = "$restUrl/license_keys?key=eq.${currentInfo.key}",
-                        headers = supabaseHeaders(),
-                        body = json.encodeToString(mapOf("active_devices" to newCount)),
+                        url = patchUrl,
+                        headers = supabaseHeaders(method = "PATCH", url = patchUrl, body = body),
+                        body = body,
                     )
                 }
             }
@@ -572,5 +600,26 @@ object LicenseRepository {
             body = body,
         )
         checkResponseOrThrow(response, "Reset Devices")
+    }
+
+    suspend fun adminDeleteLicense(adminPassword: String = "", key: String): Result<Unit> = runCatching {
+        val restUrl = supabaseRestUrl()
+        val deleteUrl = "$restUrl/license_keys?key=eq.$key"
+        val response = httpRequestRaw(
+            method = "DELETE",
+            url = deleteUrl,
+            headers = supabaseHeaders(method = "DELETE", url = deleteUrl, body = ""),
+            body = "",
+        )
+        checkResponseOrThrow(response, "Delete License")
+        val deleteAnalyticsUrl = "$restUrl/license_analytics?license_key=eq.$key"
+        runCatching {
+            httpRequestRaw(
+                method = "DELETE",
+                url = deleteAnalyticsUrl,
+                headers = supabaseHeaders(method = "DELETE", url = deleteAnalyticsUrl, body = ""),
+                body = "",
+            )
+        }
     }
 }

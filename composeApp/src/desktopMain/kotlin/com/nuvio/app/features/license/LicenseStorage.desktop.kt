@@ -5,6 +5,7 @@ import com.nuvio.app.core.storage.DesktopStorage
 internal actual object LicenseStorage {
     private val store = DesktopStorage.store("nuvio_license")
     private const val payloadKey = "license_payload"
+    private const val lastKnownKey = "last_known_license_key"
     private const val deviceIdKey = "device_unique_id"
     private const val dismissedBroadcastKey = "dismissed_broadcast_timestamp"
 
@@ -17,6 +18,13 @@ internal actual object LicenseStorage {
 
     actual fun clearLicensePayload() {
         store.remove(payloadKey)
+    }
+
+    actual fun loadLastKnownKey(): String? =
+        store.getString(lastKnownKey)
+
+    actual fun saveLastKnownKey(key: String) {
+        store.putString(lastKnownKey, key)
     }
 
     actual fun loadDeviceId(): String? =

@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 actual object LicenseStorage {
     private const val preferencesName = "nuvio_license_cache"
     private const val payloadKey = "license_payload"
+    private const val lastKnownKey = "last_known_license_key"
     private const val deviceIdKey = "device_unique_id"
     private const val dismissedBroadcastKey = "dismissed_broadcast_timestamp"
 
@@ -24,6 +25,13 @@ actual object LicenseStorage {
 
     actual fun clearLicensePayload() {
         preferences?.edit()?.remove(payloadKey)?.apply()
+    }
+
+    actual fun loadLastKnownKey(): String? =
+        preferences?.getString(lastKnownKey, null)
+
+    actual fun saveLastKnownKey(key: String) {
+        preferences?.edit()?.putString(lastKnownKey, key)?.apply()
     }
 
     actual fun loadDeviceId(): String? =

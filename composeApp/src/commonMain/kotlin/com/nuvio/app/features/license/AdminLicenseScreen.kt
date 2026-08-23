@@ -29,21 +29,28 @@ import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Campaign
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.FilterList
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Smartphone
+import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.SystemUpdate
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -105,6 +112,7 @@ fun AdminLicenseScreen(
     var isGenerating by remember { mutableStateOf(false) }
     var newlyCreatedLicense by remember { mutableStateOf<LicenseInfo?>(null) }
     var actionToast by remember { mutableStateOf<String?>(null) }
+    var licenseToDelete by remember { mutableStateOf<String?>(null) }
 
     // Mass-Addon Push Form State
     var addonManifestUrls by remember {
@@ -343,16 +351,8 @@ fun AdminLicenseScreen(
                                 )
                             }
                         },
-                        onResetDevices = { key ->
-                            scope.launch {
-                                LicenseRepository.adminResetDevices(adminPassword, key).fold(
-                                    onSuccess = {
-                                        actionToast = "Active devices reset for $key"
-                                        refreshList()
-                                    },
-                                    onFailure = { err -> actionToast = "Error: ${err.message}" },
-                                )
-                            }
+                        onDeleteKey = { key ->
+                            licenseToDelete = key
                         },
                     )
                 }
@@ -436,6 +436,7 @@ fun AdminLicenseScreen(
                 AdminHubTab.Analytics -> {
                     AnalyticsTabContent(
                         analytics = analyticsRecords,
+                        licenses = licenses,
                         isLoading = isLoadingAnalytics,
                         onRefresh = { loadAnalytics() },
                     )
@@ -445,6 +446,52 @@ fun AdminLicenseScreen(
                 }
             }
         }
+    }
+
+    if (licenseToDelete != null) {
+        val targetKey = licenseToDelete!!
+        AlertDialog(
+            onDismissRequest = { licenseToDelete = null },
+            title = {
+                Text(
+                    text = "Delete License Key",
+                    style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp),
+                )
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to permanently delete license key '$targetKey'? All associated client sessions and data will be removed.",
+                    style = TextStyle(color = Color(0xFFCCCEDD), fontSize = 14.sp),
+                )
+            },
+            containerColor = Color(0xFF1C1C26),
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val key = targetKey
+                        licenseToDelete = null
+                        scope.launch {
+                            LicenseRepository.adminDeleteLicense(adminPassword, key).fold(
+                                onSuccess = {
+                                    actionToast = "Permanently deleted $key"
+                                    refreshList()
+                                },
+                                onFailure = { err -> actionToast = "Error: ${err.message}" },
+                            )
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5252), contentColor = Color.White),
+                    shape = RoundedCornerShape(8.dp),
+                ) {
+                    Text("Delete Permanently")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { licenseToDelete = null }) {
+                    Text("Cancel", color = Color(0xFF888899))
+                }
+            },
+        )
     }
 }
 
@@ -466,7 +513,7 @@ private fun LicensesTabContent(
     onCopyKey: (String) -> Unit,
     onExtendKey: (String) -> Unit,
     onRevokeKey: (String) -> Unit,
-    onResetDevices: (String) -> Unit,
+    onDeleteKey: (String) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier
@@ -720,7 +767,7 @@ private fun LicensesTabContent(
                     onCopy = { onCopyKey(lic.key) },
                     onExtend = { onExtendKey(lic.key) },
                     onRevoke = { onRevokeKey(lic.key) },
-                    onResetDevices = { onResetDevices(lic.key) },
+                    onDelete = { onDeleteKey(lic.key) },
                 )
             }
         }
@@ -995,7 +1042,7 @@ private fun LicenseCardItem(
     onCopy: () -> Unit,
     onExtend: () -> Unit,
     onRevoke: () -> Unit,
-    onResetDevices: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     val isRevoked = license.status == "revoked"
     val isExpired = license.status == "expired"
@@ -1013,7 +1060,7 @@ private fun LicenseCardItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = license.key,
@@ -1065,23 +1112,14 @@ private fun LicenseCardItem(
             }
 
             // Quick Actions
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Button(
                     onClick = onCopy,
                     shape = RoundedCornerShape(6.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222230), contentColor = Color.White),
                     modifier = Modifier.height(32.dp),
                 ) {
-                    Icon(imageVector = Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
-                }
-
-                Button(
-                    onClick = onResetDevices,
-                    shape = RoundedCornerShape(6.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222230), contentColor = Color(0xFF88AAFF)),
-                    modifier = Modifier.height(32.dp),
-                ) {
-                    Text("Reset Dev", fontSize = 11.sp)
+                    Icon(imageVector = Icons.Rounded.ContentCopy, contentDescription = "Copy", modifier = Modifier.size(14.dp))
                 }
 
                 Button(
@@ -1103,6 +1141,17 @@ private fun LicenseCardItem(
                         Text("Revoke", fontSize = 11.sp)
                     }
                 }
+
+                Button(
+                    onClick = onDelete,
+                    shape = RoundedCornerShape(6.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0x22FF5252), contentColor = Color(0xFFFF5252)),
+                    modifier = Modifier.height(32.dp),
+                ) {
+                    Icon(imageVector = Icons.Rounded.DeleteOutline, contentDescription = "Delete", modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Delete", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
     }
@@ -1111,13 +1160,50 @@ private fun LicenseCardItem(
 @Composable
 private fun AnalyticsTabContent(
     analytics: List<LicenseAnalyticsRecord>,
+    licenses: List<LicenseInfo>,
     isLoading: Boolean,
     onRefresh: () -> Unit,
 ) {
+    var searchFilter by remember { mutableStateOf("") }
+    var selectedEventFilter by remember { mutableStateOf<String?>("ALL") }
+
     val totalHeartbeats = analytics.size
     val uniqueKeys = analytics.mapNotNull { it.license_key }.distinct().size
     val uniqueDevices = analytics.mapNotNull { it.device_id }.distinct().size
-    val activePlatforms = analytics.mapNotNull { it.platform }.distinct()
+
+    // License metrics
+    val totalLicenses = licenses.size
+    val activeLicenses = licenses.count { it.status.equals("active", ignoreCase = true) && !isDateExpired(it.expiresAt) }
+    val expiredLicenses = licenses.count { isDateExpired(it.expiresAt) && !it.status.equals("revoked", ignoreCase = true) }
+    val revokedLicenses = licenses.count { it.status.equals("revoked", ignoreCase = true) }
+
+    val totalActiveDevices = licenses.sumOf { it.activeDevices }
+    val totalMaxDevices = licenses.sumOf { it.maxDevices }
+    val utilizationFraction = if (totalMaxDevices > 0) (totalActiveDevices.toFloat() / totalMaxDevices.toFloat()).coerceIn(0f, 1f) else 0f
+    val utilizationPct = (utilizationFraction * 100).toInt()
+
+    // Platform Breakdown
+    val platforms = remember(analytics) {
+        val groups = analytics.groupBy { (it.platform ?: "Desktop Client").trim() }
+        groups.map { (name, list) ->
+            val count = list.size
+            val pct = if (totalHeartbeats > 0) (count.toFloat() / totalHeartbeats.toFloat()) else 0f
+            Triple(name, count, pct)
+        }.sortedByDescending { it.second }
+    }
+
+    // Filtered Telemetry Records
+    val filteredAnalytics = remember(analytics, searchFilter, selectedEventFilter) {
+        analytics.filter { record ->
+            val matchesSearch = searchFilter.isBlank() ||
+                (record.license_key?.contains(searchFilter, ignoreCase = true) == true) ||
+                (record.device_id?.contains(searchFilter, ignoreCase = true) == true) ||
+                (record.platform?.contains(searchFilter, ignoreCase = true) == true)
+            val matchesEvent = selectedEventFilter == "ALL" || selectedEventFilter == null ||
+                record.event.equals(selectedEventFilter, ignoreCase = true)
+            matchesSearch && matchesEvent
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -1125,6 +1211,7 @@ private fun AnalyticsTabContent(
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        // Header
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1133,11 +1220,11 @@ private fun AnalyticsTabContent(
             ) {
                 Column {
                     Text(
-                        text = "LIVE TELEMETRY & ANALYTICS",
+                        text = "LIVE TELEMETRY & SYSTEM ANALYTICS",
                         style = MaterialTheme.typography.titleMedium.copy(color = Color.White, fontWeight = FontWeight.Bold),
                     )
                     Text(
-                        text = "Real-time heartbeat logs, connected devices, and license activity streams.",
+                        text = "Real-time client device connections, license slot allocations, and hardware fleet telemetry.",
                         style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF888899)),
                     )
                 }
@@ -1155,43 +1242,218 @@ private fun AnalyticsTabContent(
             }
         }
 
-        // Summary Metric Cards
+        // Top Summary Metric Cards (4 cards in grid)
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 AnalyticsMetricCard(
-                    title = "Telemetry Events",
-                    value = "$totalHeartbeats",
-                    subtitle = "Heartbeat & pings recorded",
+                    title = "Licenses Issued",
+                    value = "$totalLicenses",
+                    subtitle = "$activeLicenses Active • $expiredLicenses Expired • $revokedLicenses Revoked",
                     accentColor = Color(0xFF00E699),
                     modifier = Modifier.weight(1f),
                 )
                 AnalyticsMetricCard(
-                    title = "Active Keys",
-                    value = "$uniqueKeys",
-                    subtitle = "Unique licenses seen",
-                    accentColor = Color(0xFF3399FF),
+                    title = "Connected Device Slots",
+                    value = "$totalActiveDevices / $totalMaxDevices",
+                    subtitle = "$utilizationPct% capacity utilized across keys",
+                    accentColor = if (utilizationPct > 85) Color(0xFFFF9900) else Color(0xFF3399FF),
                     modifier = Modifier.weight(1f),
                 )
                 AnalyticsMetricCard(
-                    title = "Active Devices",
+                    title = "Hardware Fleet",
                     value = "$uniqueDevices",
-                    subtitle = "Distinct hardware IDs",
-                    accentColor = Color(0xFFFF9900),
+                    subtitle = "Distinct unique physical devices seen",
+                    accentColor = Color(0xFFAA77FF),
+                    modifier = Modifier.weight(1f),
+                )
+                AnalyticsMetricCard(
+                    title = "Telemetry Events",
+                    value = "$totalHeartbeats",
+                    subtitle = "Recorded heartbeats & active pings",
+                    accentColor = Color(0xFFFFCC00),
                     modifier = Modifier.weight(1f),
                 )
             }
         }
 
+        // Device Slot Capacity & Platform Breakdown Row
         item {
-            Text(
-                text = "RECENT TELEMETRY STREAM (${analytics.size} Records)",
-                style = MaterialTheme.typography.labelMedium.copy(color = Color.White, fontWeight = FontWeight.Bold),
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                // Device Capacity Utilization Bar
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF16161E))
+                        .border(1.dp, Color(0xFF262633), RoundedCornerShape(12.dp))
+                        .padding(16.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "DEVICE SLOT CAPACITY",
+                            style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFF00E699), fontWeight = FontWeight.Bold),
+                        )
+                        Text(
+                            text = "$totalActiveDevices of $totalMaxDevices slots",
+                            style = TextStyle(color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    LinearProgressIndicator(
+                        progress = { utilizationFraction },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        color = Color(0xFF00E699),
+                        trackColor = Color(0xFF222230),
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Real-time active client instances currently connected to license keys.",
+                        style = TextStyle(color = Color(0xFF888899), fontSize = 11.sp),
+                    )
+                }
+
+                // Platform Distribution Card
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF16161E))
+                        .border(1.dp, Color(0xFF262633), RoundedCornerShape(12.dp))
+                        .padding(16.dp),
+                ) {
+                    Text(
+                        text = "PLATFORM DISTRIBUTION",
+                        style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFF3399FF), fontWeight = FontWeight.Bold),
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    if (platforms.isEmpty()) {
+                        Text(
+                            text = "No platform telemetry recorded yet.",
+                            style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp),
+                        )
+                    } else {
+                        platforms.take(3).forEach { (name, count, pct) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = if (name.contains("Desktop", ignoreCase = true)) Icons.Rounded.Computer else Icons.Rounded.Smartphone,
+                                        contentDescription = null,
+                                        tint = Color(0xFF88AAFF),
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = name,
+                                        style = TextStyle(color = Color.White, fontSize = 12.sp),
+                                    )
+                                }
+                                Text(
+                                    text = "$count pings (${(pct * 100).toInt()}%)",
+                                    style = TextStyle(color = Color(0xFF888899), fontSize = 11.sp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
 
+        // Live Telemetry Logs Filter Bar
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF16161E))
+                    .border(1.dp, Color(0xFF262633), RoundedCornerShape(12.dp))
+                    .padding(16.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "LIVE TELEMETRY STREAM (${filteredAnalytics.size} of $totalHeartbeats Records)",
+                        style = MaterialTheme.typography.labelMedium.copy(color = Color.White, fontWeight = FontWeight.Bold),
+                    )
+
+                    // Event Filter Chips
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("ALL", "heartbeat", "activation", "login").forEach { ev ->
+                            val isSelected = (selectedEventFilter == ev) || (ev == "ALL" && (selectedEventFilter == null || selectedEventFilter == "ALL"))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isSelected) Color(0xFF00E699) else Color(0xFF222230))
+                                    .clickable { selectedEventFilter = if (ev == "ALL") null else ev }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                            ) {
+                                Text(
+                                    text = ev.uppercase(),
+                                    style = TextStyle(
+                                        color = if (isSelected) Color.Black else Color(0xFFCCCEDD),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Search Filter Input
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF0F0F16))
+                        .border(1.dp, Color(0xFF323244), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(imageVector = Icons.Rounded.Search, contentDescription = "Search", tint = Color(0xFF888899), modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    BasicTextField(
+                        value = searchFilter,
+                        onValueChange = { searchFilter = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
+                        cursorBrush = SolidColor(Color(0xFF00E699)),
+                        singleLine = true,
+                        decorationBox = { innerTextField ->
+                            if (searchFilter.isEmpty()) {
+                                Text("Filter by license key, device ID, or platform...", style = TextStyle(color = Color(0xFF666677), fontSize = 13.sp))
+                            }
+                            innerTextField()
+                        },
+                    )
+                }
+            }
+        }
+
+        // Stream Items
         if (isLoading && analytics.isEmpty()) {
             item {
                 Box(
@@ -1203,7 +1465,7 @@ private fun AnalyticsTabContent(
                     NuvioLoadingIndicator()
                 }
             }
-        } else if (analytics.isEmpty()) {
+        } else if (filteredAnalytics.isEmpty()) {
             item {
                 Box(
                     modifier = Modifier
@@ -1214,13 +1476,13 @@ private fun AnalyticsTabContent(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "No analytics telemetry records recorded yet. User client heartbeat logs will appear here.",
+                        text = if (searchFilter.isNotBlank()) "No telemetry matching '$searchFilter'" else "No analytics telemetry records recorded yet. User client heartbeat logs will appear here.",
                         style = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFF888899)),
                     )
                 }
             }
         } else {
-            items(analytics) { record ->
+            items(filteredAnalytics) { record ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1233,15 +1495,21 @@ private fun AnalyticsTabContent(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            val eventName = record.event?.uppercase() ?: "HEARTBEAT"
+                            val eventColor = when (eventName) {
+                                "ACTIVATION", "LOGIN" -> Color(0xFF3399FF)
+                                "REVOKED", "ERROR" -> Color(0xFFFF5252)
+                                else -> Color(0xFF00E699)
+                            }
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(4.dp))
-                                    .background(Color(0x2200E699))
+                                    .background(eventColor.copy(alpha = 0.15f))
                                     .padding(horizontal = 6.dp, vertical = 2.dp),
                             ) {
                                 Text(
-                                    text = record.event?.uppercase() ?: "HEARTBEAT",
-                                    style = TextStyle(color = Color(0xFF00E699), fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                    text = eventName,
+                                    style = TextStyle(color = eventColor, fontSize = 10.sp, fontWeight = FontWeight.Bold),
                                 )
                             }
                             Spacer(modifier = Modifier.width(8.dp))
@@ -1252,7 +1520,7 @@ private fun AnalyticsTabContent(
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Device: ${record.device_id?.take(16) ?: "N/A"} • Platform: ${record.platform ?: "Client"} • Version: ${record.version ?: "1.1.20"}",
+                            text = "Hardware: ${record.device_id?.take(18) ?: "N/A"} • ${record.platform ?: "Client"} • v${record.version ?: "1.1.20"}",
                             style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp),
                         )
                     }
@@ -1265,6 +1533,12 @@ private fun AnalyticsTabContent(
             }
         }
     }
+}
+
+private fun isDateExpired(expiresAt: String?): Boolean {
+    if (expiresAt.isNullOrBlank()) return false
+    val today = com.nuvio.app.features.watchprogress.CurrentDateProvider.todayIsoDate()
+    return expiresAt.take(10) < today
 }
 
 @Composable
