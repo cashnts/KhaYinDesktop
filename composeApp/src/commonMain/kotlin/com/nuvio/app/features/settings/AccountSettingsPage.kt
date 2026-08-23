@@ -495,7 +495,7 @@ private fun SubscriptionPlansCard(
                         "4K HDR playback" to true,
                         "Standard customer support" to true,
                         "Up to 3 devices" to true,
-                        "Standard download speed" to false,
+                        "Up to 5 offline downloads" to true,
                     ),
                 )
                 PlanTierCard(
@@ -511,7 +511,7 @@ private fun SubscriptionPlansCard(
                         "Exclusive Myanmar (Burmese) subtitles" to true,
                         "Priority 24/7 customer support" to true,
                         "Up to 6 devices" to true,
-                        "Uncapped high-speed downloads" to true,
+                        "Unlimited offline downloads" to true,
                         "Early access to new features" to true,
                     ),
                 )
@@ -528,7 +528,7 @@ private fun SubscriptionPlansCard(
                         "4K HDR playback" to true,
                         "Standard customer support" to true,
                         "Up to 3 devices" to true,
-                        "Standard download speed" to false,
+                        "Up to 5 offline downloads" to true,
                     ),
                 )
                 PlanTierCard(
@@ -541,7 +541,7 @@ private fun SubscriptionPlansCard(
                         "Exclusive Myanmar (Burmese) subtitles" to true,
                         "Priority 24/7 customer support" to true,
                         "Up to 6 devices" to true,
-                        "Uncapped high-speed downloads" to true,
+                        "Unlimited offline downloads" to true,
                         "Early access to new features" to true,
                     ),
                 )

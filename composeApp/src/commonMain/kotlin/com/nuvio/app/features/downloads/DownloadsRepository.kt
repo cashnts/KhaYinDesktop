@@ -138,6 +138,14 @@ object DownloadsRepository {
         var replacedExisting = false
         val currentItems = _uiState.value.items.toMutableList()
         val existing = currentItems.firstOrNull { it.logicalContentKey == logicalKey }
+
+        val isPlus = com.nuvio.app.features.license.LicenseRepository.isPlusMember
+        val maxAllowedDownloads = if (isPlus) Int.MAX_VALUE else 5
+        val nonReplacedCount = if (existing != null) currentItems.size - 1 else currentItems.size
+        if (nonReplacedCount >= maxAllowedDownloads) {
+            return DownloadEnqueueResult.LimitReached
+        }
+
         if (existing != null) {
             replacedExisting = true
             activeHandles.remove(existing.id)?.cancel()
