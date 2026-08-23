@@ -63,6 +63,7 @@ import com.nuvio.app.features.license.LicenseInfo
 import com.nuvio.app.features.license.LicenseRepository
 import com.nuvio.app.features.license.LicenseState
 import com.nuvio.app.features.license.activeInfo
+import com.nuvio.app.features.license.isPlus
 
 internal fun LazyListScope.accountSettingsContent(
     isTablet: Boolean,
@@ -149,9 +150,10 @@ private fun SubscriptionSettingsBody(
                 )
                 Spacer(modifier = Modifier.height(10.dp))
 
+                val tierText = if (licenseInfo.isPlus) "Plus (MMSUB)" else "Standard"
                 AccountInfoRow(
-                    label = "Tier",
-                    value = (licenseInfo.tier ?: "Standard").replaceFirstChar { it.uppercase() },
+                    label = "Package / Tier",
+                    value = tierText,
                     valueColor = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(modifier = Modifier.height(10.dp))

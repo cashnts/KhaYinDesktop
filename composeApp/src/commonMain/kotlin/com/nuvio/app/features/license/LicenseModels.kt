@@ -155,3 +155,9 @@ data class AdminLicenseActionResponse(
     val license: LicenseInfo? = null,
     val error: String? = null,
 )
+
+val LicenseInfo.isPlus: Boolean
+    get() = tier.equals("plus", ignoreCase = true) ||
+        tier.equals("supporter_plus", ignoreCase = true) ||
+        tier.equals("premium", ignoreCase = true)
+

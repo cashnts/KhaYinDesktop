@@ -37,6 +37,13 @@ object LicenseRepository {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    val isPlusMember: Boolean
+        get() {
+            if (com.nuvio.app.core.build.AppFeaturePolicy.isAdminClient) return true
+            val current = (_state.value as? LicenseState.Active)?.info
+            return current?.isPlus == true
+        }
+
     private var initialized = false
     private var verifyJob: Job? = null
 

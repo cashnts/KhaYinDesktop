@@ -297,6 +297,8 @@ fun AdminLicenseScreen(
                         onDurationChange = { durationDays = it },
                         maxDevices = maxDevices,
                         onMaxDevicesChange = { maxDevices = it },
+                        tier = tier,
+                        onTierChange = { tier = it },
                         isGenerating = isGenerating,
                         newlyCreatedLicense = newlyCreatedLicense,
                         onGenerate = {
@@ -507,6 +509,8 @@ private fun LicensesTabContent(
     onDurationChange: (Int) -> Unit,
     maxDevices: Int,
     onMaxDevicesChange: (Int) -> Unit,
+    tier: String,
+    onTierChange: (String) -> Unit,
     isGenerating: Boolean,
     newlyCreatedLicense: LicenseInfo?,
     onGenerate: () -> Unit,
@@ -540,6 +544,51 @@ private fun LicensesTabContent(
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
+
+                Text("Package / Plan", style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFFAAAAAA)))
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    listOf(
+                        "standard" to ("Standard" to "Normal streaming (No MMSUB)"),
+                        "plus" to ("Plus (MMSUB)" to "Standard + Burmese Subtitles"),
+                    ).forEach { (pkgKey, info) ->
+                        val (pkgTitle, pkgSubtitle) = info
+                        val selected = tier.equals(pkgKey, ignoreCase = true)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (selected) Color(0xFF00E699) else Color(0xFF0F0F16))
+                                .border(1.dp, if (selected) Color(0xFF00E699) else Color(0xFF323244), RoundedCornerShape(8.dp))
+                                .clickable { onTierChange(pkgKey) }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                        ) {
+                            Column {
+                                Text(
+                                    text = pkgTitle,
+                                    style = TextStyle(
+                                        color = if (selected) Color.Black else Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                    ),
+                                )
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = pkgSubtitle,
+                                    style = TextStyle(
+                                        color = if (selected) Color(0xFF1B2E24) else Color(0xFF888899),
+                                        fontSize = 11.sp,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Text("Customer / Client Name", style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFFAAAAAA)))
                 Spacer(modifier = Modifier.height(4.dp))
@@ -1015,7 +1064,7 @@ private fun UserDevicesTabContent(licenses: List<LicenseInfo>) {
                     Text(text = lic.customerName ?: "User Client", style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold))
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "Key: ${lic.key} • Tier: ${lic.tier?.uppercase() ?: "STANDARD"}",
+                        text = "Key: ${lic.key} • Tier: ${if (lic.isPlus) "PLUS (MMSUB)" else "STANDARD"}",
                         style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp, fontFamily = FontFamily.Monospace),
                     )
                 }
@@ -1046,6 +1095,7 @@ private fun LicenseCardItem(
 ) {
     val isRevoked = license.status == "revoked"
     val isExpired = license.status == "expired"
+    val isPlus = license.isPlus
 
     Column(
         modifier = Modifier
@@ -1101,12 +1151,30 @@ private fun LicenseCardItem(
                             ),
                         )
                     }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(
+                                if (isPlus) Color(0x2200E699) else Color(0x22888899),
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            text = if (isPlus) "PLUS (MMSUB)" else "STANDARD",
+                            style = TextStyle(
+                                color = if (isPlus) Color(0xFF00E699) else Color(0xFFCCCEDD),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = "${license.customerName ?: "Member"} • ${license.tier?.uppercase() ?: "STANDARD"} • ${if (license.expiresAt != null) "Expires " + license.expiresAt.take(10) else "Lifetime"} • ${license.activeDevices}/${license.maxDevices} device(s)",
+                    text = "${license.customerName ?: "Member"} • ${if (isPlus) "Plus (MMSUB)" else "Standard"} • ${if (license.expiresAt != null) "Expires " + license.expiresAt.take(10) else "Lifetime"} • ${license.activeDevices}/${license.maxDevices} device(s)",
                     style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF888899), fontSize = 12.sp),
                 )
             }
