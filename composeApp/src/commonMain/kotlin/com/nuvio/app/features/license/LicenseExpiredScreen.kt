@@ -212,10 +212,21 @@ fun LicenseExpiredScreen(
                 }
             }
 
+            var isChecking by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+            val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+
             Spacer(modifier = Modifier.height(24.dp))
 
             Button(
-                onClick = onEnterNewKey,
+                onClick = {
+                    if (!isChecking) {
+                        isChecking = true
+                        coroutineScope.launch {
+                            LicenseRepository.verifyRemoteLicense()
+                            isChecking = false
+                        }
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
@@ -223,6 +234,41 @@ fun LicenseExpiredScreen(
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF00E699),
                     contentColor = Color.Black,
+                ),
+            ) {
+                if (isChecking) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        color = Color.Black,
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Rounded.Refresh,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Re-check License Status",
+                            style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp),
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Button(
+                onClick = onEnterNewKey,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF222230),
+                    contentColor = Color.White,
                 ),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -233,8 +279,8 @@ fun LicenseExpiredScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Enter New License Key",
-                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp),
+                        text = "Enter Different License Key",
+                        style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp),
                     )
                 }
             }
