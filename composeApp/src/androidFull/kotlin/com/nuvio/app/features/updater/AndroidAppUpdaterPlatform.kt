@@ -26,8 +26,8 @@ object AndroidAppUpdaterPlatform {
     private const val ignoredTagKey = "ignored_release_tag"
 
     private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(60, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(0, TimeUnit.MILLISECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
@@ -63,37 +63,72 @@ object AndroidAppUpdaterPlatform {
         runCatching {
             val context = requireContext()
             val safeName = assetName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
-            val destination = File(File(context.cacheDir, "updates"), safeName)
-            destination.parentFile?.mkdirs()
-            if (destination.exists()) {
-                destination.delete()
+            val updatesDir = File(context.cacheDir, "updates").apply { mkdirs() }
+            val destination = File(updatesDir, safeName)
+            val tempFile = File(updatesDir, "$safeName.part")
+
+            var resumeFromBytes = tempFile.takeIf { it.exists() }?.length()?.coerceAtLeast(0L) ?: 0L
+            var attemptedRangeRequest = resumeFromBytes > 0L
+
+            fun buildRequest(rangeStart: Long?): Request {
+                val builder = Request.Builder()
+                    .url(assetUrl)
+                    .header("User-Agent", "KhaYin/Android")
+                    .header("Accept", "*/*")
+                if (rangeStart != null && rangeStart > 0L) {
+                    builder.header("Range", "bytes=$rangeStart-")
+                }
+                return builder.build()
             }
 
-            val request = Request.Builder()
-                .url(assetUrl)
-                .build()
+            var response = httpClient.newCall(buildRequest(if (attemptedRangeRequest) resumeFromBytes else null)).execute()
 
-            httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    error(runBlocking { getString(Res.string.updates_download_failed_http, response.code) })
+            if (attemptedRangeRequest && response.code == 416) {
+                response.close()
+                tempFile.delete()
+                resumeFromBytes = 0L
+                attemptedRangeRequest = false
+                response = httpClient.newCall(buildRequest(null)).execute()
+            }
+
+            response.use { resp ->
+                if (!resp.isSuccessful) {
+                    error(runBlocking { getString(Res.string.updates_download_failed_http, resp.code) })
                 }
 
-                val body = response.body ?: error(runBlocking { getString(Res.string.updates_empty_download_body) })
-                val totalBytes = body.contentLength().takeIf { it > 0L }
+                val isPartialResume = attemptedRangeRequest && resp.code == 206 && resumeFromBytes > 0L
+                val appendToTemp = isPartialResume
+                val startingBytes = if (appendToTemp) resumeFromBytes else 0L
+                if (!appendToTemp && tempFile.exists()) {
+                    tempFile.delete()
+                }
+
+                val body = resp.body ?: error(runBlocking { getString(Res.string.updates_empty_download_body) })
+                val contentLength = body.contentLength().takeIf { it > 0L }
+                val totalBytes = if (contentLength != null) startingBytes + contentLength else null
+
+                var downloadedBytes = startingBytes
+                onProgress(downloadedBytes, totalBytes)
+
                 body.byteStream().use { input ->
-                    FileOutputStream(destination).use { output ->
-                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                        var downloadedBytes = 0L
+                    FileOutputStream(tempFile, appendToTemp).use { output ->
+                        val buffer = ByteArray(64 * 1024)
                         while (true) {
                             val read = input.read(buffer)
                             if (read <= 0) break
                             output.write(buffer, 0, read)
-                            downloadedBytes += read
+                            downloadedBytes += read.toLong()
                             onProgress(downloadedBytes, totalBytes)
                         }
                         output.flush()
                     }
                 }
+            }
+
+            if (destination.exists()) destination.delete()
+            if (!tempFile.renameTo(destination)) {
+                tempFile.copyTo(destination, overwrite = true)
+                tempFile.delete()
             }
 
             destination.absolutePath

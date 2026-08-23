@@ -73,26 +73,53 @@ actual object AppUpdaterPlatform {
             val safeName = assetName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
             val destination = File(updatesDir(), safeName)
             val tempFile = File(updatesDir(), "$safeName.part")
-            if (destination.exists()) destination.delete()
-            if (tempFile.exists()) tempFile.delete()
 
-            val request = HttpRequest.newBuilder()
-                .uri(URI(assetUrl))
-                .timeout(Duration.ofSeconds(60))
-                .GET()
-                .build()
-            val response = desktopUpdaterHttpClient.send(request, HttpResponse.BodyHandlers.ofInputStream())
+            var resumeFromBytes = tempFile.takeIf { it.exists() }?.length()?.coerceAtLeast(0L) ?: 0L
+            var attemptedRangeRequest = resumeFromBytes > 0L
+
+            fun buildRequest(rangeStart: Long?): HttpRequest {
+                val builder = HttpRequest.newBuilder()
+                    .uri(URI(assetUrl))
+                    .header("User-Agent", "KhaYin/${AppUpdaterPlatform.currentVersionName}")
+                    .header("Accept", "*/*")
+                    .GET()
+                if (rangeStart != null && rangeStart > 0L) {
+                    builder.header("Range", "bytes=$rangeStart-")
+                }
+                return builder.build()
+            }
+
+            var response = desktopUpdaterHttpClient.send(buildRequest(if (attemptedRangeRequest) resumeFromBytes else null), HttpResponse.BodyHandlers.ofInputStream())
+
+            if (attemptedRangeRequest && response.statusCode() == 416) {
+                tempFile.delete()
+                resumeFromBytes = 0L
+                attemptedRangeRequest = false
+                response = desktopUpdaterHttpClient.send(buildRequest(null), HttpResponse.BodyHandlers.ofInputStream())
+            }
+
             if (response.statusCode() !in 200..299) {
                 error(runBlocking { getString(Res.string.updates_download_failed_http, response.statusCode()) })
             }
 
-            val totalBytes = response.headers().firstValue("Content-Length").orElse(null)
-                ?.toLongOrNull()
-                ?.takeIf { it > 0L }
-            var downloadedBytes = 0L
+            val isPartialResume = attemptedRangeRequest && response.statusCode() == 206 && resumeFromBytes > 0L
+            val appendToTemp = isPartialResume
+            val startingBytes = if (appendToTemp) resumeFromBytes else 0L
+            if (!appendToTemp && tempFile.exists()) {
+                tempFile.delete()
+            }
+
+            val contentLength = response.headers().firstValue("Content-Length").orElse(null)?.toLongOrNull()
+            val totalBytes = if (contentLength != null && contentLength > 0L) {
+                startingBytes + contentLength
+            } else null
+
+            var downloadedBytes = startingBytes
+            onProgress(downloadedBytes, totalBytes)
+
             response.body()?.use { input ->
-                FileOutputStream(tempFile).use { output ->
-                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                FileOutputStream(tempFile, appendToTemp).use { output ->
+                    val buffer = ByteArray(64 * 1024)
                     while (true) {
                         val read = input.read(buffer)
                         if (read <= 0) break
@@ -104,6 +131,7 @@ actual object AppUpdaterPlatform {
                 }
             } ?: error(runBlocking { getString(Res.string.updates_empty_download_body) })
 
+            if (destination.exists()) destination.delete()
             if (!tempFile.renameTo(destination)) {
                 tempFile.copyTo(destination, overwrite = true)
                 tempFile.delete()

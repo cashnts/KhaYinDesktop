@@ -205,11 +205,13 @@ fun AppUpdateScreen(
                     "Version ${update.tag} has been downloaded and is ready to install."
                 } else if (state.isDownloading) {
                     "Downloading version ${update.tag}... Please keep the app open."
+                } else if (state.errorMessage != null) {
+                    state.errorMessage
                 } else {
                     "A new version of KhaYin (v${update.tag}) is available."
                 },
                 style = MaterialTheme.typography.bodyMedium.copy(
-                    color = Color(0xFF9E9EA7),
+                    color = if (state.errorMessage != null && !state.isDownloading && !isInstalling) Color(0xFFFF5252) else Color(0xFF9E9EA7),
                 ),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 16.dp),
@@ -251,8 +253,8 @@ fun AppUpdateScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        text = if (isInstalling) "Ready to install" else if (state.isDownloading) "Downloading..." else "Pending",
-                        style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF7A7A85)),
+                        text = if (isInstalling) "Ready to install" else if (state.isDownloading) "Downloading..." else if (state.errorMessage != null) "Download failed" else "Pending",
+                        style = MaterialTheme.typography.bodySmall.copy(color = if (state.errorMessage != null && !state.isDownloading && !isInstalling) Color(0xFFFF5252) else Color(0xFF7A7A85)),
                     )
                     Text(
                         text = if (isInstalling) "100%" else "$percentage%",
@@ -298,7 +300,7 @@ fun AppUpdateScreen(
                     ),
                 ) {
                     Text(
-                        text = if (isInstalling) "Install & Restart" else if (state.isDownloading) "Downloading..." else "Update Now",
+                        text = if (isInstalling) "Install & Restart" else if (state.isDownloading) "Downloading..." else if (state.errorMessage != null) "Retry Download" else "Update Now",
                         style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp),
                     )
                 }
