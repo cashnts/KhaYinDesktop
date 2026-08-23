@@ -622,4 +622,21 @@ object LicenseRepository {
             )
         }
     }
+
+    suspend fun updateLicenseProfile(profileName: String): Result<Unit> = runCatching {
+        val current = _state.value as? LicenseState.Active ?: return@runCatching
+        val key = current.info.key
+        val restUrl = supabaseRestUrl()
+        val patchUrl = "$restUrl/license_keys?key=eq.$key"
+        val body = """{"profile_name":${json.encodeToString(profileName)}}"""
+        val response = httpRequestRaw(
+            method = "PATCH",
+            url = patchUrl,
+            headers = supabaseHeaders(method = "PATCH", url = patchUrl, body = body),
+            body = body,
+        )
+        val updatedInfo = current.info.copy(profileName = profileName)
+        _state.value = LicenseState.Active(updatedInfo)
+        LicenseStorage.saveLicensePayload(json.encodeToString(updatedInfo))
+    }
 }

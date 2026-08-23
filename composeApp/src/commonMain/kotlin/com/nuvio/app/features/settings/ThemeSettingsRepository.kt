@@ -65,13 +65,20 @@ object ThemeSettingsRepository {
         hasLoaded = true
         val stored = ThemeSettingsStorage.loadSelectedTheme()
         val theme = if (stored != null) {
-            try {
-                AppTheme.valueOf(stored)
-            } catch (_: IllegalArgumentException) {
-                null
+            if (stored.equals("DARK", ignoreCase = true) || stored.equals("LIGHT", ignoreCase = true) || stored.equals("NUVIO", ignoreCase = true)) {
+                ThemeSettingsStorage.saveSelectedTheme(AppTheme.KHAYIN.name)
+                AppTheme.KHAYIN
+            } else {
+                try {
+                    AppTheme.valueOf(stored)
+                } catch (_: IllegalArgumentException) {
+                    ThemeSettingsStorage.saveSelectedTheme(AppTheme.KHAYIN.name)
+                    AppTheme.KHAYIN
+                }
             }
         } else {
-            null
+            ThemeSettingsStorage.saveSelectedTheme(AppTheme.KHAYIN.name)
+            AppTheme.KHAYIN
         }
         _selectedThemePreference.value = theme
         applyEffectiveTheme()

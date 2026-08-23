@@ -141,7 +141,9 @@ fun ProfileEditScreen(
     NuvioScreen(modifier = modifier) {
         stickyHeader {
             NuvioScreenHeader(
-                title = if (isNew) {
+                title = if (AppFeaturePolicy.isUserClient) {
+                    "Customize Profile"
+                } else if (isNew) {
                     stringResource(Res.string.profile_edit_add_title)
                 } else {
                     stringResource(Res.string.profile_edit_edit_title)
@@ -366,7 +368,7 @@ fun ProfileEditScreen(
             NuvioPrimaryButton(
                 text = if (isSaving) {
                     stringResource(Res.string.profile_saving)
-                } else if (isNew) {
+                } else if (isNew && !AppFeaturePolicy.isUserClient) {
                     stringResource(Res.string.profile_create_profile)
                 } else {
                     stringResource(Res.string.collections_editor_save_changes)
@@ -376,7 +378,7 @@ fun ProfileEditScreen(
                     isSaving = true
                     scope.launch {
                         val avatarColorHex = visibleAvatarItem?.bgColor ?: fallbackColorHex
-                        if (isNew) {
+                        if (isNew && !AppFeaturePolicy.isUserClient) {
                             ProfileRepository.createProfile(
                                 name = name,
                                 avatarColorHex = avatarColorHex,
@@ -385,8 +387,9 @@ fun ProfileEditScreen(
                                 usesPrimaryAddons = usesPrimaryAddons,
                             )
                         } else {
+                            val targetIndex = currentProfile?.profileIndex ?: 1
                             ProfileRepository.updateProfile(
-                                profileIndex = currentProfile!!.profileIndex,
+                                profileIndex = targetIndex,
                                 name = name,
                                 avatarColorHex = avatarColorHex,
                                 avatarId = if (customAvatarUrl == null) selectedAvatarId else null,
@@ -403,7 +406,7 @@ fun ProfileEditScreen(
             )
         }
 
-        if (!isNew && (profileState.profiles.size > 1 || AppFeaturePolicy.isAdminClient)) {
+        if (!isNew && (profileState.profiles.size > 1 || AppFeaturePolicy.isAdminClient) && !AppFeaturePolicy.isUserClient) {
             item {
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(

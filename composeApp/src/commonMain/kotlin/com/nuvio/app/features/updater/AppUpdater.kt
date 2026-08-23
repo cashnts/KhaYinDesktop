@@ -66,6 +66,7 @@ private data class KhayinPlatformDto(
     val ext: String? = null,
     val pattern: String? = null,
     val badge: String? = null,
+    val url: String? = null,
 )
 
 private val appUpdaterJson = Json {
@@ -148,7 +149,7 @@ private object AppUpdaterRepository {
             "${downloads.appPrefix}-$suffix-v$rawVersion.$ext"
         }
 
-        val downloadUrl = "${downloads.baseUrl.trimEnd('/')}/v$rawVersion/$fileName"
+        val downloadUrl = platform.url?.takeIf { it.isNotBlank() } ?: "${downloads.baseUrl.trimEnd('/')}/v$rawVersion/$fileName"
 
         AppUpdate(
             tag = rawVersion,
@@ -206,10 +207,8 @@ class AppUpdaterController internal constructor(
         val version = AppUpdaterPlatform.currentVersionName.lowercase()
         return version.contains("alpha") ||
             version.contains("beta") ||
-            version.contains("dev") ||
             version.contains("snapshot") ||
-            version.contains("rc") ||
-            AppUpdaterPlatform.isDebugBuild
+            version.contains("rc")
     }
 
     fun ensureAutoCheckStarted() {

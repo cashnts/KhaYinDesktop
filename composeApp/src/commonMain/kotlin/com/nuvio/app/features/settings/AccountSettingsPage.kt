@@ -66,10 +66,14 @@ import com.nuvio.app.features.license.activeInfo
 
 internal fun LazyListScope.accountSettingsContent(
     isTablet: Boolean,
+    onCustomizeProfile: (() -> Unit)? = null,
 ) {
     item {
         if (AppFeaturePolicy.isUserClient) {
-            SubscriptionSettingsBody(isTablet = isTablet)
+            SubscriptionSettingsBody(
+                isTablet = isTablet,
+                onCustomizeProfile = onCustomizeProfile,
+            )
         } else {
             AccountSettingsBody(isTablet = isTablet)
         }
@@ -79,14 +83,45 @@ internal fun LazyListScope.accountSettingsContent(
 @Composable
 private fun SubscriptionSettingsBody(
     isTablet: Boolean,
+    onCustomizeProfile: (() -> Unit)? = null,
 ) {
     val licenseState by LicenseRepository.state.collectAsStateWithLifecycle()
     val licenseInfo = licenseState.activeInfo
+    val profileState by com.nuvio.app.features.profiles.ProfileRepository.state.collectAsStateWithLifecycle()
+    val activeProfile = profileState.activeProfile
     val clipboardManager = LocalClipboardManager.current
     var showDeactivateConfirm by remember { mutableStateOf(false) }
     var copiedKey by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        NuvioSurfaceCard {
+            Text(
+                text = "Profile & Appearance",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "Personalize your profile display name, avatar icon, and custom background.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            AccountInfoRow(
+                label = "Profile Name",
+                value = activeProfile?.name?.takeIf { it.isNotBlank() } ?: licenseInfo?.customerName ?: "Member",
+                valueColor = MaterialTheme.colorScheme.primary,
+            )
+            if (onCustomizeProfile != null) {
+                Spacer(modifier = Modifier.height(14.dp))
+                NuvioPrimaryButton(
+                    text = "Customize Profile",
+                    onClick = onCustomizeProfile,
+                )
+            }
+        }
+
         NuvioSurfaceCard {
             Text(
                 text = "Subscription & License",
@@ -138,20 +173,13 @@ private fun SubscriptionSettingsBody(
                     value = "${licenseInfo.activeDevices} / ${licenseInfo.maxDevices} Active",
                 )
 
-                val activeProfileName = com.nuvio.app.features.profiles.ProfileRepository.state.value.activeProfile?.name?.takeIf { it.isNotBlank() }
+                val activeProfileName = activeProfile?.name?.takeIf { it.isNotBlank() }
                 val licensedToName = licenseInfo.customerName?.takeIf { it.isNotBlank() } ?: activeProfileName
                 if (licensedToName != null) {
                     Spacer(modifier = Modifier.height(10.dp))
                     AccountInfoRow(
                         label = "Licensed To",
                         value = licensedToName,
-                    )
-                }
-                if (activeProfileName != null && !activeProfileName.equals(licensedToName, ignoreCase = true)) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    AccountInfoRow(
-                        label = "Profile",
-                        value = activeProfileName,
                     )
                 }
 

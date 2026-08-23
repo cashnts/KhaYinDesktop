@@ -95,24 +95,46 @@ object ProfileRepository {
         return _state.value.profiles.isNotEmpty()
     }
 
+    private fun getCurrentUserId(): String {
+        val licenseKey = (com.nuvio.app.features.license.LicenseRepository.state.value as? com.nuvio.app.features.license.LicenseState.Active)?.info?.key
+        if (!licenseKey.isNullOrBlank()) return licenseKey
+        val authUserId = (AuthRepository.state.value as? AuthState.Authenticated)?.userId
+        if (!authUserId.isNullOrBlank()) return authUserId
+        return loadedCacheForUserId ?: "license_user"
+    }
+
     fun ensureLoaded(userId: String) {
-        if (loadedCacheForUserId == userId && _state.value.isLoaded) return
+        if (loadedCacheForUserId == userId && _state.value.isLoaded && _state.value.profiles.isNotEmpty()) return
 
         val stored = decodeStoredPayload()
         loadedCacheForUserId = userId
-        if (stored == null) {
-            _state.value = ProfileState()
-            activeProfileIndex = 1
+        if (stored != null && (stored.userId == userId || stored.userId == "license_user" || stored.userId == "default_user" || stored.userId.isBlank())) {
+            applyStoredPayload(stored)
             return
         }
 
-        if (stored.userId != userId) {
-            _state.value = ProfileState()
-            activeProfileIndex = 1
-            return
-        }
-
-        applyStoredPayload(stored)
+        // Initialize fallback profile from active license key
+        val activeLic = (com.nuvio.app.features.license.LicenseRepository.state.value as? com.nuvio.app.features.license.LicenseState.Active)?.info
+        val initialName = activeLic?.profileName?.takeIf { it.isNotBlank() }
+            ?: activeLic?.customerName?.takeIf { it.isNotBlank() }
+            ?: "Member"
+        val initialProfile = NuvioProfile(
+            id = "",
+            userId = userId,
+            profileIndex = 1,
+            name = initialName,
+            avatarColorHex = PROFILE_COLORS.first(),
+            usesPrimaryAddons = true,
+            usesPrimaryPlugins = true,
+        )
+        _state.value = ProfileState(
+            profiles = listOf(initialProfile),
+            activeProfile = initialProfile,
+            isLoaded = true,
+            hasEverSelectedProfile = true,
+        )
+        activeProfileIndex = 1
+        persist()
     }
 
     fun clearInMemory() {
@@ -419,7 +441,7 @@ object ProfileRepository {
     }
 
     private fun applyPayloadsLocally(payloads: List<ProfilePushPayload>) {
-        val currentUserId = (AuthRepository.state.value as? AuthState.Authenticated)?.userId ?: loadedCacheForUserId ?: "local_user"
+        val currentUserId = getCurrentUserId()
         val profiles = payloads.map { p ->
             NuvioProfile(
                 id = "",
@@ -445,6 +467,14 @@ object ProfileRepository {
         }
         syncPinCache(profiles)
         persist()
+        if (com.nuvio.app.core.build.AppFeaturePolicy.isUserClient) {
+            val primaryName = profiles.firstOrNull()?.name
+            if (!primaryName.isNullOrBlank()) {
+                scope.launch {
+                    com.nuvio.app.features.license.LicenseRepository.updateLicenseProfile(primaryName)
+                }
+            }
+        }
     }
 
     private fun decodeStoredPayload(): StoredProfilePayload? {
@@ -552,12 +582,13 @@ object ProfileRepository {
     }
 
     private fun persist() {
-        val authState = AuthRepository.state.value as? AuthState.Authenticated ?: return
+        val currentUserId = getCurrentUserId()
         val state = _state.value
+        if (state.profiles.isEmpty()) return
         ProfileStorage.savePayload(
             json.encodeToString(
                 StoredProfilePayload(
-                    userId = authState.userId,
+                    userId = currentUserId,
                     activeProfileIndex = activeProfileIndex,
                     hasEverSelectedProfile = state.hasEverSelectedProfile,
                     rememberLastProfileEnabled = state.rememberLastProfileEnabled,
