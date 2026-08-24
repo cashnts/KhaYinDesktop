@@ -203,7 +203,7 @@ object SearchRepository {
             !forceRefresh &&
             sources == discoverSources &&
             lastDiscoverHideUnreleasedContent == hideUnreleasedContent &&
-            activeDiscoverJob?.isActive == true
+            (activeDiscoverJob?.isActive == true || current.items.isNotEmpty())
         ) {
             log.d {
                 "Reusing discover state type=${current.selectedType} catalog=${current.selectedCatalogKey} " +

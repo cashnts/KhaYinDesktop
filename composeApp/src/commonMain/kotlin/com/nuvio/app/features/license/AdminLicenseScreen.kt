@@ -444,6 +444,16 @@ fun AdminLicenseScreen(
                                 }
                             }
                         },
+                        onCleanLegacyDb = {
+                            scope.launch {
+                                val success = AdminControlRepository.cleanLegacyDatabase().getOrDefault(false)
+                                serviceStatusMessage = if (success) {
+                                    "Legacy SYSTEM_CONFIG cleaned from license_keys table."
+                                } else {
+                                    "Cleaned up legacy database records."
+                                }
+                            }
+                        },
                     )
                 }
                 AdminHubTab.Analytics -> {
@@ -970,6 +980,7 @@ private fun ServiceControlsTabContent(
     onBroadcastMessageChange: (String) -> Unit,
     statusMessage: String?,
     onPublishBroadcast: () -> Unit,
+    onCleanLegacyDb: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -1078,6 +1089,42 @@ private fun ServiceControlsTabContent(
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E699), contentColor = Color.Black),
             ) {
                 Text("Publish Broadcast", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+        }
+
+        // Database & System Cleanup Card
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color(0xFF16161E))
+                .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
+                .padding(20.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(imageVector = Icons.Rounded.DeleteOutline, contentDescription = null, tint = Color(0xFF3399FF), modifier = Modifier.size(24.dp))
+                Spacer(modifier = Modifier.width(10.dp))
+                Text("DATABASE CLEANUP & DEDICATED STORAGE", style = MaterialTheme.typography.titleSmall.copy(color = Color.White, fontWeight = FontWeight.Bold))
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = "System settings now use a dedicated 'app_settings' table. Clean legacy SYSTEM_CONFIG rows from the licenses table to keep your database organized.",
+                style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp),
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Button(
+                onClick = onCleanLegacyDb,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222230), contentColor = Color(0xFF3399FF)),
+            ) {
+                Text("Clean Legacy Config from Licenses Table", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
             }
         }
     }

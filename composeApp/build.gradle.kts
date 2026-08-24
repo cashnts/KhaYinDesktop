@@ -1037,9 +1037,15 @@ tasks.withType<KotlinCompilationTask<*>>().configureEach {
 kotlin {
     android {
         namespace = "com.nuvio.app"
+        val compileSdkInt = libs.versions.android.compileSdk.get().toInt()
+        val compileSdkMinorInt = libs.versions.android.compileSdkMinor.get().toInt()
         compileSdk {
-            version = release(libs.versions.android.compileSdk.get().toInt()) {
-                minorApiLevel = libs.versions.android.compileSdkMinor.get().toInt()
+            version = if (compileSdkInt >= 36 && compileSdkMinorInt > 0) {
+                release(compileSdkInt) {
+                    minorApiLevel = compileSdkMinorInt
+                }
+            } else {
+                release(compileSdkInt)
             }
         }
         minSdk = libs.versions.android.minSdk.get().toInt()

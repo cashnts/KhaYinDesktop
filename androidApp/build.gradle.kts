@@ -62,8 +62,12 @@ val buildsReleaseApks = requestedTaskNames.any {
 
 android {
     namespace = "com.nuvio.android"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
-    compileSdkMinor = libs.versions.android.compileSdkMinor.get().toInt()
+    val compileSdkInt = libs.versions.android.compileSdk.get().toInt()
+    compileSdk = compileSdkInt
+    val compileSdkMinorInt = libs.versions.android.compileSdkMinor.get().toInt()
+    if (compileSdkInt >= 36 && compileSdkMinorInt > 0) {
+        compileSdkMinor = compileSdkMinorInt
+    }
 
     signingConfigs {
         if (hasReleaseSigning) {

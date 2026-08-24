@@ -435,7 +435,7 @@ private data class AppLanguageSheetOption(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AppearanceLanguageBottomSheet(
+internal fun AppearanceLanguageBottomSheet(
     selectedLanguage: AppLanguage,
     onLanguageSelected: (AppLanguage) -> Unit,
     onDismiss: () -> Unit,

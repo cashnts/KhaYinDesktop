@@ -859,9 +859,18 @@ fun App(
                 AppGateScreen.LicenseActivation.name -> {
                     LicenseActivationScreen(
                         onActivated = {
-                            editingProfile = null
-                            isNewProfile = true
-                            gateScreen = AppGateScreen.ProfileEdit.name
+                            val currentProfiles = ProfileRepository.state.value.profiles
+                            val targetProfile = ProfileRepository.state.value.activeProfile
+                                ?: currentProfiles.firstOrNull()
+                            if (targetProfile != null) {
+                                ProfileRepository.selectProfile(targetProfile.profileIndex)
+                                SyncManager.pullAllForProfile(targetProfile.profileIndex)
+                                gateScreen = AppGateScreen.Main.name
+                            } else {
+                                editingProfile = null
+                                isNewProfile = true
+                                gateScreen = AppGateScreen.ProfileEdit.name
+                            }
                         },
                         onOpenAdminPanel = {
                             gateScreen = AppGateScreen.AdminPanel.name
@@ -991,6 +1000,12 @@ fun App(
                             autoSkipProfileSelection = false
                             gateScreen = AppGateScreen.ProfileSelection.name
                         },
+                        onCustomizeProfile = {
+                            val active = profileState.activeProfile ?: profileState.profiles.firstOrNull()
+                            editingProfile = active
+                            isNewProfile = false
+                            gateScreen = AppGateScreen.ProfileEdit.name
+                        },
                         onAddProfile = {
                             editingProfile = null
                             isNewProfile = true
@@ -1024,6 +1039,7 @@ private fun MainAppContent(
     nativeProfileSwitcherController: NativeProfileSwitcherController? = null,
     onRootContentReady: ((Boolean) -> Unit)? = null,
     onSwitchProfile: () -> Unit = {},
+    onCustomizeProfile: () -> Unit = {},
     onAddProfile: () -> Unit = {},
     onOpenAdminHub: (() -> Unit)? = null,
 ) {
@@ -2275,6 +2291,7 @@ private fun MainAppContent(
                                         libraryDisintegrationRequest = libraryDisintegrationRequests.current,
                                         continueWatchingDisintegrationRequest = continueWatchingDisintegrationRequests.current,
                                         onSwitchProfile = onSwitchProfile,
+                                        onCustomizeProfile = onCustomizeProfile,
                                         onOpenAdminHub = onOpenAdminHub,
                                         onHomescreenSettingsClick = { navController.navigate(HomescreenSettingsRoute(homescreenSettingsTitle)) },
                                         onMetaScreenSettingsClick = { navController.navigate(MetaScreenSettingsRoute(metaScreenSettingsTitle)) },
@@ -3442,6 +3459,8 @@ private fun MainAppContent(
                         modifier = Modifier.fillMaxSize(),
                         requestedPageName = route.pageName,
                         onRequestedPageConsumed = {},
+                        onSwitchProfile = onSwitchProfile,
+                        onCustomizeProfile = onCustomizeProfile,
                         onAdminHubClick = onOpenAdminHub,
                         onDownloadsClick = {
                             navController.navigate(DownloadsSettingsRoute(downloadsSettingsTitle))
@@ -4074,6 +4093,7 @@ private fun AppTabHost(
     libraryDisintegrationRequest: DisintegrationRequest<String>? = null,
     continueWatchingDisintegrationRequest: DisintegrationRequest<String>? = null,
     onSwitchProfile: (() -> Unit)? = null,
+    onCustomizeProfile: (() -> Unit)? = null,
     onOpenAdminHub: (() -> Unit)? = null,
     onHomescreenSettingsClick: () -> Unit = {},
     onMetaScreenSettingsClick: () -> Unit = {},
@@ -4156,6 +4176,7 @@ private fun AppTabHost(
                                 requestedPageName = requestedSettingsPageName,
                                 onRequestedPageConsumed = onRequestedSettingsPageConsumed,
                                 onSwitchProfile = onSwitchProfile,
+                                onCustomizeProfile = onCustomizeProfile,
                                 onHomescreenClick = onHomescreenSettingsClick,
                                 onMetaScreenClick = onMetaScreenSettingsClick,
                                 onContinueWatchingClick = onContinueWatchingSettingsClick,
@@ -4260,6 +4281,7 @@ private fun AppSettingsTabContent(
     requestedPageName: String?,
     onRequestedPageConsumed: () -> Unit,
     onSwitchProfile: (() -> Unit)?,
+    onCustomizeProfile: (() -> Unit)? = null,
     onHomescreenClick: () -> Unit,
     onMetaScreenClick: () -> Unit,
     onContinueWatchingClick: () -> Unit,
@@ -4281,6 +4303,7 @@ private fun AppSettingsTabContent(
         onRequestedPageConsumed = onRequestedPageConsumed,
         rootActionsEnabled = tabsRouteActiveState.value,
         onSwitchProfile = onSwitchProfile,
+        onCustomizeProfile = onCustomizeProfile,
         onHomescreenClick = onHomescreenClick,
         onMetaScreenClick = onMetaScreenClick,
         onContinueWatchingClick = onContinueWatchingClick,

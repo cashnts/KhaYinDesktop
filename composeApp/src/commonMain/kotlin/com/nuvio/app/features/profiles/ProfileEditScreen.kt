@@ -167,53 +167,15 @@ fun ProfileEditScreen(
             )
         }
 
-        item {
-            NuvioSurfaceCard {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = stringResource(Res.string.profile_custom_avatar_url),
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = stringResource(Res.string.profile_custom_avatar_url_description),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    NuvioInputField(
-                        value = avatarUrl,
-                        onValueChange = { value ->
-                            avatarUrl = value
-                            if (value.isNotBlank()) {
-                                selectedAvatarId = null
-                            }
-                        },
-                        placeholder = stringResource(Res.string.profile_custom_avatar_url_placeholder),
-                    )
-                    if (avatarUrlIsInvalid) {
-                        Text(
-                            text = stringResource(Res.string.profile_avatar_url_invalid),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
-            }
-        }
-
         if (canChooseBackground) {
             item {
                 NuvioSurfaceCard {
-                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
                             text = stringResource(Res.string.profile_choose_background),
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = stringResource(Res.string.profile_background_member_note),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.SemiBold,
                         )
                         ProfileBackgroundPicker(
                             backgrounds = backgroundCatalog,
@@ -292,8 +254,8 @@ fun ProfileEditScreen(
                             }
                         }
 
-                        val avatarSpacing = 10.dp
-                        val minAvatarSize = 54.dp
+                        val avatarSpacing = 8.dp
+                        val minAvatarSize = 46.dp
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -493,15 +455,15 @@ private fun ProfileIdentityCard(
     hasAvatarChoices: Boolean,
 ) {
     NuvioSurfaceCard {
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
                     modifier = Modifier
-                        .size(88.dp)
+                        .size(64.dp)
                         .clip(CircleShape)
                         .background(
                             if (selectedAvatar != null || customAvatarUrl != null) {
@@ -525,20 +487,20 @@ private fun ProfileIdentityCard(
                         AsyncImage(
                             model = customAvatarUrl,
                             contentDescription = name,
-                            modifier = Modifier.size(88.dp).clip(CircleShape),
+                            modifier = Modifier.size(64.dp).clip(CircleShape),
                             contentScale = ContentScale.Crop,
                         )
                     } else if (selectedAvatar != null) {
                         AsyncImage(
                             model = avatarImageUrl(selectedAvatar),
                             contentDescription = selectedAvatar.displayName,
-                            modifier = Modifier.size(88.dp).clip(CircleShape),
+                            modifier = Modifier.size(64.dp).clip(CircleShape),
                             contentScale = ContentScale.Crop,
                         )
                     } else if (name.isNotBlank()) {
                         Text(
                             text = name.take(1).uppercase(),
-                            style = MaterialTheme.typography.displayLarge,
+                            style = MaterialTheme.typography.titleLarge,
                             color = accentColor,
                             fontWeight = FontWeight.Bold,
                         )
@@ -547,14 +509,14 @@ private fun ProfileIdentityCard(
                             imageVector = Icons.Rounded.Person,
                             contentDescription = null,
                             tint = accentColor,
-                            modifier = Modifier.size(40.dp),
+                            modifier = Modifier.size(32.dp),
                         )
                     }
                 }
 
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text(
                         text = name.ifBlank {

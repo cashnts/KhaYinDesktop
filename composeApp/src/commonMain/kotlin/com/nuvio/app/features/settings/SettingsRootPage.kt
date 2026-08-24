@@ -69,10 +69,15 @@ import nuvio.composeapp.generated.resources.about_supporters_contributors_subtit
 import nuvio.composeapp.generated.resources.about_licenses_attributions_subtitle
 import org.jetbrains.compose.resources.stringResource
 
+import androidx.compose.material.icons.rounded.Translate
+import nuvio.composeapp.generated.resources.settings_appearance_app_language
+
 private const val PRIVACY_POLICY_URL = "https://stream.khayin.net/privacy"
 
 internal fun LazyListScope.settingsRootContent(
     isTablet: Boolean,
+    selectedAppLanguage: AppLanguage = AppLanguage.DEVICE,
+    onAppLanguageClick: (() -> Unit)? = null,
     onPlaybackClick: () -> Unit,
     onAppearanceClick: () -> Unit,
     onAdvancedClick: () -> Unit,
@@ -167,6 +172,16 @@ internal fun LazyListScope.settingsRootContent(
                 isTablet = isTablet,
             ) {
                 SettingsGroup(isTablet = isTablet) {
+                    if (onAppLanguageClick != null) {
+                        SettingsNavigationRow(
+                            title = stringResource(Res.string.settings_appearance_app_language),
+                            description = stringResource(selectedAppLanguage.labelRes),
+                            icon = Icons.Rounded.Translate,
+                            isTablet = isTablet,
+                            onClick = onAppLanguageClick,
+                        )
+                        SettingsGroupDivider(isTablet = isTablet)
+                    }
                     SettingsNavigationRow(
                         title = stringResource(Res.string.compose_settings_page_appearance),
                         description = stringResource(Res.string.compose_settings_root_appearance_description),

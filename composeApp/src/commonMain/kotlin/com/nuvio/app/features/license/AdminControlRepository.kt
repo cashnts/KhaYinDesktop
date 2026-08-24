@@ -40,6 +40,13 @@ data class LicenseAnalyticsRecord(
     val created_at: String? = null,
 )
 
+@Serializable
+data class AppSettingsRecord(
+    val id: String = "global",
+    val config: kotlinx.serialization.json.JsonElement? = null,
+    val updated_at: String? = null,
+)
+
 object AdminControlRepository {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var pollingJob: Job? = null
@@ -47,15 +54,24 @@ object AdminControlRepository {
     private val _config = MutableStateFlow(SystemServiceConfig())
     val config: StateFlow<SystemServiceConfig> = _config.asStateFlow()
 
-    private val _dismissedBroadcastTimestamp = MutableStateFlow(LicenseStorage.loadDismissedBroadcastTimestamp())
+    private val _dismissedBroadcastTimestamp = MutableStateFlow(0L)
     val dismissedBroadcastTimestamp: StateFlow<Long> = _dismissedBroadcastTimestamp.asStateFlow()
 
     fun dismissBroadcast(timestamp: Long) {
-        _dismissedBroadcastTimestamp.value = timestamp
-        LicenseStorage.saveDismissedBroadcastTimestamp(timestamp)
+        val target = if (timestamp > 0L) timestamp else _config.value.broadcastTimestamp
+        _dismissedBroadcastTimestamp.value = target
+        LicenseStorage.saveDismissedBroadcastTimestamp(target)
+    }
+
+    fun refreshDismissedTimestamp() {
+        val stored = LicenseStorage.loadDismissedBroadcastTimestamp()
+        if (stored > _dismissedBroadcastTimestamp.value) {
+            _dismissedBroadcastTimestamp.value = stored
+        }
     }
 
     fun startPolling() {
+        refreshDismissedTimestamp()
         if (pollingJob != null) return
         pollingJob = scope.launch {
             fetchConfig()
@@ -85,23 +101,52 @@ object AdminControlRepository {
     }
 
     suspend fun fetchConfig(): SystemServiceConfig {
+        refreshDismissedTimestamp()
         return runCatching {
             val restUrl = supabaseRestUrl()
-            val url = "$restUrl/license_keys?key=eq.SYSTEM_CONFIG&select=*"
-            val response = httpRequestRaw(
+            
+            // 1. Try dedicated app_settings table first
+            val appSettingsUrl = "$restUrl/app_settings?id=eq.global&select=*"
+            val appSettingsResponse = httpRequestRaw(
                 method = "GET",
-                url = url,
-                headers = supabaseHeaders(method = "GET", url = url),
+                url = appSettingsUrl,
+                headers = supabaseHeaders(method = "GET", url = appSettingsUrl),
                 body = "",
             )
-            if (response.status in 200..299 && !response.body.startsWith("<")) {
-                val records = json.decodeFromString<List<SupabaseLicenseRecord>>(response.body)
-                if (records.isNotEmpty()) {
-                    val notes = records.first().notes
-                    if (!notes.isNullOrBlank()) {
-                        val parsed = json.decodeFromString<SystemServiceConfig>(notes)
+            if (appSettingsResponse.status in 200..299 && !appSettingsResponse.body.startsWith("<")) {
+                val records = runCatching { json.decodeFromString<List<AppSettingsRecord>>(appSettingsResponse.body) }.getOrNull()
+                if (!records.isNullOrEmpty()) {
+                    val rawConfig = records.first().config
+                    val parsed = when (rawConfig) {
+                        is kotlinx.serialization.json.JsonObject -> runCatching { json.decodeFromJsonElement(SystemServiceConfig.serializer(), rawConfig) }.getOrNull()
+                        is kotlinx.serialization.json.JsonPrimitive -> runCatching { json.decodeFromString(SystemServiceConfig.serializer(), rawConfig.content) }.getOrNull()
+                        else -> null
+                    }
+                    if (parsed != null) {
                         _config.value = parsed
                         return@runCatching parsed
+                    }
+                }
+            }
+
+            // 2. Fallback to legacy SYSTEM_CONFIG row in license_keys
+            val legacyUrl = "$restUrl/license_keys?key=eq.SYSTEM_CONFIG&select=*"
+            val legacyResponse = httpRequestRaw(
+                method = "GET",
+                url = legacyUrl,
+                headers = supabaseHeaders(method = "GET", url = legacyUrl),
+                body = "",
+            )
+            if (legacyResponse.status in 200..299 && !legacyResponse.body.startsWith("<")) {
+                val records = runCatching { json.decodeFromString<List<SupabaseLicenseRecord>>(legacyResponse.body) }.getOrNull()
+                if (!records.isNullOrEmpty()) {
+                    val notes = records.first().notes
+                    if (!notes.isNullOrBlank()) {
+                        val parsed = runCatching { json.decodeFromString<SystemServiceConfig>(notes) }.getOrNull()
+                        if (parsed != null) {
+                            _config.value = parsed
+                            return@runCatching parsed
+                        }
                     }
                 }
             }
@@ -112,33 +157,68 @@ object AdminControlRepository {
     suspend fun updateConfig(newConfig: SystemServiceConfig): Result<SystemServiceConfig> {
         return runCatching {
             val restUrl = supabaseRestUrl()
-            val payload = SupabaseLicenseRecord(
-                key = "SYSTEM_CONFIG",
-                status = "config",
-                customerName = "System",
-                tier = "system",
-                notes = json.encodeToString(newConfig),
-            )
-            val body = json.encodeToString(payload)
-            val postUrl = "$restUrl/license_keys"
-            val response = httpRequestRaw(
+            _config.value = newConfig
+            
+            // 1. Save to dedicated app_settings table
+            val appSettingsPayload = kotlinx.serialization.json.buildJsonObject {
+                put("id", kotlinx.serialization.json.JsonPrimitive("global"))
+                put("config", json.encodeToJsonElement(SystemServiceConfig.serializer(), newConfig))
+            }
+            val appSettingsBody = json.encodeToString(appSettingsPayload)
+            val appSettingsUrl = "$restUrl/app_settings"
+            val appSettingsResponse = httpRequestRaw(
                 method = "POST",
-                url = postUrl,
-                headers = supabaseHeaders(method = "POST", url = postUrl, body = body),
-                body = body,
+                url = appSettingsUrl,
+                headers = supabaseHeaders(method = "POST", url = appSettingsUrl, body = appSettingsBody),
+                body = appSettingsBody,
             )
-            if (response.status !in 200..299) {
-                val patchUrl = "$restUrl/license_keys?key=eq.SYSTEM_CONFIG"
-                httpRequestRaw(
+
+            // If POST fails, try PATCH or fallback
+            if (appSettingsResponse.status !in 200..299) {
+                val patchUrl = "$restUrl/app_settings?id=eq.global"
+                val patchResponse = httpRequestRaw(
                     method = "PATCH",
                     url = patchUrl,
-                    headers = supabaseHeaders(method = "PATCH", url = patchUrl, body = body),
-                    body = body,
+                    headers = supabaseHeaders(method = "PATCH", url = patchUrl, body = appSettingsBody),
+                    body = appSettingsBody,
                 )
+                if (patchResponse.status !in 200..299) {
+                    // Fallback to writing to license_keys if app_settings table doesn't exist yet
+                    val legacyPayload = SupabaseLicenseRecord(
+                        key = "SYSTEM_CONFIG",
+                        status = "config",
+                        customerName = "System",
+                        tier = "system",
+                        notes = json.encodeToString(newConfig),
+                    )
+                    val legacyBody = json.encodeToString(legacyPayload)
+                    val legacyPostUrl = "$restUrl/license_keys"
+                    httpRequestRaw(
+                        method = "POST",
+                        url = legacyPostUrl,
+                        headers = supabaseHeaders(method = "POST", url = legacyPostUrl, body = legacyBody),
+                        body = legacyBody,
+                    )
+                }
             }
-            _config.value = newConfig
+
+            // 2. Automatically delete legacy SYSTEM_CONFIG row from license_keys table
+            cleanLegacyDatabase()
+
             newConfig
         }
+    }
+
+    suspend fun cleanLegacyDatabase(): Result<Boolean> = runCatching {
+        val restUrl = supabaseRestUrl()
+        val delUrl = "$restUrl/license_keys?key=eq.SYSTEM_CONFIG"
+        val response = httpRequestRaw(
+            method = "DELETE",
+            url = delUrl,
+            headers = supabaseHeaders(method = "DELETE", url = delUrl),
+            body = "",
+        )
+        response.status in 200..299
     }
 
     suspend fun fetchAnalytics(limit: Int = 100): Result<List<LicenseAnalyticsRecord>> = runCatching {
