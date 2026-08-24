@@ -1261,7 +1261,7 @@ compose.desktop {
             ?: "user"
         val isAdminClient = clientRoleValue.equals("admin", ignoreCase = true)
         val desktopAppDisplayName = if (isAdminClient) "KhaYin Admin" else "KhaYin"
-        val desktopBundleId = if (isAdminClient) "net.khayin.stream.desktop.admin" else "net.khayin.stream.desktop"
+        val desktopBundleId = if (isAdminClient) "dev.khayin.app.desktop.admin" else "dev.khayin.app.desktop"
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
@@ -1287,7 +1287,7 @@ compose.desktop {
                         <array>
                             <dict>
                                 <key>CFBundleURLName</key>
-                                <string>net.khayin.stream.desktop</string>
+                                <string>dev.khayin.app.desktop</string>
                                 <key>CFBundleURLSchemes</key>
                                 <array>
                                     <string>khayin</string>
@@ -1321,7 +1321,7 @@ compose.desktop {
                 upgradeUuid = windowsMsiUpgradeUuid
                 shortcut = true
                 menu = true
-                menuGroup = "Nuvio"
+                menuGroup = "KhaYin"
             }
             linux {
                 iconFile.set(project.file("src/desktopMain/resources/icons/nuvio-app-icon-transparent.png"))

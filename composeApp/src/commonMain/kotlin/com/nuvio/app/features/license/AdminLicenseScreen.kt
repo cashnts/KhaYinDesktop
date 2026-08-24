@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -68,6 +69,10 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.settings_admin_control_hub_title
+import nuvio.composeapp.generated.resources.settings_admin_media_server_operations
+import org.jetbrains.compose.resources.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -127,6 +132,15 @@ fun AdminLicenseScreen(
     var maintenanceModeEnabled by remember { mutableStateOf(false) }
     var streamingDisabled by remember { mutableStateOf(false) }
     var broadcastAlertMessage by remember { mutableStateOf("") }
+    var broadcastSeverity by remember { mutableStateOf("INFO") }
+    var enableDownloads by remember { mutableStateOf(true) }
+    var enablePlugins by remember { mutableStateOf(true) }
+    var enableP2p by remember { mutableStateOf(true) }
+    var enableDebrid by remember { mutableStateOf(true) }
+    var enableTrailerPlayback by remember { mutableStateOf(true) }
+    var minSupportedVersion by remember { mutableStateOf("") }
+    var disabledAddonsText by remember { mutableStateOf("") }
+    var dynamicConfigText by remember { mutableStateOf("") }
     var serviceStatusMessage by remember { mutableStateOf<String?>(null) }
 
     val scope = rememberCoroutineScope()
@@ -170,6 +184,15 @@ fun AdminLicenseScreen(
         maintenanceModeEnabled = cfg.maintenanceMode
         streamingDisabled = cfg.streamingDisabled
         broadcastAlertMessage = cfg.broadcastMessage
+        broadcastSeverity = cfg.broadcastSeverity
+        enableDownloads = cfg.enableDownloads
+        enablePlugins = cfg.enablePlugins
+        enableP2p = cfg.enableP2p
+        enableDebrid = cfg.enableDebrid
+        enableTrailerPlayback = cfg.enableTrailerPlayback
+        minSupportedVersion = cfg.minSupportedVersion
+        disabledAddonsText = cfg.disabledAddons.joinToString("\n")
+        dynamicConfigText = cfg.dynamicConfig.entries.joinToString("\n") { "${it.key}=${it.value}" }
         if (cfg.presetAddons.isNotEmpty()) {
             addonManifestUrls = cfg.presetAddons.joinToString("\n")
         }
@@ -204,14 +227,14 @@ fun AdminLicenseScreen(
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
                         Text(
-                            text = "Admin Control Hub",
+                            text = stringResource(Res.string.settings_admin_control_hub_title),
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
                             ),
                         )
                         Text(
-                            text = "KhaYin Media Server Operations",
+                            text = stringResource(Res.string.settings_admin_media_server_operations),
                             style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFF888899)),
                         )
                     }
@@ -425,23 +448,89 @@ fun AdminLicenseScreen(
                                 }
                             }
                         },
+                        enableDownloads = enableDownloads,
+                        onEnableDownloadsToggle = { toggle ->
+                            enableDownloads = toggle
+                            scope.launch {
+                                AdminControlRepository.updateConfig(
+                                    AdminControlRepository.config.value.copy(enableDownloads = toggle),
+                                )
+                                serviceStatusMessage = "Live feature 'Downloads' set to $toggle."
+                            }
+                        },
+                        enablePlugins = enablePlugins,
+                        onEnablePluginsToggle = { toggle ->
+                            enablePlugins = toggle
+                            scope.launch {
+                                AdminControlRepository.updateConfig(
+                                    AdminControlRepository.config.value.copy(enablePlugins = toggle),
+                                )
+                                serviceStatusMessage = "Live feature 'Addons/Plugins' set to $toggle."
+                            }
+                        },
+                        enableP2p = enableP2p,
+                        onEnableP2pToggle = { toggle ->
+                            enableP2p = toggle
+                            scope.launch {
+                                AdminControlRepository.updateConfig(
+                                    AdminControlRepository.config.value.copy(enableP2p = toggle),
+                                )
+                                serviceStatusMessage = "Live feature 'P2P Torrents' set to $toggle."
+                            }
+                        },
+                        enableDebrid = enableDebrid,
+                        onEnableDebridToggle = { toggle ->
+                            enableDebrid = toggle
+                            scope.launch {
+                                AdminControlRepository.updateConfig(
+                                    AdminControlRepository.config.value.copy(enableDebrid = toggle),
+                                )
+                                serviceStatusMessage = "Live feature 'Debrid' set to $toggle."
+                            }
+                        },
+                        enableTrailerPlayback = enableTrailerPlayback,
+                        onEnableTrailerPlaybackToggle = { toggle ->
+                            enableTrailerPlayback = toggle
+                            scope.launch {
+                                AdminControlRepository.updateConfig(
+                                    AdminControlRepository.config.value.copy(enableTrailerPlayback = toggle),
+                                )
+                                serviceStatusMessage = "Live feature 'Trailers' set to $toggle."
+                            }
+                        },
+                        minSupportedVersion = minSupportedVersion,
+                        onMinSupportedVersionChange = { minSupportedVersion = it },
+                        disabledAddonsText = disabledAddonsText,
+                        onDisabledAddonsTextChange = { disabledAddonsText = it },
+                        dynamicConfigText = dynamicConfigText,
+                        onDynamicConfigTextChange = { dynamicConfigText = it },
                         broadcastMessage = broadcastAlertMessage,
                         onBroadcastMessageChange = { broadcastAlertMessage = it },
+                        broadcastSeverity = broadcastSeverity,
+                        onBroadcastSeverityChange = { broadcastSeverity = it },
                         statusMessage = serviceStatusMessage,
                         onPublishBroadcast = {
                             scope.launch {
                                 val ts = if (broadcastAlertMessage.isNotBlank()) com.nuvio.app.features.watchprogress.WatchProgressClock.nowEpochMs() else 0L
+                                val disabledList = disabledAddonsText.lines().map { it.trim() }.filter { it.isNotBlank() }
+                                val parsedDynamicConfig = dynamicConfigText.lines()
+                                    .map { it.trim() }
+                                    .filter { it.contains("=") }
+                                    .associate { line ->
+                                        val parts = line.split("=", limit = 2)
+                                        parts[0].trim() to parts[1].trim()
+                                    }
                                 AdminControlRepository.updateConfig(
                                     AdminControlRepository.config.value.copy(
                                         broadcastMessage = broadcastAlertMessage.trim(),
+                                        broadcastSeverity = broadcastSeverity,
                                         broadcastTimestamp = ts,
+                                        minSupportedVersion = minSupportedVersion.trim(),
+                                        disabledAddons = disabledList,
+                                        dynamicConfig = parsedDynamicConfig,
                                     ),
                                 )
-                                serviceStatusMessage = if (broadcastAlertMessage.isNotBlank()) {
-                                    "Broadcast alert published to all active client apps."
-                                } else {
-                                    "Broadcast alert cleared."
-                                }
+                                serviceStatusMessage = "Live configuration published to all active client devices!"
                             }
                         },
                         onCleanLegacyDb = {
@@ -976,155 +1065,411 @@ private fun ServiceControlsTabContent(
     onMaintenanceToggle: (Boolean) -> Unit,
     streamingDisabled: Boolean,
     onStreamingDisabledToggle: (Boolean) -> Unit,
+    enableDownloads: Boolean,
+    onEnableDownloadsToggle: (Boolean) -> Unit,
+    enablePlugins: Boolean,
+    onEnablePluginsToggle: (Boolean) -> Unit,
+    enableP2p: Boolean,
+    onEnableP2pToggle: (Boolean) -> Unit,
+    enableDebrid: Boolean,
+    onEnableDebridToggle: (Boolean) -> Unit,
+    enableTrailerPlayback: Boolean,
+    onEnableTrailerPlaybackToggle: (Boolean) -> Unit,
+    minSupportedVersion: String,
+    onMinSupportedVersionChange: (String) -> Unit,
+    disabledAddonsText: String,
+    onDisabledAddonsTextChange: (String) -> Unit,
+    dynamicConfigText: String,
+    onDynamicConfigTextChange: (String) -> Unit,
     broadcastMessage: String,
     onBroadcastMessageChange: (String) -> Unit,
+    broadcastSeverity: String,
+    onBroadcastSeverityChange: (String) -> Unit,
     statusMessage: String?,
     onPublishBroadcast: () -> Unit,
     onCleanLegacyDb: () -> Unit,
 ) {
-    Column(
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        // Toggle switches
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color(0xFF16161E))
-                .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
-                .padding(20.dp),
-        ) {
-            Text("SERVICE AVAILABILITY & TOGGLES", style = MaterialTheme.typography.labelMedium.copy(color = Color(0xFF00E699), fontWeight = FontWeight.Bold))
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Maintenance Mode (Emergency Killswitch)", style = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold))
-                    Text("Temporarily freezes client apps with a maintenance notice", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
-                }
-                Switch(
-                    checked = maintenanceMode,
-                    onCheckedChange = onMaintenanceToggle,
-                    colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFFFF5252)),
-                )
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Disable Media Streaming", style = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold))
-                    Text("Blocks stream link fetching during scheduled server upgrades", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
-                }
-                Switch(
-                    checked = streamingDisabled,
-                    onCheckedChange = onStreamingDisabledToggle,
-                    colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFFFFAA00)),
-                )
-            }
-        }
-
-        // Broadcast Alert Card
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color(0xFF16161E))
-                .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
-                .padding(20.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(imageVector = Icons.Rounded.Campaign, contentDescription = null, tint = Color(0xFF00E699), modifier = Modifier.size(24.dp))
-                Spacer(modifier = Modifier.width(10.dp))
-                Text("EMERGENCY BROADCAST MESSAGE", style = MaterialTheme.typography.titleSmall.copy(color = Color.White, fontWeight = FontWeight.Bold))
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Row(
+        item {
+            // Live Operational Killswitches
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF0F0F16))
-                    .border(1.dp, Color(0xFF323244), RoundedCornerShape(8.dp))
-                    .padding(12.dp),
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF16161E))
+                    .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
+                    .padding(20.dp),
             ) {
-                BasicTextField(
-                    value = broadcastMessage,
-                    onValueChange = onBroadcastMessageChange,
+                Text("EMERGENCY KILLSWITCHES & SERVICE ACCESS", style = MaterialTheme.typography.labelMedium.copy(color = Color(0xFF00E699), fontWeight = FontWeight.Bold))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
-                    cursorBrush = SolidColor(Color(0xFF00E699)),
-                    decorationBox = { inner ->
-                        if (broadcastMessage.isEmpty()) Text("Type alert message to show on client apps...", color = Color(0xFF555566), fontSize = 13.sp)
-                        inner()
-                    },
-                )
-            }
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Maintenance Mode", style = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold))
+                        Text("Temporarily freezes client apps with a maintenance notice", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
+                    }
+                    Switch(
+                        checked = maintenanceMode,
+                        onCheckedChange = onMaintenanceToggle,
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFFFF5252)),
+                    )
+                }
 
-            statusMessage?.let { msg ->
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(text = msg, style = TextStyle(color = Color(0xFF00E699), fontSize = 12.sp))
-            }
+                Spacer(modifier = Modifier.height(14.dp))
 
-            Spacer(modifier = Modifier.height(14.dp))
-
-            Button(
-                onClick = onPublishBroadcast,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(40.dp),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E699), contentColor = Color.Black),
-            ) {
-                Text("Publish Broadcast", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Disable Media Streaming", style = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold))
+                        Text("Blocks stream link fetching during scheduled server upgrades", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
+                    }
+                    Switch(
+                        checked = streamingDisabled,
+                        onCheckedChange = onStreamingDisabledToggle,
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFFFFAA00)),
+                    )
+                }
             }
         }
 
-        // Database & System Cleanup Card
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color(0xFF16161E))
-                .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
-                .padding(20.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(imageVector = Icons.Rounded.DeleteOutline, contentDescription = null, tint = Color(0xFF3399FF), modifier = Modifier.size(24.dp))
-                Spacer(modifier = Modifier.width(10.dp))
-                Text("DATABASE CLEANUP & DEDICATED STORAGE", style = MaterialTheme.typography.titleSmall.copy(color = Color.White, fontWeight = FontWeight.Bold))
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Text(
-                text = "System settings now use a dedicated 'app_settings' table. Clean legacy SYSTEM_CONFIG rows from the licenses table to keep your database organized.",
-                style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp),
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            Button(
-                onClick = onCleanLegacyDb,
+        item {
+            // Live Remote Feature Flags
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(40.dp),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222230), contentColor = Color(0xFF3399FF)),
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF16161E))
+                    .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
+                    .padding(20.dp),
             ) {
-                Text("Clean Legacy Config from Licenses Table", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text("LIVE FEATURE FLAGS (OVER-THE-AIR TOGGLES)", style = MaterialTheme.typography.labelMedium.copy(color = Color(0xFF00E699), fontWeight = FontWeight.Bold))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Downloads
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Offline Downloads Feature", style = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold))
+                        Text("Enable/disable local offline video downloading", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
+                    }
+                    Switch(
+                        checked = enableDownloads,
+                        onCheckedChange = onEnableDownloadsToggle,
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFF00E699)),
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Addons / Plugins
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("3rd-Party Addons & Plugins", style = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold))
+                        Text("Allow client devices to install community addons", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
+                    }
+                    Switch(
+                        checked = enablePlugins,
+                        onCheckedChange = onEnablePluginsToggle,
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFF00E699)),
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // P2P / Torrents
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("P2P Torrent Engine", style = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold))
+                        Text("Enable direct peer-to-peer torrent streaming engine", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
+                    }
+                    Switch(
+                        checked = enableP2p,
+                        onCheckedChange = onEnableP2pToggle,
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFF00E699)),
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Debrid
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Debrid Cloud Resolvers", style = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold))
+                        Text("Allow premium Real-Debrid/Torbox caching integrations", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
+                    }
+                    Switch(
+                        checked = enableDebrid,
+                        onCheckedChange = onEnableDebridToggle,
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFF00E699)),
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Trailers
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("In-App Trailer Playback", style = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold))
+                        Text("Allow YouTube and inline trailer preview players", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
+                    }
+                    Switch(
+                        checked = enableTrailerPlayback,
+                        onCheckedChange = onEnableTrailerPlaybackToggle,
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFF00E699)),
+                    )
+                }
+            }
+        }
+
+        item {
+            // Live Broadcast & Remote Announcements
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF16161E))
+                    .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
+                    .padding(20.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(imageVector = Icons.Rounded.Campaign, contentDescription = null, tint = Color(0xFF00E699), modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text("LIVE BROADCAST NOTICE BANNER", style = MaterialTheme.typography.titleSmall.copy(color = Color.White, fontWeight = FontWeight.Bold))
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF0F0F16))
+                        .border(1.dp, Color(0xFF323244), RoundedCornerShape(8.dp))
+                        .padding(12.dp),
+                ) {
+                    BasicTextField(
+                        value = broadcastMessage,
+                        onValueChange = onBroadcastMessageChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
+                        cursorBrush = SolidColor(Color(0xFF00E699)),
+                        decorationBox = { inner ->
+                            if (broadcastMessage.isEmpty()) Text("Type announcement to broadcast live on all apps...", color = Color(0xFF555566), fontSize = 13.sp)
+                            inner()
+                        },
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Severity Selection
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    listOf("INFO" to Color(0xFF3399FF), "WARNING" to Color(0xFFFFAA00), "CRITICAL" to Color(0xFFFF5252), "PROMO" to Color(0xFF00E699)).forEach { (sev, col) ->
+                        val isSelected = broadcastSeverity.equals(sev, ignoreCase = true)
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isSelected) col.copy(alpha = 0.25f) else Color(0xFF0F0F16))
+                                .border(1.dp, if (isSelected) col else Color(0xFF262633), RoundedCornerShape(6.dp))
+                                .clickable { onBroadcastSeverityChange(sev) }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        ) {
+                            Text(sev, style = TextStyle(color = if (isSelected) col else Color(0xFF888899), fontSize = 11.sp, fontWeight = FontWeight.Bold))
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            // Version Gating & Broken Addon Blacklist
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF16161E))
+                    .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
+                    .padding(20.dp),
+            ) {
+                Text("VERSION GATING & BLACKLISTED ADDONS", style = MaterialTheme.typography.labelMedium.copy(color = Color(0xFF00E699), fontWeight = FontWeight.Bold))
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text("Minimum Supported App Version (e.g. 5.2):", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF0F0F16))
+                        .border(1.dp, Color(0xFF323244), RoundedCornerShape(8.dp))
+                        .padding(10.dp),
+                ) {
+                    BasicTextField(
+                        value = minSupportedVersion,
+                        onValueChange = onMinSupportedVersionChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
+                        cursorBrush = SolidColor(Color(0xFF00E699)),
+                        decorationBox = { inner ->
+                            if (minSupportedVersion.isEmpty()) Text("Leave blank for all versions...", color = Color(0xFF555566), fontSize = 13.sp)
+                            inner()
+                        },
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text("Blacklisted Addons (One URL per line to block instantly):", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF0F0F16))
+                        .border(1.dp, Color(0xFF323244), RoundedCornerShape(8.dp))
+                        .padding(10.dp),
+                ) {
+                    BasicTextField(
+                        value = disabledAddonsText,
+                        onValueChange = onDisabledAddonsTextChange,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp),
+                        textStyle = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace),
+                        cursorBrush = SolidColor(Color(0xFF00E699)),
+                        decorationBox = { inner ->
+                            if (disabledAddonsText.isEmpty()) Text("e.g. https://malicious-addon.com/manifest.json", color = Color(0xFF555566), fontSize = 12.sp)
+                            inner()
+                        },
+                    )
+                }
+            }
+        }
+
+        item {
+            // Live Dynamic Key-Value Store (Extensible Config)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF16161E))
+                    .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
+                    .padding(20.dp),
+            ) {
+                Text("DYNAMIC KEY-VALUE OVERRIDES (NO REDEPLOY)", style = MaterialTheme.typography.labelMedium.copy(color = Color(0xFF00E699), fontWeight = FontWeight.Bold))
+                Spacer(modifier = Modifier.height(6.dp))
+                Text("Format: key=value (one per line). Overrides parameters live across all apps.", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF0F0F16))
+                        .border(1.dp, Color(0xFF323244), RoundedCornerShape(8.dp))
+                        .padding(10.dp),
+                ) {
+                    BasicTextField(
+                        value = dynamicConfigText,
+                        onValueChange = onDynamicConfigTextChange,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 70.dp),
+                        textStyle = TextStyle(color = Color(0xFF00E699), fontSize = 12.sp, fontFamily = FontFamily.Monospace),
+                        cursorBrush = SolidColor(Color(0xFF00E699)),
+                        decorationBox = { inner ->
+                            if (dynamicConfigText.isEmpty()) Text("stream_timeout=15\ncustom_proxy_url=https://proxy.example.com", color = Color(0xFF555566), fontSize = 12.sp)
+                            inner()
+                        },
+                    )
+                }
+
+                statusMessage?.let { msg ->
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(text = msg, style = TextStyle(color = Color(0xFF00E699), fontSize = 12.sp))
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(
+                    onClick = onPublishBroadcast,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E699), contentColor = Color.Black),
+                ) {
+                    Text("Publish Live Configuration to All Devices", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+            }
+        }
+
+        item {
+            // Database & System Cleanup Card
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF16161E))
+                    .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
+                    .padding(20.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(imageVector = Icons.Rounded.DeleteOutline, contentDescription = null, tint = Color(0xFF3399FF), modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text("DATABASE CLEANUP & DEDICATED STORAGE", style = MaterialTheme.typography.titleSmall.copy(color = Color.White, fontWeight = FontWeight.Bold))
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "System settings now use a dedicated 'app_settings' table. Clean legacy SYSTEM_CONFIG rows from the licenses table to keep your database organized.",
+                    style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp),
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Button(
+                    onClick = onCleanLegacyDb,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(40.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222230), contentColor = Color(0xFF3399FF)),
+                ) {
+                    Text("Clean Legacy Config from Licenses Table", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                }
             }
         }
     }

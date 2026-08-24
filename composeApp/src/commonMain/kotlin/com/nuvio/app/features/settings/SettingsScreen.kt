@@ -88,6 +88,8 @@ import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepositor
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesUiState
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.compose_settings_page_root
+import nuvio.composeapp.generated.resources.settings_subscription_title
+import nuvio.composeapp.generated.resources.settings_subscription_and_license
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -909,7 +911,7 @@ private fun TabletSettingsScreen(
                 Spacer(modifier = Modifier.height(10.dp))
                 SettingsCategory.entries.forEach { category ->
                     val label = if (category == SettingsCategory.Account && !AppFeaturePolicy.isAdminClient) {
-                        "Subscription"
+                        stringResource(Res.string.settings_subscription_title)
                     } else {
                         stringResource(category.labelRes)
                     }
@@ -1011,7 +1013,7 @@ private fun TabletSettingsScreen(
                             title = if (page == SettingsPage.Root) {
                                 if (settingsSearchQuery.isBlank()) {
                                     if (activeCategory == SettingsCategory.Account && !AppFeaturePolicy.isAdminClient) {
-                                        "Subscription"
+                                        stringResource(Res.string.settings_subscription_title)
                                     } else {
                                         stringResource(activeCategory.labelRes)
                                     }
@@ -1020,7 +1022,7 @@ private fun TabletSettingsScreen(
                                 }
                             } else {
                                 if (page == SettingsPage.Account && !AppFeaturePolicy.isAdminClient) {
-                                    "Subscription & License"
+                                    stringResource(Res.string.settings_subscription_and_license)
                                 } else {
                                     stringResource(page.titleRes)
                                 }

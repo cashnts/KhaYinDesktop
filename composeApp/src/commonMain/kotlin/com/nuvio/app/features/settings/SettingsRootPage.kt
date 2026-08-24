@@ -55,9 +55,15 @@ import nuvio.composeapp.generated.resources.compose_settings_root_notifications_
 import nuvio.composeapp.generated.resources.compose_settings_root_privacy_policy_description
 import nuvio.composeapp.generated.resources.compose_settings_root_switch_profile_description
 import nuvio.composeapp.generated.resources.compose_settings_root_switch_profile_title
+import nuvio.composeapp.generated.resources.compose_settings_page_tracking
 import nuvio.composeapp.generated.resources.compose_settings_root_tracking_description
 import nuvio.composeapp.generated.resources.compose_settings_root_about_section
 import nuvio.composeapp.generated.resources.compose_settings_root_account_section
+import nuvio.composeapp.generated.resources.settings_admin_control_hub_desc
+import nuvio.composeapp.generated.resources.settings_admin_control_hub_title
+import nuvio.composeapp.generated.resources.settings_subscription_and_license
+import nuvio.composeapp.generated.resources.settings_subscription_root_row_desc
+import nuvio.composeapp.generated.resources.settings_subscription_title
 import nuvio.composeapp.generated.resources.compose_settings_root_advanced_description
 import nuvio.composeapp.generated.resources.compose_settings_root_advanced_section
 import nuvio.composeapp.generated.resources.compose_settings_page_content_discovery
@@ -109,7 +115,7 @@ internal fun LazyListScope.settingsRootContent(
                 title = if (AppFeaturePolicy.isAdminClient) {
                     stringResource(Res.string.compose_settings_root_account_section)
                 } else {
-                    "Subscription"
+                    stringResource(Res.string.settings_subscription_title)
                 },
                 isTablet = isTablet,
             ) {
@@ -125,8 +131,8 @@ internal fun LazyListScope.settingsRootContent(
                         if (onAdminHubClick != null) {
                             SettingsGroupDivider(isTablet = isTablet)
                             SettingsNavigationRow(
-                                title = "Admin Control Hub",
-                                description = "License keys, mass addon push, broadcast notices, service controls",
+                                title = stringResource(Res.string.settings_admin_control_hub_title),
+                                description = stringResource(Res.string.settings_admin_control_hub_desc),
                                 icon = Icons.Rounded.AdminPanelSettings,
                                 isTablet = isTablet,
                                 onClick = onAdminHubClick,
@@ -154,8 +160,8 @@ internal fun LazyListScope.settingsRootContent(
                         }
                     } else {
                         SettingsNavigationRow(
-                            title = "Subscription & License",
-                            description = "Active plan, expiry date, and license status",
+                            title = stringResource(Res.string.settings_subscription_and_license),
+                            description = stringResource(Res.string.settings_subscription_root_row_desc),
                             icon = Icons.Rounded.AccountCircle,
                             isTablet = isTablet,
                             onClick = onAccountClick,

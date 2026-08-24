@@ -3,10 +3,22 @@
     <cache-path
         name="nuvio_updates"
         path="updates/" />
+    <external-cache-path
+        name="nuvio_ext_updates"
+        path="updates/" />
+    <files-path
+        name="nuvio_files_updates"
+        path="updates/" />
+    <external-files-path
+        name="nuvio_ext_files_updates"
+        path="updates/" />
     <cache-path
         name="nuvio_subtitles"
         path="subtitles/" />
     <files-path
         name="nuvio_downloads"
+        path="downloads/" />
+    <external-files-path
+        name="nuvio_ext_downloads"
         path="downloads/" />
 </paths>

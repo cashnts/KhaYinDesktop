@@ -21,11 +21,40 @@ import kotlinx.serialization.json.Json
 
 @Serializable
 data class SystemServiceConfig(
+    // 1. Operational & Emergency Controls
     val maintenanceMode: Boolean = false,
+    val maintenanceNotice: String = "",
     val streamingDisabled: Boolean = false,
+    val streamingDisabledNotice: String = "",
+
+    // 2. Global Announcements / Live Notice Banner
+    val broadcastTitle: String = "",
     val broadcastMessage: String = "",
+    val broadcastSeverity: String = "INFO", // "INFO", "WARNING", "CRITICAL", "PROMO"
     val broadcastTimestamp: Long = 0L,
+    val broadcastDismissable: Boolean = true,
+    val broadcastActionUrl: String = "",
+    val broadcastActionLabel: String = "",
+
+    // 3. Dynamic Feature Flags (Live toggles without redeploying)
+    val enableDownloads: Boolean = true,
+    val enablePlugins: Boolean = true,
+    val enableP2p: Boolean = true,
+    val enableDebrid: Boolean = true,
+    val enableTrailerPlayback: Boolean = true,
+    val enableSimklTracking: Boolean = true,
+    val enableTraktTracking: Boolean = true,
+
+    // 4. Over-The-Air Addon Management
     val presetAddons: List<String> = emptyList(),
+    val disabledAddons: List<String> = emptyList(), // Instant remote blacklist for broken/malicious addons
+
+    // 5. Version Gating
+    val minSupportedVersion: String = "",
+    val forceUpdateUrl: String = "",
+
+    // 6. Extensible Live Key-Value Parameters (No redeploy needed)
+    val dynamicConfig: Map<String, String> = emptyMap(),
 )
 
 @Serializable
@@ -56,6 +85,27 @@ object AdminControlRepository {
 
     private val _dismissedBroadcastTimestamp = MutableStateFlow(0L)
     val dismissedBroadcastTimestamp: StateFlow<Long> = _dismissedBroadcastTimestamp.asStateFlow()
+
+    fun isAddonBlocked(manifestOrTransportUrl: String): Boolean {
+        if (manifestOrTransportUrl.isBlank()) return false
+        val normalized = manifestOrTransportUrl.trim().lowercase()
+        return _config.value.disabledAddons.any { disabled ->
+            val d = disabled.trim().lowercase()
+            d.isNotBlank() && (normalized.contains(d) || d.contains(normalized))
+        }
+    }
+
+    fun getString(key: String, defaultValue: String = ""): String {
+        return _config.value.dynamicConfig[key]?.takeIf { it.isNotBlank() } ?: defaultValue
+    }
+
+    fun getBoolean(key: String, defaultValue: Boolean = false): Boolean {
+        return _config.value.dynamicConfig[key]?.toBooleanStrictOrNull() ?: defaultValue
+    }
+
+    fun getInt(key: String, defaultValue: Int = 0): Int {
+        return _config.value.dynamicConfig[key]?.toIntOrNull() ?: defaultValue
+    }
 
     fun dismissBroadcast(timestamp: Long) {
         val target = if (timestamp > 0L) timestamp else _config.value.broadcastTimestamp

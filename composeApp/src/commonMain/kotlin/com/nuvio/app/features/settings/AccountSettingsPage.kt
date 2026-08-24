@@ -61,6 +61,47 @@ import nuvio.composeapp.generated.resources.settings_account_sign_out_confirm_ti
 import nuvio.composeapp.generated.resources.settings_account_status
 import nuvio.composeapp.generated.resources.settings_account_status_anonymous
 import nuvio.composeapp.generated.resources.settings_account_status_signed_in
+import nuvio.composeapp.generated.resources.settings_subscription_active_plan_badge
+import nuvio.composeapp.generated.resources.settings_subscription_and_license
+import nuvio.composeapp.generated.resources.settings_subscription_copy_license_key
+import nuvio.composeapp.generated.resources.settings_subscription_customize_profile
+import nuvio.composeapp.generated.resources.settings_subscription_devices
+import nuvio.composeapp.generated.resources.settings_subscription_devices_active
+import nuvio.composeapp.generated.resources.settings_subscription_expires_on
+import nuvio.composeapp.generated.resources.settings_subscription_feature_4k_hdr
+import nuvio.composeapp.generated.resources.settings_subscription_feature_early_access
+import nuvio.composeapp.generated.resources.settings_subscription_feature_en_zh_subs
+import nuvio.composeapp.generated.resources.settings_subscription_feature_everything_in_standard
+import nuvio.composeapp.generated.resources.settings_subscription_feature_exclusive_mm_subs
+import nuvio.composeapp.generated.resources.settings_subscription_feature_ondemand_streaming
+import nuvio.composeapp.generated.resources.settings_subscription_feature_priority_support
+import nuvio.composeapp.generated.resources.settings_subscription_feature_standard_support
+import nuvio.composeapp.generated.resources.settings_subscription_feature_unlimited_downloads
+import nuvio.composeapp.generated.resources.settings_subscription_feature_up_to_3_devices
+import nuvio.composeapp.generated.resources.settings_subscription_feature_up_to_5_downloads
+import nuvio.composeapp.generated.resources.settings_subscription_feature_up_to_6_devices
+import nuvio.composeapp.generated.resources.settings_subscription_license_key
+import nuvio.composeapp.generated.resources.settings_subscription_licensed_to
+import nuvio.composeapp.generated.resources.settings_subscription_lifetime_access
+import nuvio.composeapp.generated.resources.settings_subscription_logout
+import nuvio.composeapp.generated.resources.settings_subscription_logout_confirm_message
+import nuvio.composeapp.generated.resources.settings_subscription_member_default
+import nuvio.composeapp.generated.resources.settings_subscription_no_license
+import nuvio.composeapp.generated.resources.settings_subscription_package_tier
+import nuvio.composeapp.generated.resources.settings_subscription_plan_plus
+import nuvio.composeapp.generated.resources.settings_subscription_plan_standard
+import nuvio.composeapp.generated.resources.settings_subscription_profile_appearance_desc
+import nuvio.composeapp.generated.resources.settings_subscription_profile_appearance_title
+import nuvio.composeapp.generated.resources.settings_subscription_profile_name
+import nuvio.composeapp.generated.resources.settings_subscription_recommended_badge
+import nuvio.composeapp.generated.resources.settings_subscription_status
+import nuvio.composeapp.generated.resources.settings_subscription_status_active
+import nuvio.composeapp.generated.resources.settings_subscription_status_expired
+import nuvio.composeapp.generated.resources.settings_subscription_status_revoked
+import nuvio.composeapp.generated.resources.settings_subscription_tier_plus
+import nuvio.composeapp.generated.resources.settings_subscription_tier_standard
+import nuvio.composeapp.generated.resources.settings_subscription_tiers_desc
+import nuvio.composeapp.generated.resources.settings_subscription_tiers_title
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -110,27 +151,27 @@ private fun SubscriptionSettingsBody(
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         NuvioSurfaceCard {
             Text(
-                text = "Profile & Appearance",
+                text = stringResource(Res.string.settings_subscription_profile_appearance_title),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "Personalize your profile display name, avatar icon, and custom background.",
+                text = stringResource(Res.string.settings_subscription_profile_appearance_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(modifier = Modifier.height(14.dp))
             AccountInfoRow(
-                label = "Profile Name",
-                value = activeProfile?.name?.takeIf { it.isNotBlank() } ?: licenseInfo?.customerName ?: "Member",
+                label = stringResource(Res.string.settings_subscription_profile_name),
+                value = activeProfile?.name?.takeIf { it.isNotBlank() } ?: licenseInfo?.customerName ?: stringResource(Res.string.settings_subscription_member_default),
                 valueColor = MaterialTheme.colorScheme.primary,
             )
             if (onCustomizeProfile != null) {
                 Spacer(modifier = Modifier.height(14.dp))
                 NuvioPrimaryButton(
-                    text = "Customize Profile",
+                    text = stringResource(Res.string.settings_subscription_customize_profile),
                     onClick = onCustomizeProfile,
                 )
             }
@@ -138,7 +179,7 @@ private fun SubscriptionSettingsBody(
 
         NuvioSurfaceCard {
             Text(
-                text = "Subscription & License",
+                text = stringResource(Res.string.settings_subscription_and_license),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.SemiBold,
@@ -146,46 +187,41 @@ private fun SubscriptionSettingsBody(
             Spacer(modifier = Modifier.height(14.dp))
 
             if (licenseInfo != null) {
-                val statusText = when {
-                    licenseInfo.status.equals("revoked", ignoreCase = true) -> "Revoked"
-                    licenseInfo.status.equals("active", ignoreCase = true) -> "Active"
-                    else -> "Expired"
-                }
-                val statusColor = when (statusText) {
-                    "Active" -> MaterialTheme.colorScheme.primary
-                    "Revoked" -> MaterialTheme.colorScheme.error
-                    else -> Color(0xFFFFB300)
+                val (statusText, statusColor) = when {
+                    licenseInfo.status.equals("revoked", ignoreCase = true) -> stringResource(Res.string.settings_subscription_status_revoked) to MaterialTheme.colorScheme.error
+                    licenseInfo.status.equals("active", ignoreCase = true) -> stringResource(Res.string.settings_subscription_status_active) to MaterialTheme.colorScheme.primary
+                    else -> stringResource(Res.string.settings_subscription_status_expired) to Color(0xFFFFB300)
                 }
                 AccountInfoRow(
-                    label = "Status",
+                    label = stringResource(Res.string.settings_subscription_status),
                     value = statusText,
                     valueColor = statusColor,
                 )
                 Spacer(modifier = Modifier.height(10.dp))
 
-                val tierText = if (licenseInfo.isPlus) "Plus" else "Standard"
+                val tierText = if (licenseInfo.isPlus) stringResource(Res.string.settings_subscription_tier_plus) else stringResource(Res.string.settings_subscription_tier_standard)
                 AccountInfoRow(
-                    label = "Package / Tier",
+                    label = stringResource(Res.string.settings_subscription_package_tier),
                     value = tierText,
                     valueColor = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(modifier = Modifier.height(10.dp))
 
                 val expiryText = if (licenseInfo.expiresAt.isNullOrBlank()) {
-                    "Lifetime Access (No Expiration)"
+                    stringResource(Res.string.settings_subscription_lifetime_access)
                 } else {
                     licenseInfo.expiresAt.take(10)
                 }
                 AccountInfoRow(
-                    label = "Expires On",
+                    label = stringResource(Res.string.settings_subscription_expires_on),
                     value = expiryText,
                     valueColor = if (licenseInfo.expiresAt.isNullOrBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(modifier = Modifier.height(10.dp))
 
                 AccountInfoRow(
-                    label = "Devices",
-                    value = "${licenseInfo.activeDevices} / ${licenseInfo.maxDevices} Active",
+                    label = stringResource(Res.string.settings_subscription_devices),
+                    value = stringResource(Res.string.settings_subscription_devices_active, licenseInfo.activeDevices, licenseInfo.maxDevices),
                 )
 
                 val activeProfileName = activeProfile?.name?.takeIf { it.isNotBlank() }
@@ -193,7 +229,7 @@ private fun SubscriptionSettingsBody(
                 if (licensedToName != null) {
                     Spacer(modifier = Modifier.height(10.dp))
                     AccountInfoRow(
-                        label = "Licensed To",
+                        label = stringResource(Res.string.settings_subscription_licensed_to),
                         value = licensedToName,
                     )
                 }
@@ -206,7 +242,7 @@ private fun SubscriptionSettingsBody(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "License Key",
+                            text = stringResource(Res.string.settings_subscription_license_key),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -225,14 +261,14 @@ private fun SubscriptionSettingsBody(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.ContentCopy,
-                            contentDescription = "Copy License Key",
+                            contentDescription = stringResource(Res.string.settings_subscription_copy_license_key),
                             tint = if (copiedKey) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
             } else {
                 Text(
-                    text = "No active license attached.",
+                    text = stringResource(Res.string.settings_subscription_no_license),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -245,16 +281,16 @@ private fun SubscriptionSettingsBody(
         )
 
         NuvioPrimaryButton(
-            text = "Log Out",
+            text = stringResource(Res.string.settings_subscription_logout),
             onClick = { showDeactivateConfirm = true },
         )
     }
 
     NuvioStatusModal(
-        title = "Log Out",
-        message = "Are you sure you want to log out from KhaYin on this device? You can re-enter your license key at any time.",
+        title = stringResource(Res.string.settings_subscription_logout),
+        message = stringResource(Res.string.settings_subscription_logout_confirm_message),
         isVisible = showDeactivateConfirm,
-        confirmText = "Log Out",
+        confirmText = stringResource(Res.string.settings_subscription_logout),
         dismissText = stringResource(Res.string.action_cancel),
         onConfirm = {
             showDeactivateConfirm = false
@@ -459,16 +495,37 @@ private fun SubscriptionPlansCard(
     isPlusActive: Boolean,
     isTablet: Boolean,
 ) {
+    val standardTitle = stringResource(Res.string.settings_subscription_plan_standard)
+    val plusTitle = stringResource(Res.string.settings_subscription_plan_plus)
+    val recommendedBadge = stringResource(Res.string.settings_subscription_recommended_badge)
+
+    val standardFeatures = listOf(
+        stringResource(Res.string.settings_subscription_feature_en_zh_subs) to true,
+        stringResource(Res.string.settings_subscription_feature_ondemand_streaming) to true,
+        stringResource(Res.string.settings_subscription_feature_4k_hdr) to true,
+        stringResource(Res.string.settings_subscription_feature_standard_support) to true,
+        stringResource(Res.string.settings_subscription_feature_up_to_3_devices) to true,
+        stringResource(Res.string.settings_subscription_feature_up_to_5_downloads) to true,
+    )
+    val plusFeatures = listOf(
+        stringResource(Res.string.settings_subscription_feature_everything_in_standard) to true,
+        stringResource(Res.string.settings_subscription_feature_exclusive_mm_subs) to true,
+        stringResource(Res.string.settings_subscription_feature_priority_support) to true,
+        stringResource(Res.string.settings_subscription_feature_up_to_6_devices) to true,
+        stringResource(Res.string.settings_subscription_feature_unlimited_downloads) to true,
+        stringResource(Res.string.settings_subscription_feature_early_access) to true,
+    )
+
     NuvioSurfaceCard {
         Text(
-            text = "Subscription Tiers",
+            text = stringResource(Res.string.settings_subscription_tiers_title),
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Features and privileges available across subscription plans",
+            text = stringResource(Res.string.settings_subscription_tiers_desc),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -483,67 +540,39 @@ private fun SubscriptionPlansCard(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 PlanTierCard(
-                    title = "STANDARD",
+                    title = standardTitle,
                     isCurrentPlan = !isPlusActive,
                     accentColor = Color(0xFF9E9EA7),
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight(),
-                    features = listOf(
-                        "English & Chinese subtitles" to true,
-                        "On-demand streaming" to true,
-                        "4K HDR playback" to true,
-                        "Standard customer support" to true,
-                        "Up to 3 devices" to true,
-                        "Up to 5 offline downloads" to true,
-                    ),
+                    features = standardFeatures,
                 )
                 PlanTierCard(
-                    title = "PLUS",
+                    title = plusTitle,
                     isCurrentPlan = isPlusActive,
                     accentColor = MaterialTheme.colorScheme.primary,
-                    highlightBadge = "RECOMMENDED",
+                    highlightBadge = recommendedBadge,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight(),
-                    features = listOf(
-                        "Everything in Standard" to true,
-                        "Exclusive Myanmar (Burmese) subtitles" to true,
-                        "Priority 24/7 customer support" to true,
-                        "Up to 6 devices" to true,
-                        "Unlimited offline downloads" to true,
-                        "Early access to new features" to true,
-                    ),
+                    features = plusFeatures,
                 )
             }
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 PlanTierCard(
-                    title = "STANDARD",
+                    title = standardTitle,
                     isCurrentPlan = !isPlusActive,
                     accentColor = Color(0xFF9E9EA7),
-                    features = listOf(
-                        "English & Chinese subtitles" to true,
-                        "On-demand streaming" to true,
-                        "4K HDR playback" to true,
-                        "Standard customer support" to true,
-                        "Up to 3 devices" to true,
-                        "Up to 5 offline downloads" to true,
-                    ),
+                    features = standardFeatures,
                 )
                 PlanTierCard(
-                    title = "PLUS",
+                    title = plusTitle,
                     isCurrentPlan = isPlusActive,
                     accentColor = MaterialTheme.colorScheme.primary,
-                    highlightBadge = "RECOMMENDED",
-                    features = listOf(
-                        "Everything in Standard" to true,
-                        "Exclusive Myanmar (Burmese) subtitles" to true,
-                        "Priority 24/7 customer support" to true,
-                        "Up to 6 devices" to true,
-                        "Unlimited offline downloads" to true,
-                        "Early access to new features" to true,
-                    ),
+                    highlightBadge = recommendedBadge,
+                    features = plusFeatures,
                 )
             }
         }
@@ -612,7 +641,7 @@ private fun PlanTierCard(
                             .padding(horizontal = 8.dp, vertical = 3.dp),
                     ) {
                         Text(
-                            text = "ACTIVE PLAN",
+                            text = stringResource(Res.string.settings_subscription_active_plan_badge),
                             style = TextStyle(
                                 color = accentColor,
                                 fontSize = 10.sp,
