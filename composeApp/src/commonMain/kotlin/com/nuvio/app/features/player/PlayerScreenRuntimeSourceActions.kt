@@ -258,7 +258,7 @@ internal fun PlayerScreenRuntime.switchToSource(stream: StreamItem) {
         activeSourceIdentityKey = sourceIdentityKey ?: activeSourceIdentityKey
         return
     }
-    val currentPositionMs = playbackSnapshot.positionMs.coerceAtLeast(0L)
+    val currentPositionMs = maxOf(playbackSnapshot.positionMs, activeInitialPositionMs).coerceAtLeast(0L)
     flushWatchProgress()
     stopActiveP2pStream()
     val currentVideoId = activeVideoId
@@ -278,7 +278,10 @@ internal fun PlayerScreenRuntime.switchToSource(stream: StreamItem) {
     currentStreamBingeGroup = stream.behaviorHints.bingeGroup
     activeInitialPositionMs = currentPositionMs
     activeInitialProgressFraction = null
+    initialSeekApplied = false
+    initialLoadCompleted = false
     showSourcesPanel = false
+    showResolutionPanel = false
     controlsVisible = true
 }
 
@@ -407,6 +410,21 @@ internal fun PlayerScreenRuntime.openSourcesPanel() {
         episode = activeEpisodeNumber,
     )
     showSourcesPanel = true
+    showResolutionPanel = false
+    showEpisodesPanel = false
+    controlsVisible = false
+}
+
+internal fun PlayerScreenRuntime.openResolutionPanel() {
+    val vid = activeVideoId ?: return
+    PlayerStreamsRepository.loadSources(
+        type = contentType ?: parentMetaType,
+        videoId = vid,
+        season = activeSeasonNumber,
+        episode = activeEpisodeNumber,
+    )
+    showResolutionPanel = true
+    showSourcesPanel = false
     showEpisodesPanel = false
     controlsVisible = false
 }
@@ -419,6 +437,7 @@ internal fun PlayerScreenRuntime.openEpisodesPanel() {
     }
     showEpisodesPanel = true
     showSourcesPanel = false
+    showResolutionPanel = false
     controlsVisible = false
 }
 
@@ -427,6 +446,7 @@ private data class EpisodeResume(val positionMs: Long, val fraction: Float?)
 private fun PlayerScreenRuntime.resetEpisodePanelAndNextEpisodeState() {
     showNextEpisodeCard = false
     showSourcesPanel = false
+    showResolutionPanel = false
     showEpisodesPanel = false
     episodeStreamsPanelState = EpisodeStreamsPanelState()
     nextEpisodeAutoPlayJob?.cancel()

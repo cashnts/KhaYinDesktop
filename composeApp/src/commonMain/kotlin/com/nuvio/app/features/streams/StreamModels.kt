@@ -88,6 +88,30 @@ data class StreamItem(
     val isCachedDebridTorrentStream: Boolean
         get() = isTorrentStream && debridCacheStatus?.state == StreamDebridCacheState.CACHED
 
+    val isUncachedStream: Boolean
+        get() {
+            if (debridCacheStatus?.state == StreamDebridCacheState.NOT_CACHED) return true
+            val checkTexts = listOfNotNull(name, title, description, url, behaviorHints.filename)
+            return checkTexts.any { text ->
+                text.contains("uncached", ignoreCase = true) ||
+                text.contains("torrent_not_downloaded", ignoreCase = true) ||
+                text.contains("not_downloaded", ignoreCase = true) ||
+                text.contains("not downloaded", ignoreCase = true) ||
+                text.contains("[download]", ignoreCase = true) ||
+                text.contains("downloading", ignoreCase = true) ||
+                text.contains("[dl]", ignoreCase = true) ||
+                text.contains("⏳") ||
+                text.contains("caching in progress", ignoreCase = true) ||
+                text.contains("media caching", ignoreCase = true)
+            }
+        }
+
+    val isLowQualitySource: Boolean
+        get() {
+            val check = listOfNotNull(name, title, description, behaviorHints.filename).joinToString(" ").lowercase()
+            return listOf("camrip", "hdcam", "telesync", "hdts", "screener", "dvdscr").any { check.contains(it) }
+        }
+
     val needsLocalDebridResolve: Boolean
         get() = isTorrentStream && playableDirectUrl == null
 

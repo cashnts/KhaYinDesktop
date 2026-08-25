@@ -1,6 +1,7 @@
 package com.nuvio.app.features.streams
 
 import com.nuvio.app.core.build.AppFeaturePolicy
+import com.nuvio.app.features.player.PlayerResolutionHelper
 
 object StreamAutoPlaySelector {
 
@@ -168,20 +169,27 @@ object StreamAutoPlaySelector {
                 }
             }
         }
-        if (matchingStreams.isEmpty() && preferredStream == null) return StreamAutoPlayEvaluation()
-
         val readyStreams = buildList {
             preferredStream?.let(::add)
-            matchingStreams
+            val sortedMatching = matchingStreams
                 .filter { it.isAutoPlayable(debridEnabled, activeResolverProviderId) }
                 .filterNot { it == preferredStream }
-                .forEach(::add)
+                .sortedWith(
+                    compareByDescending<StreamItem> { it.playableDirectUrl != null || it.isDirectDebridStream }
+                        .thenByDescending { it.isCachedDebridTorrentStream }
+                        .thenByDescending {
+                            val rank = PlayerResolutionHelper.detectResolutionTier(it).rank
+                            if (rank == 6) 0 else (7 - rank)
+                        }
+                        .thenByDescending { it.behaviorHints.videoSize ?: 0L }
+                )
+            sortedMatching.forEach(::add)
         }
-        val selected = readyStreams.firstOrNull()
+        val selected = readyStreams.firstOrNull() ?: matchingStreams.firstOrNull()
         if (selected != null) {
             return StreamAutoPlayEvaluation(
                 stream = selected,
-                readyStreams = readyStreams,
+                readyStreams = if (readyStreams.isNotEmpty()) readyStreams else listOf(selected),
             )
         }
 
@@ -198,6 +206,7 @@ object StreamAutoPlaySelector {
         activeResolverProviderId: String?,
     ): Boolean =
         playableDirectUrl != null ||
+            (url != null && !url.startsWith("magnet:", ignoreCase = true) && !url.startsWith("torrent:", ignoreCase = true)) ||
             (
                 AppFeaturePolicy.p2pEnabled &&
                     needsLocalDebridResolve &&

@@ -49,7 +49,7 @@ internal object DiscordPresenceManager {
                     lastActivity = null
                     try {
                         AppPresenceState.current.collect { snapshot ->
-                            val activity = snapshot?.toDiscordActivity() ?: DiscordActivity(details = "Browsing Nuvio")
+                            val activity = snapshot?.toDiscordActivity() ?: DiscordActivity(details = "Browsing KhaYin")
                             if (activity == lastActivity) return@collect
                             if (client.setActivity(activity)) {
                                 lastActivity = activity
@@ -85,13 +85,18 @@ private fun String.toDiscordEpisodeLabel(): String {
     return if (title.isBlank()) "S$season, E$episode" else "S$season, E$episode: $title"
 }
 
-
 private fun PresenceSnapshot.toDiscordActivity(): DiscordActivity = when (this) {
-    is PresenceSnapshot.Tab -> DiscordActivity(details = "Browsing ${tab.name}")
-    is PresenceSnapshot.Details -> DiscordActivity(details = "Viewing $title")
+    is PresenceSnapshot.Tab -> DiscordActivity(
+        details = "Browsing KhaYin",
+        state = "In ${tab.name}",
+    )
+    is PresenceSnapshot.Details -> DiscordActivity(
+        details = "Viewing $title",
+        state = "KhaYin Media",
+    )
     is PresenceSnapshot.Player -> DiscordActivity(
         details = if (isPlaying) "Watching: $title" else "Paused: $title",
-        state = episodeLabel?.toDiscordEpisodeLabel() ?: if (isPlaying) "Watching" else "Paused",
+        state = episodeLabel?.toDiscordEpisodeLabel() ?: if (isPlaying) "Streaming" else "Paused",
         timestamps = if (isPlaying) {
             // Discord expects Unix timestamps in seconds, not milliseconds.
             DiscordActivityTimestamps(start = (System.currentTimeMillis() - positionMs) / 1_000L)

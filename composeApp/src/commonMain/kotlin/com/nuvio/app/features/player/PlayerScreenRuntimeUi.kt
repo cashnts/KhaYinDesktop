@@ -592,6 +592,10 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long, 
                 null
             },
             onSourcesClick = if (activeVideoId != null) { { openSourcesPanel() } } else null,
+            onResolutionClick = if (activeVideoId != null) { { openResolutionPanel() } } else null,
+            activeResolutionLabel = PlayerResolutionHelper.detectResolutionTierFromText(
+                activeStreamTitle + " " + activeStreamSubtitle.orEmpty()
+            ).shortLabel.takeIf { it != "Auto" } ?: "Quality",
             onEpisodesClick = if (isSeries) { { openEpisodesPanel() } } else null,
             onOpenInExternalPlayer = args.onOpenInExternalPlayer?.let { openExternal ->
                 {
@@ -763,8 +767,13 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
             prepareSourcesForPlayerControls(forceRefresh = true)
         }
         "selectSource" -> {
-            val streams = sourceStreamsState.groups.flatMap { it.streams }
-            val stream = streams.getOrNull(value.toInt()) ?: return true
+            val rawStreams = sourceStreamsState.groups.flatMap { group ->
+                group.streams.map { stream -> group.addonId to stream }
+            }
+            val bestStreams = PlayerResolutionHelper.filterBestStreamsWithGroup(rawStreams)
+            val stream = bestStreams.getOrNull(value.toInt())?.second
+                ?: sourceStreamsState.groups.flatMap { it.streams }.getOrNull(value.toInt())
+                ?: return true
             if (requestP2pConsentForPlayerControls(stream = stream, episode = null)) return true
             switchToSource(stream)
             playerControlsCloseModalsToken += 1
@@ -784,7 +793,13 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
         }
         "selectEpisodeStream" -> {
             val episode = episodeStreamsPanelState.selectedEpisode ?: return true
-            val stream = episodeStreamsRepoState.groups.flatMap { it.streams }.getOrNull(value.toInt()) ?: return true
+            val rawStreams = episodeStreamsRepoState.groups.flatMap { group ->
+                group.streams.map { stream -> group.addonId to stream }
+            }
+            val bestStreams = PlayerResolutionHelper.filterBestStreamsWithGroup(rawStreams)
+            val stream = bestStreams.getOrNull(value.toInt())?.second
+                ?: episodeStreamsRepoState.groups.flatMap { it.streams }.getOrNull(value.toInt())
+                ?: return true
             if (requestP2pConsentForPlayerControls(stream = stream, episode = episode)) return true
             switchToEpisodeStream(stream, episode)
             playerControlsCloseModalsToken += 1
@@ -1169,30 +1184,29 @@ private fun PlayerScreenRuntime.buildPlayerControlSourceItems(): List<PlayerCont
     val canResolveDebrid = DebridSettingsRepository.uiState.value.canResolvePlayableLinks
     val streamBadgeState = StreamBadgeSettingsRepository.uiState.value
     val showFileSizeBadges = streamBadgeState.showFileSizeBadges
-    val showAddonLogo = streamBadgeState.showAddonLogo
     val badgePlacement = streamBadgeState.badgePlacement.name
-    return sourceStreamsState.groups.flatMap { group ->
+    val rawStreams = sourceStreamsState.groups.flatMap { group ->
         group.streams.map { stream -> group.addonId to stream }
-    }.mapIndexed { index, (filterId, stream) ->
+    }
+    val bestStreams = PlayerResolutionHelper.filterBestStreamsWithGroup(rawStreams)
+    return bestStreams.mapIndexed { index, (filterId, stream) ->
+        val tier = PlayerResolutionHelper.detectResolutionTier(stream)
+        val displayLabel = if (tier != VideoResolutionTier.UNKNOWN) {
+            tier.label
+        } else {
+            stream.streamLabel
+        }
         PlayerControlSourceItem(
             index = index,
             filterId = filterId,
-            label = stream.streamLabel,
-            subtitle = stream.streamSubtitle.orEmpty(),
-            addonName = stream.addonName,
-            addonLogo = stream.addonLogo.orEmpty(),
-            showAddonLogo = showAddonLogo,
+            label = displayLabel,
+            subtitle = "",
+            addonName = "",
+            addonLogo = "",
+            showAddonLogo = false,
             isCurrent = isCurrentPlayerControlStream(stream),
             isEnabled = stream.isSelectableForPlayback(canResolveDebrid),
-            badges = stream.badges.map {
-                PlayerControlSourceBadgeItem(
-                    name = it.name,
-                    imageURL = it.imageURL,
-                    tagColor = it.tagColor,
-                    tagStyle = it.tagStyle,
-                    borderColor = it.borderColor,
-                )
-            },
+            badges = emptyList(),
             formattedSize = if (showFileSizeBadges) formatStreamVideoSize(stream.behaviorHints.videoSize) else "",
             badgePlacement = badgePlacement,
         )
@@ -1204,30 +1218,29 @@ private fun PlayerScreenRuntime.buildPlayerControlEpisodeStreamItems(): List<Pla
     val canResolveDebrid = DebridSettingsRepository.uiState.value.canResolvePlayableLinks
     val streamBadgeState = StreamBadgeSettingsRepository.uiState.value
     val showFileSizeBadges = streamBadgeState.showFileSizeBadges
-    val showAddonLogo = streamBadgeState.showAddonLogo
     val badgePlacement = streamBadgeState.badgePlacement.name
-    return episodeStreamsRepoState.groups.flatMap { group ->
+    val rawStreams = episodeStreamsRepoState.groups.flatMap { group ->
         group.streams.map { stream -> group.addonId to stream }
-    }.mapIndexed { index, (filterId, stream) ->
+    }
+    val bestStreams = PlayerResolutionHelper.filterBestStreamsWithGroup(rawStreams)
+    return bestStreams.mapIndexed { index, (filterId, stream) ->
+        val tier = PlayerResolutionHelper.detectResolutionTier(stream)
+        val displayLabel = if (tier != VideoResolutionTier.UNKNOWN) {
+            tier.label
+        } else {
+            stream.streamLabel
+        }
         PlayerControlSourceItem(
             index = index,
             filterId = filterId,
-            label = stream.streamLabel,
-            subtitle = stream.streamSubtitle.orEmpty(),
-            addonName = stream.addonName,
-            addonLogo = stream.addonLogo.orEmpty(),
-            showAddonLogo = showAddonLogo,
-            isCurrent = false,
+            label = displayLabel,
+            subtitle = "",
+            addonName = "",
+            addonLogo = "",
+            showAddonLogo = false,
+            isCurrent = isCurrentPlayerControlStream(stream),
             isEnabled = stream.isSelectableForPlayback(canResolveDebrid),
-            badges = stream.badges.map {
-                PlayerControlSourceBadgeItem(
-                    name = it.name,
-                    imageURL = it.imageURL,
-                    tagColor = it.tagColor,
-                    tagStyle = it.tagStyle,
-                    borderColor = it.borderColor,
-                )
-            },
+            badges = emptyList(),
             formattedSize = if (showFileSizeBadges) formatStreamVideoSize(stream.behaviorHints.videoSize) else "",
             badgePlacement = badgePlacement,
         )
@@ -1618,6 +1631,7 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
         },
         onVideoSettingsModalDismissed = { showVideoSettingsModal = false },
         showSourcesPanel = showSourcesPanel,
+        showResolutionPanel = showResolutionPanel,
         sourceStreamsState = sourceStreamsState,
         contentTitle = title,
         activeEpisodeTitle = activeEpisodeTitle,
@@ -1639,6 +1653,10 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
         },
         onSourcesPanelDismissed = {
             showSourcesPanel = false
+            controlsVisible = true
+        },
+        onResolutionPanelDismissed = {
+            showResolutionPanel = false
             controlsVisible = true
         },
         isSeries = isSeries,

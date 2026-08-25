@@ -430,7 +430,7 @@
     <string name="compose_player_outline">Outline</string>
     <string name="compose_player_outline_color">Outline Color</string>
     <string name="compose_player_panel_episodes">Episodes</string>
-    <string name="compose_player_panel_sources">Sources</string>
+    <string name="compose_player_panel_sources">Resolutions</string>
     <string name="compose_player_panel_streams">Streams</string>
     <string name="compose_player_playback_error">Playback error</string>
     <string name="compose_player_playing">Playing</string>

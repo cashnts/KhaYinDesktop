@@ -1753,10 +1753,10 @@ button:disabled {
 }
 
 .player-side-modal .player-side-panel {
-  width: min(520px, calc(100vw - 24px));
+  width: min(340px, calc(100vw - 24px));
   height: 100%;
   max-height: none;
-  padding: 24px;
+  padding: 20px;
   border: 0;
   border-radius: 16px 0 0 16px;
   background: var(--theme-surface-elevated);
@@ -2292,9 +2292,10 @@ button:disabled {
 }
 
 .track-row.source-row {
-  min-height: 68px;
-  align-items: flex-start;
-  padding: 14px;
+  min-height: 48px;
+  align-items: center;
+  padding: 12px 16px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, .05);
   box-shadow: 0 2px 8px rgba(0, 0, 0, .04);
 }

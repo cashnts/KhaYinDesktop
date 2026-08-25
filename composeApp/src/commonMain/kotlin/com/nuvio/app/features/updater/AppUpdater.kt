@@ -53,6 +53,9 @@ private data class KhayinDownloadsDto(
     val appPrefix: String = "khayin",
     val version: String = "",
     val portalUrl: String = "https://dl.khayin.net",
+    val notes: String? = null,
+    val changelog: String? = null,
+    val changelogs: List<String>? = null,
     val platforms: Map<String, KhayinPlatformDto> = emptyMap(),
 )
 
@@ -62,6 +65,9 @@ private data class KhayinPlatformDto(
     val name: String? = null,
     val tag: String? = null,
     val detail: String? = null,
+    val notes: String? = null,
+    val changelog: String? = null,
+    val changelogs: List<String>? = null,
     val suffix: String? = null,
     val ext: String? = null,
     val pattern: String? = null,
@@ -151,10 +157,19 @@ private object AppUpdaterRepository {
 
         val downloadUrl = platform.url?.takeIf { it.isNotBlank() } ?: "${downloads.baseUrl.trimEnd('/')}/v$rawVersion/$fileName"
 
+        val rawNotes = platform.changelog
+            ?: platform.detail
+            ?: platform.notes
+            ?: platform.changelogs?.joinToString("\n• ", prefix = "• ")
+            ?: downloads.changelog
+            ?: downloads.notes
+            ?: downloads.changelogs?.joinToString("\n• ", prefix = "• ")
+            ?: "• Bug fixes and performance improvements."
+
         AppUpdate(
             tag = rawVersion,
             title = "KhaYin v$rawVersion",
-            notes = platform.detail ?: "KhaYin v$rawVersion is available.",
+            notes = rawNotes,
             releaseUrl = downloads.portalUrl,
             assetName = fileName,
             assetUrl = downloadUrl,

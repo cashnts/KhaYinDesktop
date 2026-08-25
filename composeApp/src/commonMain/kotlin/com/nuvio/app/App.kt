@@ -4028,23 +4028,6 @@ private fun MainAppContent(
                 )
             }
 
-            NuvioFloatingPrompt(
-                visible = resumePromptItem != null,
-                imageUrl = resumePromptItem?.poster ?: resumePromptItem?.imageUrl,
-                title = resumePromptItem?.title.orEmpty(),
-                subtitle = resumePromptItem?.let { localizedContinueWatchingSubtitle(it) }.orEmpty(),
-                progressFraction = resumePromptItem?.progressFraction ?: 0f,
-                actionLabel = stringResource(Res.string.resume_prompt_action),
-                onAction = {
-                    val item = resumePromptItem ?: return@NuvioFloatingPrompt
-                    resumePromptItem = null
-                    openContinueWatching(item, false, false)
-                },
-                onDismiss = { resumePromptItem = null },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .zIndex(15f),
-            )
 
             NuvioToastHost(
                 modifier = Modifier

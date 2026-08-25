@@ -263,7 +263,58 @@ fun AppUpdateScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            if (update.notes.isNotBlank()) {
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF181820))
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "What's New in v${update.tag}",
+                            style = TextStyle(
+                                color = Color(0xFF00E699),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                            ),
+                        )
+                        Text(
+                            text = "Changelog",
+                            style = TextStyle(
+                                color = Color(0xFF7A7A85),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                            ),
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 130.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        Text(
+                            text = update.notes.trim(),
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = Color(0xFFD4D4DC),
+                                lineHeight = 18.sp,
+                            ),
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
