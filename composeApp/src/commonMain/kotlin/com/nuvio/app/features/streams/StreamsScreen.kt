@@ -231,50 +231,131 @@ fun StreamsScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
     ) {
-        val isTabletLayout = maxWidth >= 768.dp
+        val isAutoPlayLoading = !manualSelection
 
-        if (isTabletLayout) {
-            TabletStreamsLayout(
-                isEpisode = isEpisode,
-                title = title,
-                logo = logo,
-                poster = poster,
-                background = background,
-                episodeThumbnail = episodeThumbnail,
-                seasonNumber = seasonNumber,
-                episodeNumber = episodeNumber,
-                episodeTitle = episodeTitle,
-                uiState = uiState,
-                debridEnabled = debridSettings.canResolvePlayableLinks,
-                appendInstantServiceToDefaultName = debridSettings.canResolvePlayableLinks && !debridSettings.hasCustomStreamFormatting,
-                resumePositionMs = effectiveResumePositionMs,
-                resumeProgressFraction = effectiveResumeProgressFraction,
-                onStreamSelected = { stream, positionMs, progressFraction ->
-                    onStreamSelected(stream, positionMs, progressFraction)
-                },
-                onStreamLongPress = { stream -> streamActionsTarget = stream },
-                onRefresh = reloadStreams,
-            )
+        if (isAutoPlayLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (!heroArtwork.isNullOrBlank()) {
+                    AsyncImage(
+                        model = heroArtwork,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { alpha = 0.3f },
+                        contentScale = ContentScale.Crop,
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color.Black.copy(alpha = 0.6f),
+                                        Color.Black.copy(alpha = 0.85f),
+                                        Color.Black,
+                                    ),
+                                ),
+                            ),
+                    )
+                }
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                    modifier = Modifier.padding(horizontal = 32.dp),
+                ) {
+                    if (autoPlayOverlayLogoUrl != null && !autoPlayOverlayLogoLoadError) {
+                        AsyncImage(
+                            model = autoPlayOverlayLogoUrl,
+                            contentDescription = title,
+                            modifier = Modifier.height(56.dp),
+                            contentScale = ContentScale.Fit,
+                            onError = { autoPlayOverlayLogoLoadError = true },
+                        )
+                    } else if (title.isNotBlank()) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Black),
+                            color = Color.White,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (isEpisode && (seasonNumber != null || episodeNumber != null)) {
+                        val epLabel = buildString {
+                            if (seasonNumber != null) append("S$seasonNumber ")
+                            if (episodeNumber != null) append("E$episodeNumber")
+                            if (!episodeTitle.isNullOrBlank()) append(" • $episodeTitle")
+                        }
+                        Text(
+                            text = epLabel,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.7f),
+                        )
+                    }
+                    NuvioLoadingIndicator(
+                        modifier = Modifier.size(36.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = uiState.overlayMessage
+                            ?: stringResource(Res.string.streams_finding_source),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.85f),
+                    )
+                }
+            }
         } else {
-            MobileStreamsLayout(
-                isEpisode = isEpisode,
-                title = title,
-                logo = logo,
-                heroArtwork = heroArtwork,
-                seasonNumber = seasonNumber,
-                episodeNumber = episodeNumber,
-                episodeTitle = episodeTitle,
-                uiState = uiState,
-                debridEnabled = debridSettings.canResolvePlayableLinks,
-                appendInstantServiceToDefaultName = debridSettings.canResolvePlayableLinks && !debridSettings.hasCustomStreamFormatting,
-                resumePositionMs = effectiveResumePositionMs,
-                resumeProgressFraction = effectiveResumeProgressFraction,
-                onStreamSelected = { stream, positionMs, progressFraction ->
-                    onStreamSelected(stream, positionMs, progressFraction)
-                },
-                onStreamLongPress = { stream -> streamActionsTarget = stream },
-                onRefresh = reloadStreams,
-            )
+            val isTabletLayout = maxWidth >= 768.dp
+            if (isTabletLayout) {
+                TabletStreamsLayout(
+                    isEpisode = isEpisode,
+                    title = title,
+                    logo = logo,
+                    poster = poster,
+                    background = background,
+                    episodeThumbnail = episodeThumbnail,
+                    seasonNumber = seasonNumber,
+                    episodeNumber = episodeNumber,
+                    episodeTitle = episodeTitle,
+                    uiState = uiState,
+                    debridEnabled = debridSettings.canResolvePlayableLinks,
+                    appendInstantServiceToDefaultName = debridSettings.canResolvePlayableLinks && !debridSettings.hasCustomStreamFormatting,
+                    resumePositionMs = effectiveResumePositionMs,
+                    resumeProgressFraction = effectiveResumeProgressFraction,
+                    onStreamSelected = { stream, positionMs, progressFraction ->
+                        onStreamSelected(stream, positionMs, progressFraction)
+                    },
+                    onStreamLongPress = { stream -> streamActionsTarget = stream },
+                    onRefresh = reloadStreams,
+                )
+            } else {
+                MobileStreamsLayout(
+                    isEpisode = isEpisode,
+                    title = title,
+                    logo = logo,
+                    heroArtwork = heroArtwork,
+                    seasonNumber = seasonNumber,
+                    episodeNumber = episodeNumber,
+                    episodeTitle = episodeTitle,
+                    uiState = uiState,
+                    debridEnabled = debridSettings.canResolvePlayableLinks,
+                    appendInstantServiceToDefaultName = debridSettings.canResolvePlayableLinks && !debridSettings.hasCustomStreamFormatting,
+                    resumePositionMs = effectiveResumePositionMs,
+                    resumeProgressFraction = effectiveResumeProgressFraction,
+                    onStreamSelected = { stream, positionMs, progressFraction ->
+                        onStreamSelected(stream, positionMs, progressFraction)
+                    },
+                    onStreamLongPress = { stream -> streamActionsTarget = stream },
+                    onRefresh = reloadStreams,
+                )
+            }
         }
 
         Row(
@@ -291,57 +372,6 @@ fun StreamsScreen(
                 containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.45f),
                 contentColor = MaterialTheme.colorScheme.onBackground,
             )
-
-        }
-
-        AnimatedVisibility(
-            visible = uiState.showDirectAutoPlayOverlay,
-            enter = fadeIn(animationSpec = tween(250)),
-            exit = fadeOut(animationSpec = tween(200)),
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.85f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    if (autoPlayOverlayLogoUrl != null && !autoPlayOverlayLogoLoadError) {
-                        AsyncImage(
-                            model = autoPlayOverlayLogoUrl,
-                            contentDescription = title,
-                            modifier = Modifier
-                                .height(48.dp),
-                            contentScale = ContentScale.Fit,
-                            onError = { autoPlayOverlayLogoLoadError = true },
-                        )
-                    } else if (title.isNotBlank()) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
-                            color = Color.White,
-                            textAlign = TextAlign.Center,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(horizontal = 24.dp),
-                        )
-                    }
-                    NuvioLoadingIndicator(
-                        modifier = Modifier.size(32.dp),
-                        color = Color.White,
-                    )
-                    Text(
-                        text = uiState.overlayMessage
-                            ?: stringResource(Res.string.streams_finding_source),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.8f),
-                    )
-                }
-            }
         }
 
         StreamActionsSheet(

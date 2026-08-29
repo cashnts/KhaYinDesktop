@@ -521,17 +521,24 @@ fun HomeScreen(
         mutableStateOf(0)
     }
 
-    val catalogRefreshKey = remember(enabledAddons) {
-        buildHomeCatalogRefreshSignature(enabledAddons)
+    val catalogRefreshKey = remember(enabledAddons, activeProfileId) {
+        "${activeProfileId}_${buildHomeCatalogRefreshSignature(enabledAddons)}"
     }
 
     LaunchedEffect(catalogRefreshKey) {
-        if (catalogRefreshKey.isEmpty()) return@LaunchedEffect
+        if (enabledAddons.isEmpty()) return@LaunchedEffect
         HomeCatalogSettingsRepository.syncCatalogs(enabledAddons)
         HomeRepository.refresh(enabledAddons)
     }
 
-    LaunchedEffect(collections, enabledAddons) {
+    LaunchedEffect(homeUiState.sections.isEmpty(), homeUiState.isLoading, enabledAddons.size, activeProfileId) {
+        if (homeUiState.sections.isEmpty() && !homeUiState.isLoading && enabledAddons.isNotEmpty()) {
+            HomeCatalogSettingsRepository.syncCatalogs(enabledAddons)
+            HomeRepository.refresh(enabledAddons, force = true)
+        }
+    }
+
+    LaunchedEffect(collections, enabledAddons, activeProfileId) {
         HomeCatalogSettingsRepository.syncCollections(collections, enabledAddons)
         HomeRepository.applyCurrentSettings()
     }

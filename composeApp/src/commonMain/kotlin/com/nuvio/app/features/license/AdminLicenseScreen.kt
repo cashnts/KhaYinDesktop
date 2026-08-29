@@ -1,6 +1,7 @@
 package com.nuvio.app.features.license
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -29,6 +31,7 @@ import androidx.compose.material.icons.rounded.AdminPanelSettings
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Campaign
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Devices
@@ -39,6 +42,7 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.SystemUpdate
@@ -48,10 +52,12 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -130,17 +136,12 @@ fun AdminLicenseScreen(
 
     // Service Controls State
     var maintenanceModeEnabled by remember { mutableStateOf(false) }
+    var maintenanceNotice by remember { mutableStateOf("") }
     var streamingDisabled by remember { mutableStateOf(false) }
+    var streamingNotice by remember { mutableStateOf("") }
     var broadcastAlertMessage by remember { mutableStateOf("") }
     var broadcastSeverity by remember { mutableStateOf("INFO") }
-    var enableDownloads by remember { mutableStateOf(true) }
-    var enablePlugins by remember { mutableStateOf(true) }
-    var enableP2p by remember { mutableStateOf(true) }
-    var enableDebrid by remember { mutableStateOf(true) }
-    var enableTrailerPlayback by remember { mutableStateOf(true) }
-    var minSupportedVersion by remember { mutableStateOf("") }
     var disabledAddonsText by remember { mutableStateOf("") }
-    var dynamicConfigText by remember { mutableStateOf("") }
     var serviceStatusMessage by remember { mutableStateOf<String?>(null) }
 
     val scope = rememberCoroutineScope()
@@ -182,17 +183,12 @@ fun AdminLicenseScreen(
         loadAnalytics()
         val cfg = AdminControlRepository.fetchConfig()
         maintenanceModeEnabled = cfg.maintenanceMode
+        maintenanceNotice = cfg.maintenanceNotice
         streamingDisabled = cfg.streamingDisabled
+        streamingNotice = cfg.streamingDisabledNotice
         broadcastAlertMessage = cfg.broadcastMessage
         broadcastSeverity = cfg.broadcastSeverity
-        enableDownloads = cfg.enableDownloads
-        enablePlugins = cfg.enablePlugins
-        enableP2p = cfg.enableP2p
-        enableDebrid = cfg.enableDebrid
-        enableTrailerPlayback = cfg.enableTrailerPlayback
-        minSupportedVersion = cfg.minSupportedVersion
         disabledAddonsText = cfg.disabledAddons.joinToString("\n")
-        dynamicConfigText = cfg.dynamicConfig.entries.joinToString("\n") { "${it.key}=${it.value}" }
         if (cfg.presetAddons.isNotEmpty()) {
             addonManifestUrls = cfg.presetAddons.joinToString("\n")
         }
@@ -234,17 +230,36 @@ fun AdminLicenseScreen(
                             ),
                         )
                         Text(
-                            text = stringResource(Res.string.settings_admin_media_server_operations),
-                            style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFF888899)),
+                            text = "KhaYin Media Server Operations",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = Color(0xFF888899),
+                                fontSize = 11.sp,
+                            ),
                         )
                     }
                 }
 
                 Button(
-                    onClick = { refreshList() },
+                    onClick = {
+                        refreshList()
+                        loadAnalytics()
+                        scope.launch {
+                            val cfg = AdminControlRepository.fetchConfig()
+                            maintenanceModeEnabled = cfg.maintenanceMode
+                            maintenanceNotice = cfg.maintenanceNotice
+                            streamingDisabled = cfg.streamingDisabled
+                            streamingNotice = cfg.streamingDisabledNotice
+                            broadcastAlertMessage = cfg.broadcastMessage
+                            broadcastSeverity = cfg.broadcastSeverity
+                            disabledAddonsText = cfg.disabledAddons.joinToString("\n")
+                            if (cfg.presetAddons.isNotEmpty()) {
+                                addonManifestUrls = cfg.presetAddons.joinToString("\n")
+                            }
+                        }
+                    },
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF1E1E28),
+                        containerColor = Color(0xFF222230),
                         contentColor = Color.White,
                     ),
                 ) {
@@ -296,17 +311,22 @@ fun AdminLicenseScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(text = toast, style = TextStyle(color = Color(0xFF00E699), fontSize = 12.sp))
-                        Text(
-                            text = "Dismiss",
-                            style = TextStyle(color = Color(0xFF888899), fontSize = 11.sp),
-                            modifier = Modifier.clickable { actionToast = null },
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = Color(0xFF00E699), modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(toast, color = Color(0xFF00E699), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = "Dismiss",
+                            tint = Color(0xFF888899),
+                            modifier = Modifier.size(16.dp).clickable { actionToast = null },
                         )
                     }
                 }
             }
 
-            // Main Tab Content
+            // Tab Content
             when (selectedTab) {
                 AdminHubTab.Licenses -> {
                     LicensesTabContent(
@@ -337,10 +357,12 @@ fun AdminLicenseScreen(
                                         notes = notes.ifBlank { null },
                                     ),
                                 ).fold(
-                                    onSuccess = { lic ->
+                                    onSuccess = { created ->
                                         isGenerating = false
-                                        newlyCreatedLicense = lic
-                                        actionToast = "Generated key: ${lic.key}"
+                                        newlyCreatedLicense = created
+                                        customerName = ""
+                                        notes = ""
+                                        actionToast = "Generated license: ${created.key}"
                                         refreshList()
                                     },
                                     onFailure = { err ->
@@ -352,7 +374,7 @@ fun AdminLicenseScreen(
                         },
                         onCopyKey = { key ->
                             clipboardManager.setText(AnnotatedString(key))
-                            actionToast = "Copied $key"
+                            actionToast = "Copied $key to clipboard"
                         },
                         onExtendKey = { key ->
                             scope.launch {
@@ -380,7 +402,7 @@ fun AdminLicenseScreen(
                             scope.launch {
                                 LicenseRepository.adminUnrevokeLicense(adminPassword, key).fold(
                                     onSuccess = {
-                                        actionToast = "Activated $key"
+                                        actionToast = "Unrevoked $key"
                                         refreshList()
                                     },
                                     onFailure = { err -> actionToast = "Error: ${err.message}" },
@@ -393,7 +415,7 @@ fun AdminLicenseScreen(
                     )
                 }
                 AdminHubTab.MassAddons -> {
-                    MassAddonPushTabContent(
+                    MassAddonsTabContent(
                         addonManifestUrls = addonManifestUrls,
                         onUrlsChange = { addonManifestUrls = it },
                         isPushing = isPushingAddons,
@@ -407,7 +429,7 @@ fun AdminLicenseScreen(
                                 ).fold(
                                     onSuccess = {
                                         isPushingAddons = false
-                                        addonPushStatus = "Successfully broadcasted ${urls.size} addon manifest(s) to all clients!"
+                                        addonPushStatus = "Broadcasted ${urls.size} manifests."
                                     },
                                     onFailure = { err ->
                                         isPushingAddons = false
@@ -425,7 +447,10 @@ fun AdminLicenseScreen(
                             maintenanceModeEnabled = toggle
                             scope.launch {
                                 AdminControlRepository.updateConfig(
-                                    AdminControlRepository.config.value.copy(maintenanceMode = toggle),
+                                    AdminControlRepository.config.value.copy(
+                                        maintenanceMode = toggle,
+                                        maintenanceNotice = maintenanceNotice.trim(),
+                                    ),
                                 )
                                 serviceStatusMessage = if (toggle) {
                                     "Maintenance mode ENABLED. Client apps frozen."
@@ -434,12 +459,17 @@ fun AdminLicenseScreen(
                                 }
                             }
                         },
+                        maintenanceNotice = maintenanceNotice,
+                        onMaintenanceNoticeChange = { maintenanceNotice = it },
                         streamingDisabled = streamingDisabled,
                         onStreamingDisabledToggle = { toggle ->
                             streamingDisabled = toggle
                             scope.launch {
                                 AdminControlRepository.updateConfig(
-                                    AdminControlRepository.config.value.copy(streamingDisabled = toggle),
+                                    AdminControlRepository.config.value.copy(
+                                        streamingDisabled = toggle,
+                                        streamingDisabledNotice = streamingNotice.trim(),
+                                    ),
                                 )
                                 serviceStatusMessage = if (toggle) {
                                     "Streaming DISABLED on client apps."
@@ -448,99 +478,75 @@ fun AdminLicenseScreen(
                                 }
                             }
                         },
-                        enableDownloads = enableDownloads,
-                        onEnableDownloadsToggle = { toggle ->
-                            enableDownloads = toggle
-                            scope.launch {
-                                AdminControlRepository.updateConfig(
-                                    AdminControlRepository.config.value.copy(enableDownloads = toggle),
-                                )
-                                serviceStatusMessage = "Live feature 'Downloads' set to $toggle."
-                            }
-                        },
-                        enablePlugins = enablePlugins,
-                        onEnablePluginsToggle = { toggle ->
-                            enablePlugins = toggle
-                            scope.launch {
-                                AdminControlRepository.updateConfig(
-                                    AdminControlRepository.config.value.copy(enablePlugins = toggle),
-                                )
-                                serviceStatusMessage = "Live feature 'Addons/Plugins' set to $toggle."
-                            }
-                        },
-                        enableP2p = enableP2p,
-                        onEnableP2pToggle = { toggle ->
-                            enableP2p = toggle
-                            scope.launch {
-                                AdminControlRepository.updateConfig(
-                                    AdminControlRepository.config.value.copy(enableP2p = toggle),
-                                )
-                                serviceStatusMessage = "Live feature 'P2P Torrents' set to $toggle."
-                            }
-                        },
-                        enableDebrid = enableDebrid,
-                        onEnableDebridToggle = { toggle ->
-                            enableDebrid = toggle
-                            scope.launch {
-                                AdminControlRepository.updateConfig(
-                                    AdminControlRepository.config.value.copy(enableDebrid = toggle),
-                                )
-                                serviceStatusMessage = "Live feature 'Debrid' set to $toggle."
-                            }
-                        },
-                        enableTrailerPlayback = enableTrailerPlayback,
-                        onEnableTrailerPlaybackToggle = { toggle ->
-                            enableTrailerPlayback = toggle
-                            scope.launch {
-                                AdminControlRepository.updateConfig(
-                                    AdminControlRepository.config.value.copy(enableTrailerPlayback = toggle),
-                                )
-                                serviceStatusMessage = "Live feature 'Trailers' set to $toggle."
-                            }
-                        },
-                        minSupportedVersion = minSupportedVersion,
-                        onMinSupportedVersionChange = { minSupportedVersion = it },
-                        disabledAddonsText = disabledAddonsText,
-                        onDisabledAddonsTextChange = { disabledAddonsText = it },
-                        dynamicConfigText = dynamicConfigText,
-                        onDynamicConfigTextChange = { dynamicConfigText = it },
+                        streamingNotice = streamingNotice,
+                        onStreamingNoticeChange = { streamingNotice = it },
                         broadcastMessage = broadcastAlertMessage,
                         onBroadcastMessageChange = { broadcastAlertMessage = it },
                         broadcastSeverity = broadcastSeverity,
                         onBroadcastSeverityChange = { broadcastSeverity = it },
-                        statusMessage = serviceStatusMessage,
-                        onPublishBroadcast = {
+                        onSendBroadcast = {
                             scope.launch {
-                                val ts = if (broadcastAlertMessage.isNotBlank()) com.nuvio.app.features.watchprogress.WatchProgressClock.nowEpochMs() else 0L
-                                val disabledList = disabledAddonsText.lines().map { it.trim() }.filter { it.isNotBlank() }
-                                val parsedDynamicConfig = dynamicConfigText.lines()
-                                    .map { it.trim() }
-                                    .filter { it.contains("=") }
-                                    .associate { line ->
-                                        val parts = line.split("=", limit = 2)
-                                        parts[0].trim() to parts[1].trim()
-                                    }
+                                val ts = com.nuvio.app.features.watchprogress.WatchProgressClock.nowEpochMs()
                                 AdminControlRepository.updateConfig(
                                     AdminControlRepository.config.value.copy(
                                         broadcastMessage = broadcastAlertMessage.trim(),
                                         broadcastSeverity = broadcastSeverity,
                                         broadcastTimestamp = ts,
-                                        minSupportedVersion = minSupportedVersion.trim(),
-                                        disabledAddons = disabledList,
-                                        dynamicConfig = parsedDynamicConfig,
                                     ),
+                                ).fold(
+                                    onSuccess = {
+                                        serviceStatusMessage = "Live broadcast banner sent to all connected clients!"
+                                    },
+                                    onFailure = { err ->
+                                        serviceStatusMessage = "Failed to broadcast: ${err.message}"
+                                    },
                                 )
-                                serviceStatusMessage = "Live configuration published to all active client devices!"
                             }
                         },
-                        onCleanLegacyDb = {
+                        onClearBroadcast = {
+                            broadcastAlertMessage = ""
                             scope.launch {
-                                val success = AdminControlRepository.cleanLegacyDatabase().getOrDefault(false)
-                                serviceStatusMessage = if (success) {
-                                    "Legacy SYSTEM_CONFIG cleaned from license_keys table."
-                                } else {
-                                    "Cleaned up legacy database records."
-                                }
+                                AdminControlRepository.updateConfig(
+                                    AdminControlRepository.config.value.copy(
+                                        broadcastMessage = "",
+                                        broadcastTimestamp = 0L,
+                                    ),
+                                ).fold(
+                                    onSuccess = {
+                                        serviceStatusMessage = "Broadcast banner cleared from all clients."
+                                    },
+                                    onFailure = { err ->
+                                        serviceStatusMessage = "Failed to clear banner: ${err.message}"
+                                    },
+                                )
+                            }
+                        },
+                        disabledAddonsText = disabledAddonsText,
+                        onDisabledAddonsTextChange = { disabledAddonsText = it },
+                        statusMessage = serviceStatusMessage,
+                        onPublishControls = {
+                            scope.launch {
+                                val ts = if (broadcastAlertMessage.isNotBlank()) com.nuvio.app.features.watchprogress.WatchProgressClock.nowEpochMs() else 0L
+                                val disabledList = disabledAddonsText.lines().map { it.trim() }.filter { it.isNotBlank() }
+                                AdminControlRepository.updateConfig(
+                                    AdminControlRepository.config.value.copy(
+                                        maintenanceMode = maintenanceModeEnabled,
+                                        maintenanceNotice = maintenanceNotice.trim(),
+                                        streamingDisabled = streamingDisabled,
+                                        streamingDisabledNotice = streamingNotice.trim(),
+                                        broadcastMessage = broadcastAlertMessage.trim(),
+                                        broadcastSeverity = broadcastSeverity,
+                                        broadcastTimestamp = ts,
+                                        disabledAddons = disabledList,
+                                    ),
+                                ).fold(
+                                    onSuccess = {
+                                        serviceStatusMessage = "Service controls published to all active client devices!"
+                                    },
+                                    onFailure = { err ->
+                                        serviceStatusMessage = "Failed to publish: ${err.message}"
+                                    },
+                                )
                             }
                         },
                     )
@@ -972,7 +978,7 @@ private fun LicensesTabContent(
 }
 
 @Composable
-private fun MassAddonPushTabContent(
+private fun MassAddonsTabContent(
     addonManifestUrls: String,
     onUrlsChange: (String) -> Unit,
     isPushing: Boolean,
@@ -983,6 +989,7 @@ private fun MassAddonPushTabContent(
         modifier = Modifier
             .fillMaxSize()
             .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Column(
             modifier = Modifier
@@ -997,11 +1004,11 @@ private fun MassAddonPushTabContent(
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
                     Text(
-                        text = "BROADCAST ADDON BUNDLES TO USERS",
+                        text = "BROADCAST ADDON BUNDLES TO ALL USERS",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = Color.White),
                     )
                     Text(
-                        text = "Addons configured here will be pushed and automatically installed on all user clients.",
+                        text = "Addons configured here will be pushed and automatically installed on all user devices when they launch or sync.",
                         style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF888899)),
                     )
                 }
@@ -1009,13 +1016,50 @@ private fun MassAddonPushTabContent(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            Text("Manifest URLs (One per line)", style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFFAAAAAA)))
-            Spacer(modifier = Modifier.height(6.dp))
+            Text("Manifest URLs (One per line):", style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFFAAAAAA)))
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Quick preset pills
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Quick Add:", style = TextStyle(color = Color(0xFF666677), fontSize = 11.sp, fontWeight = FontWeight.Bold))
+                listOf(
+                    "Cinemeta" to "https://v3-cinemeta.strem.io/manifest.json",
+                    "KhaYin Streams" to "https://stream.khayin.net/manifest.json",
+                    "Archive.org" to "https://dev.nebulawp.org/stremio/archive.org-addon/manifest.json",
+                    "OpenSubtitles" to "https://opensubtitles-v3.strem.io/manifest.json",
+                ).forEach { (label, url) ->
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF222230))
+                            .border(1.dp, Color(0xFF333344), RoundedCornerShape(6.dp))
+                            .clickable {
+                                val currentLines = addonManifestUrls.lines().map { it.trim() }.filter { it.isNotBlank() }
+                                if (url !in currentLines) {
+                                    val updated = (currentLines + url).joinToString("\n")
+                                    onUrlsChange(updated)
+                                }
+                            }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                    ) {
+                        Text(
+                            text = "+ $label",
+                            style = TextStyle(color = Color(0xFF00E699), fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(140.dp)
+                    .height(180.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color(0xFF0F0F16))
                     .border(1.dp, Color(0xFF323244), RoundedCornerShape(8.dp))
@@ -1027,12 +1071,27 @@ private fun MassAddonPushTabContent(
                     modifier = Modifier.fillMaxSize(),
                     textStyle = TextStyle(color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 13.sp),
                     cursorBrush = SolidColor(Color(0xFF00E699)),
+                    decorationBox = { inner ->
+                        if (addonManifestUrls.isEmpty()) {
+                            Text("https://v3-cinemeta.strem.io/manifest.json\nhttps://stream.khayin.net/manifest.json", color = Color(0xFF555566), fontSize = 13.sp)
+                        }
+                        inner()
+                    },
                 )
             }
 
             pushStatus?.let { status ->
                 Spacer(modifier = Modifier.height(10.dp))
-                Text(text = status, style = TextStyle(color = Color(0xFF00E699), fontSize = 13.sp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF0D2818))
+                        .border(1.dp, Color(0xFF00E699).copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                        .padding(10.dp),
+                ) {
+                    Text(text = status, style = TextStyle(color = Color(0xFF00E699), fontSize = 12.sp, fontWeight = FontWeight.SemiBold))
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -1041,7 +1100,7 @@ private fun MassAddonPushTabContent(
                 onClick = onPush,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(44.dp),
+                    .height(46.dp),
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF00E699),
@@ -1052,7 +1111,7 @@ private fun MassAddonPushTabContent(
                 if (isPushing) {
                     NuvioLoadingIndicator(modifier = Modifier.size(18.dp), color = Color.Black)
                 } else {
-                    Text("Push Addon Manifests to All Clients", fontWeight = FontWeight.Bold)
+                    Text("Push Addon Bundles to All Devices", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 }
             }
         }
@@ -1063,31 +1122,22 @@ private fun MassAddonPushTabContent(
 private fun ServiceControlsTabContent(
     maintenanceMode: Boolean,
     onMaintenanceToggle: (Boolean) -> Unit,
+    maintenanceNotice: String,
+    onMaintenanceNoticeChange: (String) -> Unit,
     streamingDisabled: Boolean,
     onStreamingDisabledToggle: (Boolean) -> Unit,
-    enableDownloads: Boolean,
-    onEnableDownloadsToggle: (Boolean) -> Unit,
-    enablePlugins: Boolean,
-    onEnablePluginsToggle: (Boolean) -> Unit,
-    enableP2p: Boolean,
-    onEnableP2pToggle: (Boolean) -> Unit,
-    enableDebrid: Boolean,
-    onEnableDebridToggle: (Boolean) -> Unit,
-    enableTrailerPlayback: Boolean,
-    onEnableTrailerPlaybackToggle: (Boolean) -> Unit,
-    minSupportedVersion: String,
-    onMinSupportedVersionChange: (String) -> Unit,
-    disabledAddonsText: String,
-    onDisabledAddonsTextChange: (String) -> Unit,
-    dynamicConfigText: String,
-    onDynamicConfigTextChange: (String) -> Unit,
+    streamingNotice: String,
+    onStreamingNoticeChange: (String) -> Unit,
     broadcastMessage: String,
     onBroadcastMessageChange: (String) -> Unit,
     broadcastSeverity: String,
     onBroadcastSeverityChange: (String) -> Unit,
+    onSendBroadcast: () -> Unit,
+    onClearBroadcast: () -> Unit,
+    disabledAddonsText: String,
+    onDisabledAddonsTextChange: (String) -> Unit,
     statusMessage: String?,
-    onPublishBroadcast: () -> Unit,
-    onCleanLegacyDb: () -> Unit,
+    onPublishControls: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier
@@ -1095,8 +1145,8 @@ private fun ServiceControlsTabContent(
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        // Emergency Controls
         item {
-            // Live Operational Killswitches
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1108,14 +1158,15 @@ private fun ServiceControlsTabContent(
                 Text("EMERGENCY KILLSWITCHES & SERVICE ACCESS", style = MaterialTheme.typography.labelMedium.copy(color = Color(0xFF00E699), fontWeight = FontWeight.Bold))
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // Maintenance Mode
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Maintenance Mode", style = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold))
-                        Text("Temporarily freezes client apps with a maintenance notice", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
+                        Text("Emergency Maintenance Mode", style = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold))
+                        Text("Locks all user apps and displays a full-screen maintenance overlay", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
                     }
                     Switch(
                         checked = maintenanceMode,
@@ -1124,15 +1175,40 @@ private fun ServiceControlsTabContent(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                if (maintenanceMode) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF0F0F16))
+                            .border(1.dp, Color(0xFF323244), RoundedCornerShape(8.dp))
+                            .padding(10.dp),
+                    ) {
+                        BasicTextField(
+                            value = maintenanceNotice,
+                            onValueChange = onMaintenanceNoticeChange,
+                            modifier = Modifier.fillMaxWidth(),
+                            textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
+                            cursorBrush = SolidColor(Color(0xFFFF5252)),
+                            decorationBox = { inner ->
+                                if (maintenanceNotice.isEmpty()) Text("Custom maintenance message for users...", color = Color(0xFF555566), fontSize = 13.sp)
+                                inner()
+                            },
+                        )
+                    }
+                }
 
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Streaming Killswitch
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Disable Media Streaming", style = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold))
+                        Text("Disable Media Streaming Resolvers", style = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold))
                         Text("Blocks stream link fetching during scheduled server upgrades", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
                     }
                     Switch(
@@ -1141,119 +1217,35 @@ private fun ServiceControlsTabContent(
                         colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFFFFAA00)),
                     )
                 }
-            }
-        }
 
-        item {
-            // Live Remote Feature Flags
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFF16161E))
-                    .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
-                    .padding(20.dp),
-            ) {
-                Text("LIVE FEATURE FLAGS (OVER-THE-AIR TOGGLES)", style = MaterialTheme.typography.labelMedium.copy(color = Color(0xFF00E699), fontWeight = FontWeight.Bold))
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Downloads
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Offline Downloads Feature", style = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold))
-                        Text("Enable/disable local offline video downloading", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
+                if (streamingDisabled) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF0F0F16))
+                            .border(1.dp, Color(0xFF323244), RoundedCornerShape(8.dp))
+                            .padding(10.dp),
+                    ) {
+                        BasicTextField(
+                            value = streamingNotice,
+                            onValueChange = onStreamingNoticeChange,
+                            modifier = Modifier.fillMaxWidth(),
+                            textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
+                            cursorBrush = SolidColor(Color(0xFFFFAA00)),
+                            decorationBox = { inner ->
+                                if (streamingNotice.isEmpty()) Text("Reason for streaming pause...", color = Color(0xFF555566), fontSize = 13.sp)
+                                inner()
+                            },
+                        )
                     }
-                    Switch(
-                        checked = enableDownloads,
-                        onCheckedChange = onEnableDownloadsToggle,
-                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFF00E699)),
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Addons / Plugins
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("3rd-Party Addons & Plugins", style = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold))
-                        Text("Allow client devices to install community addons", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
-                    }
-                    Switch(
-                        checked = enablePlugins,
-                        onCheckedChange = onEnablePluginsToggle,
-                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFF00E699)),
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // P2P / Torrents
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("P2P Torrent Engine", style = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold))
-                        Text("Enable direct peer-to-peer torrent streaming engine", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
-                    }
-                    Switch(
-                        checked = enableP2p,
-                        onCheckedChange = onEnableP2pToggle,
-                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFF00E699)),
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Debrid
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Debrid Cloud Resolvers", style = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold))
-                        Text("Allow premium Real-Debrid/Torbox caching integrations", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
-                    }
-                    Switch(
-                        checked = enableDebrid,
-                        onCheckedChange = onEnableDebridToggle,
-                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFF00E699)),
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Trailers
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("In-App Trailer Playback", style = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold))
-                        Text("Allow YouTube and inline trailer preview players", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
-                    }
-                    Switch(
-                        checked = enableTrailerPlayback,
-                        onCheckedChange = onEnableTrailerPlaybackToggle,
-                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFF00E699)),
-                    )
                 }
             }
         }
 
+        // Live Broadcast Banner
         item {
-            // Live Broadcast & Remote Announcements
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1265,7 +1257,10 @@ private fun ServiceControlsTabContent(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(imageVector = Icons.Rounded.Campaign, contentDescription = null, tint = Color(0xFF00E699), modifier = Modifier.size(24.dp))
                     Spacer(modifier = Modifier.width(10.dp))
-                    Text("LIVE BROADCAST NOTICE BANNER", style = MaterialTheme.typography.titleSmall.copy(color = Color.White, fontWeight = FontWeight.Bold))
+                    Column {
+                        Text("LIVE BROADCAST NOTICE BANNER", style = MaterialTheme.typography.titleSmall.copy(color = Color.White, fontWeight = FontWeight.Bold))
+                        Text("Displays a global notification banner across the top header of all user apps.", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -1285,13 +1280,13 @@ private fun ServiceControlsTabContent(
                         textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
                         cursorBrush = SolidColor(Color(0xFF00E699)),
                         decorationBox = { inner ->
-                            if (broadcastMessage.isEmpty()) Text("Type announcement to broadcast live on all apps...", color = Color(0xFF555566), fontSize = 13.sp)
+                            if (broadcastMessage.isEmpty()) Text("Type announcement to broadcast live on all apps (leave empty to clear)...", color = Color(0xFF555566), fontSize = 13.sp)
                             inner()
                         },
                     )
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Severity Selection
                 Row(
@@ -1299,6 +1294,7 @@ private fun ServiceControlsTabContent(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    Text("Severity:", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp, fontWeight = FontWeight.Bold))
                     listOf("INFO" to Color(0xFF3399FF), "WARNING" to Color(0xFFFFAA00), "CRITICAL" to Color(0xFFFF5252), "PROMO" to Color(0xFF00E699)).forEach { (sev, col) ->
                         val isSelected = broadcastSeverity.equals(sev, ignoreCase = true)
                         Box(
@@ -1313,11 +1309,48 @@ private fun ServiceControlsTabContent(
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Send & Clear action buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Button(
+                        onClick = onSendBroadcast,
+                        enabled = broadcastMessage.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF00E699),
+                            contentColor = Color.Black,
+                            disabledContainerColor = Color(0xFF222230),
+                            disabledContentColor = Color(0xFF555566),
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.weight(1f).height(40.dp),
+                    ) {
+                        Icon(imageVector = Icons.Rounded.Send, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Send Broadcast Now", style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold))
+                    }
+
+                    if (broadcastMessage.isNotBlank()) {
+                        OutlinedButton(
+                            onClick = onClearBroadcast,
+                            border = BorderStroke(1.dp, Color(0xFF444455)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(40.dp),
+                        ) {
+                            Text("Clear Banner", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp, fontWeight = FontWeight.SemiBold))
+                        }
+                    }
+                }
             }
         }
 
+        // Blacklisted Addons
         item {
-            // Version Gating & Broken Addon Blacklist
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1326,36 +1359,11 @@ private fun ServiceControlsTabContent(
                     .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
                     .padding(20.dp),
             ) {
-                Text("VERSION GATING & BLACKLISTED ADDONS", style = MaterialTheme.typography.labelMedium.copy(color = Color(0xFF00E699), fontWeight = FontWeight.Bold))
-                Spacer(modifier = Modifier.height(12.dp))
+                Text("BLACKLISTED ADDONS (BLOCK INSTANTLY)", style = MaterialTheme.typography.labelMedium.copy(color = Color(0xFF00E699), fontWeight = FontWeight.Bold))
+                Spacer(modifier = Modifier.height(6.dp))
+                Text("Addons listed here will be blocked and automatically uninstalled from all client apps.", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                Text("Minimum Supported App Version (e.g. 5.2):", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF0F0F16))
-                        .border(1.dp, Color(0xFF323244), RoundedCornerShape(8.dp))
-                        .padding(10.dp),
-                ) {
-                    BasicTextField(
-                        value = minSupportedVersion,
-                        onValueChange = onMinSupportedVersionChange,
-                        modifier = Modifier.fillMaxWidth(),
-                        textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
-                        cursorBrush = SolidColor(Color(0xFF00E699)),
-                        decorationBox = { inner ->
-                            if (minSupportedVersion.isEmpty()) Text("Leave blank for all versions...", color = Color(0xFF555566), fontSize = 13.sp)
-                            inner()
-                        },
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Text("Blacklisted Addons (One URL per line to block instantly):", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
-                Spacer(modifier = Modifier.height(4.dp))
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1367,49 +1375,11 @@ private fun ServiceControlsTabContent(
                     BasicTextField(
                         value = disabledAddonsText,
                         onValueChange = onDisabledAddonsTextChange,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp),
-                        textStyle = TextStyle(color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace),
-                        cursorBrush = SolidColor(Color(0xFF00E699)),
-                        decorationBox = { inner ->
-                            if (disabledAddonsText.isEmpty()) Text("e.g. https://malicious-addon.com/manifest.json", color = Color(0xFF555566), fontSize = 12.sp)
-                            inner()
-                        },
-                    )
-                }
-            }
-        }
-
-        item {
-            // Live Dynamic Key-Value Store (Extensible Config)
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFF16161E))
-                    .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
-                    .padding(20.dp),
-            ) {
-                Text("DYNAMIC KEY-VALUE OVERRIDES (NO REDEPLOY)", style = MaterialTheme.typography.labelMedium.copy(color = Color(0xFF00E699), fontWeight = FontWeight.Bold))
-                Spacer(modifier = Modifier.height(6.dp))
-                Text("Format: key=value (one per line). Overrides parameters live across all apps.", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF0F0F16))
-                        .border(1.dp, Color(0xFF323244), RoundedCornerShape(8.dp))
-                        .padding(10.dp),
-                ) {
-                    BasicTextField(
-                        value = dynamicConfigText,
-                        onValueChange = onDynamicConfigTextChange,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 70.dp),
-                        textStyle = TextStyle(color = Color(0xFF00E699), fontSize = 12.sp, fontFamily = FontFamily.Monospace),
-                        cursorBrush = SolidColor(Color(0xFF00E699)),
+                        textStyle = TextStyle(color = Color(0xFFFF8888), fontSize = 12.sp, fontFamily = FontFamily.Monospace),
+                        cursorBrush = SolidColor(Color(0xFFFF5252)),
                         decorationBox = { inner ->
-                            if (dynamicConfigText.isEmpty()) Text("stream_timeout=15\ncustom_proxy_url=https://proxy.example.com", color = Color(0xFF555566), fontSize = 12.sp)
+                            if (disabledAddonsText.isEmpty()) Text("e.g. https://malicious-addon.com/manifest.json (one per line)", color = Color(0xFF555566), fontSize = 12.sp)
                             inner()
                         },
                     )
@@ -1417,58 +1387,20 @@ private fun ServiceControlsTabContent(
 
                 statusMessage?.let { msg ->
                     Spacer(modifier = Modifier.height(10.dp))
-                    Text(text = msg, style = TextStyle(color = Color(0xFF00E699), fontSize = 12.sp))
+                    Text(text = msg, style = TextStyle(color = Color(0xFF00E699), fontSize = 12.sp, fontWeight = FontWeight.SemiBold))
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Button(
-                    onClick = onPublishBroadcast,
+                    onClick = onPublishControls,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(44.dp),
+                        .height(46.dp),
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E699), contentColor = Color.Black),
                 ) {
-                    Text("Publish Live Configuration to All Devices", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                }
-            }
-        }
-
-        item {
-            // Database & System Cleanup Card
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFF16161E))
-                    .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
-                    .padding(20.dp),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Rounded.DeleteOutline, contentDescription = null, tint = Color(0xFF3399FF), modifier = Modifier.size(24.dp))
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text("DATABASE CLEANUP & DEDICATED STORAGE", style = MaterialTheme.typography.titleSmall.copy(color = Color.White, fontWeight = FontWeight.Bold))
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Text(
-                    text = "System settings now use a dedicated 'app_settings' table. Clean legacy SYSTEM_CONFIG rows from the licenses table to keep your database organized.",
-                    style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp),
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Button(
-                    onClick = onCleanLegacyDb,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(40.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222230), contentColor = Color(0xFF3399FF)),
-                ) {
-                    Text("Clean Legacy Config from Licenses Table", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Text("Publish Service Controls to All Devices", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 }
             }
         }
@@ -1676,6 +1608,11 @@ private fun LicenseCardItem(
     }
 }
 
+enum class AnalyticsViewMode {
+    SESSIONS,
+    EVENTS,
+}
+
 @Composable
 private fun AnalyticsTabContent(
     analytics: List<LicenseAnalyticsRecord>,
@@ -1685,41 +1622,71 @@ private fun AnalyticsTabContent(
 ) {
     var searchFilter by remember { mutableStateOf("") }
     var selectedEventFilter by remember { mutableStateOf<String?>("ALL") }
+    var viewMode by remember { mutableStateOf(AnalyticsViewMode.SESSIONS) }
+    var expandedSessionId by remember { mutableStateOf<String?>(null) }
 
-    val totalHeartbeats = analytics.size
-    val uniqueKeys = analytics.mapNotNull { it.license_key }.distinct().size
-    val uniqueDevices = analytics.mapNotNull { it.device_id }.distinct().size
-
-    // License metrics
-    val totalLicenses = licenses.size
-    val activeLicenses = licenses.count { it.status.equals("active", ignoreCase = true) && !isDateExpired(it.expiresAt) }
-    val expiredLicenses = licenses.count { isDateExpired(it.expiresAt) && !it.status.equals("revoked", ignoreCase = true) }
-    val revokedLicenses = licenses.count { it.status.equals("revoked", ignoreCase = true) }
-
-    val totalActiveDevices = licenses.sumOf { it.activeDevices }
-    val totalMaxDevices = licenses.sumOf { it.maxDevices }
-    val utilizationFraction = if (totalMaxDevices > 0) (totalActiveDevices.toFloat() / totalMaxDevices.toFloat()).coerceIn(0f, 1f) else 0f
-    val utilizationPct = (utilizationFraction * 100).toInt()
-
-    // Platform Breakdown
-    val platforms = remember(analytics) {
-        val groups = analytics.groupBy { (it.platform ?: "Desktop Client").trim() }
-        groups.map { (name, list) ->
-            val count = list.size
-            val pct = if (totalHeartbeats > 0) (count.toFloat() / totalHeartbeats.toFloat()) else 0f
-            Triple(name, count, pct)
-        }.sortedByDescending { it.second }
+    // Auto-refresh telemetry every 15 seconds while active
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(15_000L)
+            onRefresh()
+        }
     }
 
-    // Filtered Telemetry Records
-    val filteredAnalytics = remember(analytics, searchFilter, selectedEventFilter) {
+    val totalEvents = analytics.size
+    val uniqueDevices = analytics.mapNotNull { it.device_id }.distinct().size
+
+    // Aggregate PostHog Sessions
+    val sessions = remember(analytics) {
+        AdminControlRepository.groupSessions(analytics)
+    }
+
+    val liveSessionsCount = sessions.count { it.isLive }
+    val totalPlaybacksCount = analytics.count { it.event == "playback_started" || it.event == "playback_stopped" }
+    val playbackStartsCount = analytics.count { it.event == "playback_started" }
+    val playbackFinishedCount = analytics.count { it.event == "playback_finished" }
+    val totalSearchesCount = analytics.count { it.event == "search_performed" }
+    val streamQueriesCount = analytics.count { it.event == "stream_fetch_completed" || it.event == "stream_fetch_started" }
+
+    // Filtered Sessions
+    val filteredSessions = remember(sessions, searchFilter) {
+        if (searchFilter.isBlank()) sessions else {
+            sessions.filter { s ->
+                s.licenseKey.contains(searchFilter, ignoreCase = true) ||
+                    s.deviceId.contains(searchFilter, ignoreCase = true) ||
+                    (s.location?.contains(searchFilter, ignoreCase = true) == true) ||
+                    s.mediaPlayed.any { it.contains(searchFilter, ignoreCase = true) } ||
+                    s.searches.any { it.contains(searchFilter, ignoreCase = true) } ||
+                    s.platform.contains(searchFilter, ignoreCase = true)
+            }
+        }
+    }
+
+    // Filtered Events
+    val filteredEvents = remember(analytics, searchFilter, selectedEventFilter) {
         analytics.filter { record ->
             val matchesSearch = searchFilter.isBlank() ||
                 (record.license_key?.contains(searchFilter, ignoreCase = true) == true) ||
+                (record.customer_name?.contains(searchFilter, ignoreCase = true) == true) ||
                 (record.device_id?.contains(searchFilter, ignoreCase = true) == true) ||
+                (record.location?.contains(searchFilter, ignoreCase = true) == true) ||
+                (record.media_title?.contains(searchFilter, ignoreCase = true) == true) ||
+                (record.search_query?.contains(searchFilter, ignoreCase = true) == true) ||
+                (record.log_message?.contains(searchFilter, ignoreCase = true) == true) ||
                 (record.platform?.contains(searchFilter, ignoreCase = true) == true)
-            val matchesEvent = selectedEventFilter == "ALL" || selectedEventFilter == null ||
-                record.event.equals(selectedEventFilter, ignoreCase = true)
+
+            val rawEvt = record.event.orEmpty()
+            val matchesEvent = when (selectedEventFilter) {
+                null, "ALL" -> true
+                "PLAYBACK" -> rawEvt.startsWith("playback_", ignoreCase = true)
+                "STREAMS" -> rawEvt.startsWith("stream_", ignoreCase = true)
+                "SEARCH" -> rawEvt.equals("search_performed", ignoreCase = true)
+                "LAUNCH" -> rawEvt.equals("app_launched", ignoreCase = true) || rawEvt.equals("license_activated", ignoreCase = true)
+                "IDENTIFY" -> rawEvt.equals("\$identify", ignoreCase = true)
+                "LOGS" -> rawEvt.equals("\$log", ignoreCase = true) || rawEvt.equals("log", ignoreCase = true)
+                "ERRORS" -> rawEvt.equals("\$exception", ignoreCase = true) || rawEvt.equals("playback_failed", ignoreCase = true) || record.log_level?.equals("error", ignoreCase = true) == true
+                else -> rawEvt.equals(selectedEventFilter, ignoreCase = true)
+            }
             matchesSearch && matchesEvent
         }
     }
@@ -1730,7 +1697,7 @@ private fun AnalyticsTabContent(
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        // Header
+        // Header Bar
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1738,25 +1705,98 @@ private fun AnalyticsTabContent(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "REAL-TIME TELEMETRY & SESSIONS",
+                            style = MaterialTheme.typography.titleMedium.copy(color = Color.White, fontWeight = FontWeight.Bold),
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF00E699).copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF00E699)),
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "LIVE FEED (15s)",
+                                    style = TextStyle(
+                                        color = Color(0xFF00E699),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "LIVE TELEMETRY & SYSTEM ANALYTICS",
-                        style = MaterialTheme.typography.titleMedium.copy(color = Color.White, fontWeight = FontWeight.Bold),
-                    )
-                    Text(
-                        text = "Real-time client device connections, license slot allocations, and hardware fleet telemetry.",
+                        text = "Real-time user session journeys, playback telemetry, stream resolutions, and diagnostic logs.",
                         style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF888899)),
                     )
                 }
 
-                Button(
-                    onClick = onRefresh,
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222230), contentColor = Color(0xFF00E699)),
-                    modifier = Modifier.height(36.dp),
-                ) {
-                    Icon(imageVector = Icons.Rounded.Refresh, contentDescription = "Refresh", modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Refresh", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // View Mode Switcher
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF161622))
+                            .border(1.dp, Color(0xFF262638), RoundedCornerShape(8.dp))
+                            .padding(2.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (viewMode == AnalyticsViewMode.SESSIONS) Color(0xFF00E699) else Color.Transparent)
+                                .clickable { viewMode = AnalyticsViewMode.SESSIONS }
+                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                        ) {
+                            Text(
+                                text = "SESSIONS (${sessions.size})",
+                                style = TextStyle(
+                                    color = if (viewMode == AnalyticsViewMode.SESSIONS) Color.Black else Color(0xFF888899),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (viewMode == AnalyticsViewMode.EVENTS) Color(0xFF00E699) else Color.Transparent)
+                                .clickable { viewMode = AnalyticsViewMode.EVENTS }
+                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                        ) {
+                            Text(
+                                text = "EVENT STREAM (${analytics.size})",
+                                style = TextStyle(
+                                    color = if (viewMode == AnalyticsViewMode.EVENTS) Color.Black else Color(0xFF888899),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = onRefresh,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222230), contentColor = Color(0xFF00E699)),
+                        modifier = Modifier.height(36.dp),
+                    ) {
+                        Icon(imageVector = Icons.Rounded.Refresh, contentDescription = "Refresh", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (isLoading) "Updating..." else "Refresh", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
@@ -1768,135 +1808,37 @@ private fun AnalyticsTabContent(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 AnalyticsMetricCard(
-                    title = "Licenses Issued",
-                    value = "$totalLicenses",
-                    subtitle = "$activeLicenses Active • $expiredLicenses Expired • $revokedLicenses Revoked",
-                    accentColor = Color(0xFF00E699),
+                    title = "Active Live Users",
+                    value = "$liveSessionsCount",
+                    subtitle = if (liveSessionsCount > 0) "$liveSessionsCount active in past 15m" else "No active sessions right now",
+                    accentColor = if (liveSessionsCount > 0) Color(0xFF00E699) else Color(0xFF888899),
                     modifier = Modifier.weight(1f),
                 )
                 AnalyticsMetricCard(
-                    title = "Connected Device Slots",
-                    value = "$totalActiveDevices / $totalMaxDevices",
-                    subtitle = "$utilizationPct% capacity utilized across keys",
-                    accentColor = if (utilizationPct > 85) Color(0xFFFF9900) else Color(0xFF3399FF),
+                    title = "Total Sessions",
+                    value = "${sessions.size}",
+                    subtitle = "$liveSessionsCount Live • ${sessions.size - liveSessionsCount} Completed",
+                    accentColor = Color(0xFF3399FF),
                     modifier = Modifier.weight(1f),
                 )
                 AnalyticsMetricCard(
-                    title = "Hardware Fleet",
-                    value = "$uniqueDevices",
-                    subtitle = "Distinct unique physical devices seen",
+                    title = "Media Playbacks",
+                    value = "$totalPlaybacksCount",
+                    subtitle = "$playbackStartsCount started • $playbackFinishedCount completed",
                     accentColor = Color(0xFFAA77FF),
                     modifier = Modifier.weight(1f),
                 )
                 AnalyticsMetricCard(
-                    title = "Telemetry Events",
-                    value = "$totalHeartbeats",
-                    subtitle = "Recorded heartbeats & active pings",
+                    title = "Searches & Streams",
+                    value = "$totalSearchesCount",
+                    subtitle = "$totalSearchesCount queries • $streamQueriesCount stream fetches",
                     accentColor = Color(0xFFFFCC00),
                     modifier = Modifier.weight(1f),
                 )
             }
         }
 
-        // Device Slot Capacity & Platform Breakdown Row
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                // Device Capacity Utilization Bar
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF16161E))
-                        .border(1.dp, Color(0xFF262633), RoundedCornerShape(12.dp))
-                        .padding(16.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "DEVICE SLOT CAPACITY",
-                            style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFF00E699), fontWeight = FontWeight.Bold),
-                        )
-                        Text(
-                            text = "$totalActiveDevices of $totalMaxDevices slots",
-                            style = TextStyle(color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(10.dp))
-                    LinearProgressIndicator(
-                        progress = { utilizationFraction },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp)),
-                        color = Color(0xFF00E699),
-                        trackColor = Color(0xFF222230),
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Real-time active client instances currently connected to license keys.",
-                        style = TextStyle(color = Color(0xFF888899), fontSize = 11.sp),
-                    )
-                }
-
-                // Platform Distribution Card
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF16161E))
-                        .border(1.dp, Color(0xFF262633), RoundedCornerShape(12.dp))
-                        .padding(16.dp),
-                ) {
-                    Text(
-                        text = "PLATFORM DISTRIBUTION",
-                        style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFF3399FF), fontWeight = FontWeight.Bold),
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    if (platforms.isEmpty()) {
-                        Text(
-                            text = "No platform telemetry recorded yet.",
-                            style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp),
-                        )
-                    } else {
-                        platforms.take(3).forEach { (name, count, pct) ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 3.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = if (name.contains("Desktop", ignoreCase = true)) Icons.Rounded.Computer else Icons.Rounded.Smartphone,
-                                        contentDescription = null,
-                                        tint = Color(0xFF88AAFF),
-                                        modifier = Modifier.size(14.dp),
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = name,
-                                        style = TextStyle(color = Color.White, fontSize = 12.sp),
-                                    )
-                                }
-                                Text(
-                                    text = "$count pings (${(pct * 100).toInt()}%)",
-                                    style = TextStyle(color = Color(0xFF888899), fontSize = 11.sp),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Live Telemetry Logs Filter Bar
+        // Filter / Search Bar
         item {
             Column(
                 modifier = Modifier
@@ -1904,43 +1846,53 @@ private fun AnalyticsTabContent(
                     .clip(RoundedCornerShape(12.dp))
                     .background(Color(0xFF16161E))
                     .border(1.dp, Color(0xFF262633), RoundedCornerShape(12.dp))
-                    .padding(16.dp),
+                    .padding(14.dp),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = "LIVE TELEMETRY STREAM (${filteredAnalytics.size} of $totalHeartbeats Records)",
-                        style = MaterialTheme.typography.labelMedium.copy(color = Color.White, fontWeight = FontWeight.Bold),
-                    )
+                if (viewMode == AnalyticsViewMode.EVENTS) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = "FILTER BY EVENT TYPE (${filteredEvents.size} of $totalEvents)",
+                            style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFF888899), fontWeight = FontWeight.Bold),
+                        )
 
-                    // Event Filter Chips
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf("ALL", "heartbeat", "activation", "login").forEach { ev ->
-                            val isSelected = (selectedEventFilter == ev) || (ev == "ALL" && (selectedEventFilter == null || selectedEventFilter == "ALL"))
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(if (isSelected) Color(0xFF00E699) else Color(0xFF222230))
-                                    .clickable { selectedEventFilter = if (ev == "ALL") null else ev }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                            ) {
-                                Text(
-                                    text = ev.uppercase(),
-                                    style = TextStyle(
-                                        color = if (isSelected) Color.Black else Color(0xFFCCCEDD),
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                    ),
-                                )
+                        // Event Filter Chips
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf(
+                                "ALL" to "ALL",
+                                "PLAYBACK" to "PLAYBACK",
+                                "STREAMS" to "STREAMS",
+                                "SEARCH" to "SEARCH",
+                                "LAUNCH" to "LAUNCH",
+                                "IDENTIFY" to "IDENTIFY",
+                                "LOGS" to "LOGS",
+                                "ERRORS" to "ERRORS",
+                            ).forEach { (evKey, evLabel) ->
+                                val isSelected = (selectedEventFilter == evKey) || (evKey == "ALL" && (selectedEventFilter == null || selectedEventFilter == "ALL"))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (isSelected) Color(0xFF00E699) else Color(0xFF222230))
+                                        .clickable { selectedEventFilter = if (evKey == "ALL") null else evKey }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                ) {
+                                    Text(
+                                        text = evLabel,
+                                        style = TextStyle(
+                                            color = if (isSelected) Color.Black else Color(0xFFCCCEDD),
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                        ),
+                                    )
+                                }
                             }
                         }
                     }
+                    Spacer(modifier = Modifier.height(10.dp))
                 }
-
-                Spacer(modifier = Modifier.height(10.dp))
 
                 // Search Filter Input
                 Row(
@@ -1957,22 +1909,36 @@ private fun AnalyticsTabContent(
                     BasicTextField(
                         value = searchFilter,
                         onValueChange = { searchFilter = it },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.weight(1f),
                         textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
                         cursorBrush = SolidColor(Color(0xFF00E699)),
                         singleLine = true,
                         decorationBox = { innerTextField ->
                             if (searchFilter.isEmpty()) {
-                                Text("Filter by license key, device ID, or platform...", style = TextStyle(color = Color(0xFF666677), fontSize = 13.sp))
+                                Text(
+                                    if (viewMode == AnalyticsViewMode.SESSIONS) "Search sessions by license key, device, media title, search query, or location..." else "Filter events by license key, media title, query, device, or log message...",
+                                    style = TextStyle(color = Color(0xFF666677), fontSize = 13.sp),
+                                )
                             }
                             innerTextField()
                         },
                     )
+                    if (searchFilter.isNotEmpty()) {
+                        Icon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = "Clear",
+                            tint = Color(0xFF888899),
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clip(CircleShape)
+                                .clickable { searchFilter = "" },
+                        )
+                    }
                 }
             }
         }
 
-        // Stream Items
+        // Loading State
         if (isLoading && analytics.isEmpty()) {
             item {
                 Box(
@@ -1984,135 +1950,328 @@ private fun AnalyticsTabContent(
                     NuvioLoadingIndicator()
                 }
             }
-        } else if (filteredAnalytics.isEmpty()) {
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF16161E))
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = if (searchFilter.isNotBlank()) "No telemetry matching '$searchFilter'" else "No analytics telemetry records recorded yet. User client heartbeat logs will appear here.",
-                        style = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFF888899)),
-                    )
+        } else if (viewMode == AnalyticsViewMode.SESSIONS) {
+            // SESSIONS LIST
+            if (filteredSessions.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF16161E))
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = if (searchFilter.isNotBlank()) "No sessions matching '$searchFilter'" else "No active sessions recorded yet. User client activity will appear here in real-time.",
+                            style = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFF888899)),
+                        )
+                    }
+                }
+            } else {
+                items(filteredSessions) { session ->
+                    val isExpanded = expandedSessionId == session.sessionId
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFF16161E))
+                            .border(1.dp, if (session.isLive) Color(0xFF00E699).copy(alpha = 0.4f) else Color(0xFF262633), RoundedCornerShape(10.dp))
+                            .clickable { expandedSessionId = if (isExpanded) null else session.sessionId }
+                            .padding(14.dp),
+                    ) {
+                        // Session Top Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(if (session.isLive) Color(0xFF00E699).copy(alpha = 0.15f) else Color(0xFF222230))
+                                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (session.isLive) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(6.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color(0xFF00E699)),
+                                            )
+                                            Spacer(modifier = Modifier.width(5.dp))
+                                        }
+                                        Text(
+                                            text = if (session.isLive) "LIVE NOW" else "COMPLETED",
+                                            style = TextStyle(
+                                                color = if (session.isLive) Color(0xFF00E699) else Color(0xFF888899),
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                            ),
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = session.licenseKey,
+                                    style = TextStyle(color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 13.sp),
+                                )
+                                if (!session.location.isNullOrBlank()) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "• ${session.location}",
+                                        style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp),
+                                    )
+                                }
+                            }
+
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "Duration: ${session.durationFormatted} • ${session.totalEvents} events",
+                                    style = TextStyle(color = Color(0xFF888899), fontSize = 11.sp, fontFamily = FontFamily.Monospace),
+                                )
+                                Text(
+                                    text = if (isExpanded) "Collapse" else "Expand",
+                                    style = TextStyle(color = Color(0xFF00E699), fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Session Highlights Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                text = "${session.platform} • ${session.deviceId} • v${session.version}",
+                                style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp),
+                            )
+
+                            Text(
+                                text = session.recentActivity,
+                                style = TextStyle(
+                                    color = if (session.mediaPlayed.isNotEmpty()) Color(0xFF00D4FF) else Color(0xFFCCCEDD),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                ),
+                            )
+                        }
+
+                        // Expanded Session Events Timeline
+                        if (isExpanded) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF0F0F16))
+                                    .border(1.dp, Color(0xFF222230), RoundedCornerShape(8.dp))
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text(
+                                    text = "SESSION JOURNEY TIMELINE",
+                                    style = TextStyle(color = Color(0xFF88AAFF), fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                                )
+
+                                val timelineEntries = remember(session.records) { formatSessionTimeline(session.records) }
+                                timelineEntries.forEach { entry ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.weight(1f, fill = false),
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(4.dp))
+                                                    .background(entry.color.copy(alpha = 0.18f))
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                                            ) {
+                                                Text(
+                                                    text = entry.title,
+                                                    style = TextStyle(
+                                                        color = entry.color,
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                    ),
+                                                )
+                                            }
+                                            if (!entry.detail.isNullOrBlank()) {
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    text = entry.detail,
+                                                    style = TextStyle(
+                                                        color = if (entry.isImportant) Color.White else Color(0xFF94A3B8),
+                                                        fontSize = 11.sp,
+                                                        fontWeight = if (entry.isImportant) FontWeight.SemiBold else FontWeight.Normal,
+                                                    ),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            text = entry.time,
+                                            style = TextStyle(
+                                                color = Color(0xFF64748B),
+                                                fontSize = 10.sp,
+                                                fontFamily = FontFamily.Monospace,
+                                            ),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         } else {
-            items(filteredAnalytics) { record ->
-                val isRevoked = record.event.equals("revoked", ignoreCase = true) || record.event.equals("error", ignoreCase = true)
-                val isLive = isTelemetryLiveActive(record)
-                val isOffline = !isLive && !isRevoked
-
-                val eventName = when {
-                    isRevoked -> "REVOKED"
-                    isLive -> "ACTIVE"
-                    record.event.equals("activation", ignoreCase = true) -> "ACTIVATION"
-                    record.event.equals("login", ignoreCase = true) -> "LOGIN"
-                    else -> "OFFLINE"
-                }
-                val eventColor = when {
-                    isRevoked -> Color(0xFFFF5252)
-                    isLive -> Color(0xFF00E699)
-                    eventName == "ACTIVATION" || eventName == "LOGIN" -> Color(0xFF3399FF)
-                    else -> Color(0xFF888899)
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFF16161E))
-                        .border(1.dp, Color(0xFF262633), RoundedCornerShape(10.dp))
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(eventColor.copy(alpha = 0.15f))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp),
-                            ) {
-                                Text(
-                                    text = eventName,
-                                    style = TextStyle(color = eventColor, fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = record.license_key ?: "UNKNOWN KEY",
-                                style = TextStyle(color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 13.sp),
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        val currentAppVersion = com.nuvio.app.core.build.AppVersionPolicy.displayVersionName
-
+            // EVENTS STREAM LIST
+            if (filteredEvents.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF16161E))
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
                         Text(
-                            text = formatTelemetryHardware(record, currentAppVersion),
-                            style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp),
+                            text = if (searchFilter.isNotBlank()) "No events matching '$searchFilter'" else "No telemetry events captured yet.",
+                            style = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFF888899)),
                         )
                     }
-
-                    val statusBadgeText = when {
-                        isRevoked -> "Revoked"
-                        isLive -> "Active Now"
-                        record.last_seen_at != null && record.last_seen_at.contains("T") ->
-                            record.last_seen_at.take(19).replace("T", " ")
-                        record.created_at != null && record.created_at.contains("T") ->
-                            record.created_at.take(19).replace("T", " ")
-                        else -> "Offline"
+                }
+            } else {
+                items(filteredEvents) { record ->
+                    val rawEvt = record.event.orEmpty()
+                    val (eventName, eventColor) = when {
+                        rawEvt.equals("app_launched", ignoreCase = true) -> "LAUNCHED" to Color(0xFF00D4FF)
+                        rawEvt.equals("license_activated", ignoreCase = true) -> "ACTIVATED" to Color(0xFF3399FF)
+                        rawEvt.equals("\$identify", ignoreCase = true) -> "IDENTIFY" to Color(0xFFA855F7)
+                        rawEvt.startsWith("playback_started", ignoreCase = true) -> "PLAY START" to Color(0xFF00E699)
+                        rawEvt.startsWith("playback_stopped", ignoreCase = true) -> "PLAY STOP" to Color(0xFF88AAFF)
+                        rawEvt.startsWith("playback_paused", ignoreCase = true) -> "PLAY PAUSE" to Color(0xFFFFCC00)
+                        rawEvt.startsWith("playback_failed", ignoreCase = true) -> "PLAY FAIL" to Color(0xFFFF4D4D)
+                        rawEvt.startsWith("stream_fetch", ignoreCase = true) -> "STREAMS" to Color(0xFFA855F7)
+                        rawEvt.startsWith("search", ignoreCase = true) -> "SEARCH" to Color(0xFFFF9900)
+                        rawEvt.equals("\$log", ignoreCase = true) || rawEvt.equals("log", ignoreCase = true) -> ("LOG: " + (record.log_level?.uppercase() ?: "INFO")) to Color(0xFFF59E0B)
+                        rawEvt.equals("\$exception", ignoreCase = true) || rawEvt.equals("error", ignoreCase = true) -> "EXCEPTION" to Color(0xFFFF4D4D)
+                        else -> rawEvt.uppercase().take(14) to Color(0xFF888899)
                     }
-                    Text(
-                        text = statusBadgeText,
-                        style = TextStyle(
-                            color = if (isLive) Color(0xFF00E699) else Color(0xFF666677),
-                            fontSize = 11.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = if (isLive) FontWeight.Bold else FontWeight.Normal,
-                        ),
-                    )
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFF16161E))
+                            .border(1.dp, Color(0xFF262633), RoundedCornerShape(10.dp))
+                            .padding(14.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(eventColor.copy(alpha = 0.15f))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                                ) {
+                                    Text(
+                                        text = eventName,
+                                        style = TextStyle(color = eventColor, fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = buildString {
+                                        if (!record.customer_name.isNullOrBlank()) {
+                                            append(record.customer_name)
+                                            append(" • ")
+                                        }
+                                        append(record.license_key ?: "ANONYMOUS")
+                                    },
+                                    style = TextStyle(color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 13.sp),
+                                )
+                            }
+
+                            val timeText = record.created_at?.take(19)?.replace("T", " ") ?: ""
+                            Text(
+                                text = timeText,
+                                style = TextStyle(color = Color(0xFF888899), fontSize = 11.sp, fontFamily = FontFamily.Monospace),
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // Details / Hardware row
+                        val detailText = buildString {
+                            append(formatTelemetryHardware(record, "1.0.0"))
+                            if (!record.media_title.isNullOrBlank()) {
+                                append(" • ")
+                                append(record.media_title)
+                            }
+                            if (!record.search_query.isNullOrBlank()) {
+                                append(" • Search: \"")
+                                append(record.search_query)
+                                append("\"")
+                            }
+                            if (!record.location.isNullOrBlank()) {
+                                append(" • ")
+                                append(record.location)
+                            }
+                        }
+
+                        Text(
+                            text = detailText,
+                            style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp),
+                        )
+
+                        if (!record.log_message.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFF0D0D14))
+                                    .border(1.dp, Color(0xFF222230), RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                            ) {
+                                Text(
+                                    text = record.log_message,
+                                    style = TextStyle(
+                                        color = if (eventName == "EXCEPTION" || record.log_level?.equals("error", ignoreCase = true) == true) Color(0xFFFF8888) else Color(0xFFCCD0E0),
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 11.sp,
+                                    ),
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
     }
-}
-
-private fun isTelemetryLiveActive(record: LicenseAnalyticsRecord, nowMs: Long = com.nuvio.app.features.watchprogress.WatchProgressClock.nowEpochMs()): Boolean {
-    val evt = record.event.orEmpty()
-    if (evt.equals("revoked", ignoreCase = true) || evt.equals("offline", ignoreCase = true) || evt.equals("error", ignoreCase = true)) {
-        return false
-    }
-    if (!evt.equals("heartbeat", ignoreCase = true)) {
-        return false
-    }
-
-    val epochMs = record.last_seen_at?.toLongOrNull()
-    if (epochMs != null && epochMs > 1_000_000_000_000L) {
-        val diffMs = nowMs - epochMs
-        return diffMs in -15_000L..(5 * 60 * 1000L)
-    }
-
-    val timeStr = record.last_seen_at?.takeIf { it.contains("T") } ?: record.created_at?.takeIf { it.contains("T") }
-    if (timeStr != null) {
-        val parsed = runCatching { kotlinx.datetime.Instant.parse(timeStr) }.getOrNull()
-        if (parsed != null) {
-            val diffMs = nowMs - parsed.toEpochMilliseconds()
-            return diffMs in -15_000L..(5 * 60 * 1000L)
-        }
-    }
-
-    return false
 }
 
 private fun formatTelemetryHardware(record: LicenseAnalyticsRecord, defaultVersion: String): String {
     val rawPlatform = record.platform?.trim().orEmpty()
     val rawDevice = record.device_id?.trim().orEmpty()
-    val version = record.version?.takeIf { it.isNotBlank() && it != "1.1.20" } ?: defaultVersion
+    val version = record.version?.takeIf { it.isNotBlank() } ?: defaultVersion
 
     val osName = when {
         rawPlatform.contains("Mac", ignoreCase = true) || rawPlatform.contains("Darwin", ignoreCase = true) -> "macOS"
@@ -2178,4 +2337,186 @@ private fun AnalyticsMetricCard(
         Spacer(modifier = Modifier.height(2.dp))
         Text(text = subtitle, style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF666677), fontSize = 11.sp))
     }
+}
+
+private data class CleanTimelineEntry(
+    val title: String,
+    val detail: String? = null,
+    val color: Color,
+    val time: String,
+    val isImportant: Boolean = false,
+)
+
+private fun formatSessionTimeline(records: List<LicenseAnalyticsRecord>): List<CleanTimelineEntry> {
+    val meaningful = records.filter {
+        val evt = it.event.orEmpty().lowercase()
+        evt != "heartbeat" && !evt.startsWith("\$identify") && !evt.startsWith("\$set") && !evt.startsWith("\$create_alias")
+    }
+
+    if (meaningful.isEmpty()) {
+        val latestTime = records.lastOrNull()?.created_at?.take(19)?.replace("T", " ") ?: ""
+        return listOf(
+            CleanTimelineEntry(
+                title = "Session Active (Idle)",
+                detail = "Telemetry connection live · No user actions performed yet",
+                color = Color(0xFF00E699),
+                time = latestTime,
+            )
+        )
+    }
+
+    val entries = mutableListOf<CleanTimelineEntry>()
+    var lastScreen: String? = null
+
+    meaningful.forEach { evt ->
+        val rawEvt = evt.event.orEmpty()
+        val time = evt.created_at?.take(19)?.replace("T", " ")?.substringAfter(" ") ?: ""
+
+        when {
+            rawEvt.startsWith("playback_started", ignoreCase = true) -> {
+                entries.add(
+                    CleanTimelineEntry(
+                        title = "Started Watching",
+                        detail = evt.media_title?.takeIf { it.isNotBlank() },
+                        color = Color(0xFF00E699),
+                        time = time,
+                        isImportant = true,
+                    )
+                )
+            }
+            rawEvt.startsWith("playback_stopped", ignoreCase = true) -> {
+                entries.add(
+                    CleanTimelineEntry(
+                        title = "Stopped Watching",
+                        detail = evt.media_title?.takeIf { it.isNotBlank() },
+                        color = Color(0xFF88AAFF),
+                        time = time,
+                    )
+                )
+            }
+            rawEvt.startsWith("playback_paused", ignoreCase = true) -> {
+                entries.add(
+                    CleanTimelineEntry(
+                        title = "Paused",
+                        detail = evt.media_title?.takeIf { it.isNotBlank() },
+                        color = Color(0xFFFFCC00),
+                        time = time,
+                    )
+                )
+            }
+            rawEvt.startsWith("playback_failed", ignoreCase = true) -> {
+                entries.add(
+                    CleanTimelineEntry(
+                        title = "Playback Failed",
+                        detail = evt.media_title?.takeIf { it.isNotBlank() } ?: evt.log_message,
+                        color = Color(0xFFFF4D4D),
+                        time = time,
+                        isImportant = true,
+                    )
+                )
+            }
+            rawEvt.startsWith("search", ignoreCase = true) -> {
+                val q = evt.search_query?.takeIf { it.isNotBlank() }
+                entries.add(
+                    CleanTimelineEntry(
+                        title = "Search",
+                        detail = if (q != null) "\"$q\"" else null,
+                        color = Color(0xFFFFB800),
+                        time = time,
+                    )
+                )
+            }
+            rawEvt.equals("profile_switched", ignoreCase = true) -> {
+                entries.add(
+                    CleanTimelineEntry(
+                        title = "Profile Switched",
+                        detail = evt.customer_name?.takeIf { it.isNotBlank() },
+                        color = Color(0xFFA855F7),
+                        time = time,
+                    )
+                )
+            }
+            rawEvt.equals("addon_installed", ignoreCase = true) -> {
+                entries.add(
+                    CleanTimelineEntry(
+                        title = "Installed Addon",
+                        detail = evt.addon_name?.takeIf { it.isNotBlank() },
+                        color = Color(0xFF2DD4BF),
+                        time = time,
+                        isImportant = true,
+                    )
+                )
+            }
+            rawEvt.equals("addon_uninstalled", ignoreCase = true) -> {
+                entries.add(
+                    CleanTimelineEntry(
+                        title = "Removed Addon",
+                        detail = evt.addon_name?.takeIf { it.isNotBlank() },
+                        color = Color(0xFFFF9900),
+                        time = time,
+                    )
+                )
+            }
+            rawEvt.equals("app_launched", ignoreCase = true) -> {
+                entries.add(
+                    CleanTimelineEntry(
+                        title = "App Launched",
+                        detail = evt.version?.takeIf { it.isNotBlank() }?.let { "v$it" },
+                        color = Color(0xFF00D4FF),
+                        time = time,
+                    )
+                )
+            }
+            rawEvt.equals("license_activated", ignoreCase = true) -> {
+                entries.add(
+                    CleanTimelineEntry(
+                        title = "License Activated",
+                        detail = evt.license_key?.takeIf { it.isNotBlank() },
+                        color = Color(0xFF3399FF),
+                        time = time,
+                        isImportant = true,
+                    )
+                )
+            }
+            rawEvt.equals("\$screen", ignoreCase = true) -> {
+                val screenName = evt.log_message?.takeIf { it.isNotBlank() } ?: "Screen"
+                if (screenName != lastScreen) {
+                    lastScreen = screenName
+                    entries.add(
+                        CleanTimelineEntry(
+                            title = "Viewed Screen",
+                            detail = screenName,
+                            color = Color(0xFF818CF8),
+                            time = time,
+                        )
+                    )
+                }
+            }
+            rawEvt.contains("exception", ignoreCase = true) || rawEvt.contains("error", ignoreCase = true) -> {
+                entries.add(
+                    CleanTimelineEntry(
+                        title = "Error Occurred",
+                        detail = evt.log_message?.takeIf { it.isNotBlank() } ?: rawEvt,
+                        color = Color(0xFFFF4D4D),
+                        time = time,
+                        isImportant = true,
+                    )
+                )
+            }
+            else -> {
+                val cleanTitle = rawEvt.replace("_", " ").split(" ")
+                    .joinToString(" ") { word -> word.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() } }
+                entries.add(
+                    CleanTimelineEntry(
+                        title = cleanTitle,
+                        detail = evt.media_title ?: evt.search_query ?: evt.log_message,
+                        color = Color(0xFF94A3B8),
+                        time = time,
+                    )
+                )
+            }
+        }
+    }
+
+    return entries
 }

@@ -3,6 +3,7 @@ package com.nuvio.app.features.player
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import com.nuvio.app.core.analytics.PostHogAnalytics
 import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.p2p.P2pSettingsRepository
 import com.nuvio.app.features.p2p.P2pStreamRequest
@@ -30,6 +31,18 @@ import org.jetbrains.compose.resources.getString
 
 @Composable
 internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
+    LaunchedEffect(errorMessage) {
+        val err = errorMessage
+        if (!err.isNullOrBlank()) {
+            PostHogAnalytics.trackPlaybackFailed(
+                mediaTitle = title,
+                videoId = activeVideoId ?: parentMetaId,
+                errorMessage = err,
+                sourceUrl = activeSourceUrl,
+            )
+        }
+    }
+
     val currentFeedback = liveGestureFeedback ?: gestureFeedback
     LaunchedEffect(currentFeedback) {
         if (currentFeedback != null) {
@@ -266,10 +279,6 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
             else -> 0L
         }
         if (targetPositionMs <= 0L) {
-            initialSeekApplied = true
-            return@LaunchedEffect
-        }
-        if (isDesktop && activeInitialPositionMs > 0L) {
             initialSeekApplied = true
             return@LaunchedEffect
         }

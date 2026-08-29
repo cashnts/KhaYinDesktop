@@ -45,6 +45,13 @@ private const val MacosDarkAquaAppearance = "NSAppearanceNameDarkAqua"
 fun main(args: Array<String>) {
     applyDesktopRendererPreference()
     SentryInitializer.start()
+    val lastKnownLicense = com.nuvio.app.features.license.LicenseStorage.loadLastKnownKey()?.takeIf { it.isNotBlank() }
+    com.nuvio.app.core.analytics.PostHogAnalytics.initialize(
+        platform = "Desktop-${com.nuvio.app.features.player.desktop.DesktopHostOs.current.name}",
+        version = com.nuvio.app.core.build.AppVersionConfig.VERSION_NAME,
+        distinctId = lastKnownLicense
+    )
+    com.nuvio.app.core.analytics.PostHogAnalytics.capture("app_launched")
     configureDesktopQuickJsLibrary()
     configureDesktopChrome()
     installDesktopOpenUriHandler()

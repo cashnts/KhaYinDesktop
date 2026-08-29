@@ -165,30 +165,7 @@ internal fun LazyListScope.advancedSettingsContent(
             }
         }
     }
-    if (DiscordRichPresenceRepository.isSupported) {
-        item {
-            val discordEnabledFlow = remember {
-                DiscordRichPresenceRepository.ensureLoaded()
-                DiscordRichPresenceRepository.enabled
-            }
-            val discordEnabled by discordEnabledFlow.collectAsStateWithLifecycle()
 
-            SettingsSection(
-                title = stringResource(Res.string.settings_advanced_section_discord),
-                isTablet = isTablet,
-            ) {
-                SettingsGroup(isTablet = isTablet) {
-                    SettingsSwitchRow(
-                        title = stringResource(Res.string.settings_advanced_discord_rich_presence),
-                        description = stringResource(Res.string.settings_advanced_discord_rich_presence_description),
-                        checked = discordEnabled,
-                        isTablet = isTablet,
-                        onCheckedChange = DiscordRichPresenceRepository::setEnabled,
-                    )
-                }
-            }
-        }
-    }
     item {
         SettingsSection(
             title = stringResource(Res.string.settings_advanced_section_cache),

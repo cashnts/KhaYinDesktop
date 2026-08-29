@@ -1823,10 +1823,8 @@ const renderOpeningOverlay = suppress => {
   const artworkUrl = setImageSource(openingArtwork, state.openingArtwork);
   const logoUrl = setImageSource(openingLogoBase, state.openingLogo);
   setImageSource(openingLogoFill, state.openingLogo);
-
   const hasProgress = progress !== null;
-  const openingBootstrap = !hasReceivedPlayerControls;
-  const wantsOpening = Boolean(openingBootstrap || state.showOpeningOverlay);
+  const wantsOpening = Boolean(state.showOpeningOverlay);
   const showOpening = Boolean(!suppress && wantsOpening && state.isLoading);
   const titleText = String(state.openingTitle || state.title || "").trim();
   const messageText = String(state.openingMessage || "").trim();
@@ -1973,7 +1971,7 @@ const renderNativePlaybackPrompts = () => {
 };
 
 const isOpeningOverlayActive = () =>
-  Boolean((!hasReceivedPlayerControls || state.showOpeningOverlay) && state.isLoading);
+  Boolean(state.showOpeningOverlay && state.isLoading);
 
 const isChromeInteractionTarget = target =>
   Boolean(target && target.closest && target.closest(chromeInteractionSelector));

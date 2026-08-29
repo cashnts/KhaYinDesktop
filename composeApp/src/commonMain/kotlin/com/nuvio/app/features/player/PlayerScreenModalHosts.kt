@@ -49,6 +49,7 @@ internal fun PlayerScreenModalHosts(
     onVideoSettingsChanged: () -> Unit,
     onVideoSettingsModalDismissed: () -> Unit,
     showSourcesPanel: Boolean,
+    showResolutionPanel: Boolean = false,
     sourceStreamsState: StreamsUiState,
     contentTitle: String,
     activeEpisodeTitle: String?,
@@ -58,6 +59,7 @@ internal fun PlayerScreenModalHosts(
     onSourceStreamSelected: (StreamItem) -> Unit,
     onReloadSources: () -> Unit,
     onSourcesPanelDismissed: () -> Unit,
+    onResolutionPanelDismissed: () -> Unit = {},
     isSeries: Boolean,
     showEpisodesPanel: Boolean,
     allEpisodes: List<MetaVideo>,
@@ -167,6 +169,15 @@ internal fun PlayerScreenModalHosts(
         onStreamSelected = onSourceStreamSelected,
         onReload = onReloadSources,
         onDismiss = onSourcesPanelDismissed,
+    )
+
+    PlayerResolutionPanel(
+        visible = showResolutionPanel,
+        streamsUiState = sourceStreamsState,
+        currentStreamUrl = activeSourceUrl,
+        currentStreamName = activeStreamTitle,
+        onStreamSelected = onSourceStreamSelected,
+        onDismiss = onResolutionPanelDismissed,
     )
 
     if (isSeries) {

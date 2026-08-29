@@ -1,5 +1,6 @@
 package com.nuvio.app.features.player
 
+import com.nuvio.app.core.analytics.PostHogAnalytics
 import com.nuvio.app.features.tmdb.TmdbService
 import com.nuvio.app.features.tracking.TrackingMediaReference
 import com.nuvio.app.features.tracking.TrackingScrobbleAction
@@ -52,11 +53,12 @@ internal fun PlayerScreenRuntime.resetIdentityStateIfNeeded() {
     if (lastResetPlaybackIdentity != identity) {
         lastResetPlaybackIdentity = identity
         shouldPlay = true
-        initialLoadCompleted = false
+        if (activeInitialPositionMs <= 0L) {
+            initialLoadCompleted = false
+        }
         speedBoostRestoreSpeed = null
         isHoldToSpeedGestureActive = false
-        initialSeekApplied = activeInitialPositionMs <= 0L &&
-            (activeInitialProgressFraction == null || activeInitialProgressFraction!! <= 0f)
+        initialSeekApplied = false
         lastProgressPersistEpochMs = 0L
         previousIsPlaying = false
         pendingSeekScrobbleRestart = false
@@ -111,7 +113,7 @@ internal fun PlayerScreenRuntime.snapshotTrackingScrobbleItemInputs() = Tracking
     title = title,
     seasonNumber = activeSeasonNumber,
     episodeNumber = activeEpisodeNumber,
-    episodeTitle = activeEpisodeTitle,
+    episodeTitle = episodeTitle,
 )
 
 private fun TrackingScrobbleItemInputs.buildMedia(): TrackingMediaReference =
@@ -133,6 +135,19 @@ internal fun PlayerScreenRuntime.emitTrackingScrobbleStart() {
     hasRequestedScrobbleStartForCurrentItem = true
     val requestGeneration = scrobbleStartRequestGeneration + 1L
     scrobbleStartRequestGeneration = requestGeneration
+
+    PostHogAnalytics.trackPlaybackStarted(
+        mediaTitle = title,
+        contentType = contentType ?: parentMetaType,
+        videoId = activeVideoId ?: parentMetaId,
+        season = activeSeasonNumber,
+        episode = activeEpisodeNumber,
+        durationMs = playbackSnapshot.durationMs,
+        positionMs = playbackSnapshot.positionMs,
+        isP2p = activeTorrentInfoHash != null,
+        streamName = activeStreamTitle,
+        addonName = activeProviderName,
+    )
 
     scope.launch {
         val media = currentTrackingMedia()
@@ -156,6 +171,14 @@ internal fun PlayerScreenRuntime.emitTrackingScrobbleStart() {
 }
 
 internal fun PlayerScreenRuntime.emitTrackingScrobblePause(progressPercent: Float? = null) {
+    val percent = progressPercent ?: currentPlaybackProgressPercent()
+    PostHogAnalytics.trackPlaybackPaused(
+        mediaTitle = title,
+        videoId = activeVideoId ?: parentMetaId,
+        positionMs = playbackSnapshot.positionMs,
+        durationMs = playbackSnapshot.durationMs,
+        progressPercent = percent,
+    )
     emitTrackingScrobbleTerminal(
         action = TrackingScrobbleAction.PAUSE,
         progressPercent = progressPercent,
@@ -163,6 +186,16 @@ internal fun PlayerScreenRuntime.emitTrackingScrobblePause(progressPercent: Floa
 }
 
 internal fun PlayerScreenRuntime.emitTrackingScrobbleStop(progressPercent: Float? = null) {
+    val percent = progressPercent ?: currentPlaybackProgressPercent()
+    val isCompleted = percent >= 80f || playbackSnapshot.isEnded
+    PostHogAnalytics.trackPlaybackStopped(
+        mediaTitle = title,
+        videoId = activeVideoId ?: parentMetaId,
+        positionMs = playbackSnapshot.positionMs,
+        durationMs = playbackSnapshot.durationMs,
+        progressPercent = percent,
+        completed = isCompleted,
+    )
     emitTrackingScrobbleTerminal(
         action = TrackingScrobbleAction.STOP,
         progressPercent = progressPercent,

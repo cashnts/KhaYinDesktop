@@ -1,6 +1,7 @@
 package com.nuvio.app.features.search
 
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.analytics.PostHogAnalytics
 import com.nuvio.app.core.i18n.localizedMediaTypeLabel
 import com.nuvio.app.features.addons.AddonCatalog
 import com.nuvio.app.features.addons.AddonExtraProperty
@@ -150,6 +151,13 @@ object SearchRepository {
             val sections = results.orderedSections(normalizedQuery)
             val firstFailure = completedResults.firstNotNullOfOrNull { it.error?.message }
             val allFailed = completedResults.isNotEmpty() && completedResults.all { it.error != null }
+
+            PostHogAnalytics.trackSearch(
+                query = normalizedQuery,
+                totalResults = sections.sumOf { it.items.size },
+                sectionCount = sections.size,
+                hasError = allFailed,
+            )
 
             _uiState.value = SearchUiState(
                 isLoading = false,

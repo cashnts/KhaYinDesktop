@@ -1,6 +1,7 @@
 package com.nuvio.app.features.player
 
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.analytics.PostHogAnalytics
 import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.buildAddonResourceUrl
@@ -266,6 +267,15 @@ object PlayerStreamsRepository {
         )
         log.d { "state $panelName request=$requestKey stage=initial ${stateFlow.value.streamDiagnostics()}" }
 
+        PostHogAnalytics.trackStreamFetchStarted(
+            type = type,
+            videoId = videoId,
+            season = season,
+            episode = episode,
+            addonCount = streamAddons.size,
+            pluginCount = pluginProviderGroups.size,
+        )
+
         val job = scope.launch {
             val installedAddonIds = streamAddons.map { it.addonId }.toSet()
             val installedAddonNames = installedAddonOrder.toSet()
@@ -510,6 +520,17 @@ object PlayerStreamsRepository {
                 }
             }
             completions.close()
+
+            val finalState = stateFlow.value
+            val totalStreams = finalState.groups.sumOf { it.streams.size }
+            PostHogAnalytics.trackStreamFetchCompleted(
+                type = type,
+                videoId = videoId,
+                totalStreams = totalStreams,
+                groupCount = finalState.groups.size,
+                isEmpty = totalStreams == 0,
+                emptyReason = finalState.emptyStateReason?.name,
+            )
         }
         setJob(job)
     }

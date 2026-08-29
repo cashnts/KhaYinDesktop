@@ -105,6 +105,11 @@ object LicenseRepository {
             } else {
                 _state.value = LicenseState.Active(cachedInfo.copy(status = "active"))
                 syncSupabaseIdentity(cachedInfo.key)
+                com.nuvio.app.core.analytics.PostHogAnalytics.identify(cachedInfo.key, mapOf(
+                    "tier" to (cachedInfo.tier ?: "standard"),
+                    "customer_name" to (cachedInfo.customerName ?: ""),
+                    "device_id" to getOrCreateDeviceId()
+                ))
             }
         } else {
             _state.value = LicenseState.Unlicensed
@@ -211,6 +216,8 @@ object LicenseRepository {
                     maxDevices = resp.resolvedMaxDevices,
                     activeDevices = 1,
                     nonce = resp.nonce ?: activationNonce,
+                    profileName = resp.profileName ?: resp.customerName,
+                    notes = resp.notes,
                 )
             } else {
                 // Fallback to table query if RPC is not deployed
@@ -241,6 +248,8 @@ object LicenseRepository {
                         maxDevices = resp.resolvedMaxDevices,
                         activeDevices = 1,
                         nonce = resp.nonce ?: activationNonce,
+                        profileName = resp.profileName ?: resp.customerName,
+                        notes = resp.notes,
                     )
                 } else {
                     val records = json.decodeFromString<List<SupabaseLicenseRecord>>(body)
@@ -307,6 +316,18 @@ object LicenseRepository {
             LicenseStorage.saveLastKnownKey(info.key)
             syncSupabaseIdentity(info.key)
             _state.value = LicenseState.Active(info)
+            com.nuvio.app.features.profiles.ProfileRepository.restoreFromLicenseInfo(info, info.key)
+
+            com.nuvio.app.core.analytics.PostHogAnalytics.identify(info.key, mapOf(
+                "tier" to (info.tier ?: "standard"),
+                "customer_name" to (info.customerName ?: ""),
+                "device_id" to getOrCreateDeviceId()
+            ))
+            com.nuvio.app.core.analytics.PostHogAnalytics.capture("license_activated", mapOf(
+                "license_key" to info.key,
+                "tier" to (info.tier ?: "standard"),
+                "expires_at" to (info.expiresAt ?: "")
+            ))
 
             // Record activation telemetry event
             val deviceMeta = runCatching { com.nuvio.app.core.auth.currentDeviceClientMetadata() }.getOrNull()
@@ -387,6 +408,8 @@ object LicenseRepository {
                             maxDevices = resp.maxDevices ?: currentInfo.maxDevices,
                             activeDevices = currentInfo.activeDevices,
                             nonce = resp.nonce ?: currentInfo.nonce,
+                            profileName = resp.profileName ?: currentInfo.profileName ?: resp.customerName,
+                            notes = resp.notes ?: currentInfo.notes,
                         )
                     }
                 }
@@ -398,6 +421,7 @@ object LicenseRepository {
             }
 
             saveSecureLicensePayload(updated)
+            com.nuvio.app.features.profiles.ProfileRepository.restoreFromLicenseInfo(updated, updated.key)
 
             // Analytics Heartbeat Ping to register device heartbeat and telemetry
             val deviceMeta = runCatching { com.nuvio.app.core.auth.currentDeviceClientMetadata() }.getOrNull()
@@ -424,6 +448,19 @@ object LicenseRepository {
                     url = analyticsUrl,
                     headers = supabaseHeaders(method = "POST", url = analyticsUrl, body = payload),
                     body = payload,
+                )
+            }
+
+            // PostHog Live Telemetry Heartbeat
+            runCatching {
+                com.nuvio.app.core.analytics.PostHogAnalytics.capture(
+                    event = "heartbeat",
+                    properties = mapOf(
+                        "license_key" to currentInfo.key,
+                        "device_id" to devName,
+                        "platform" to platformDesc,
+                        "app_version" to appVer,
+                    ),
                 )
             }
 
@@ -690,6 +727,45 @@ object LicenseRepository {
                 body = "",
             )
         }
+    }
+
+    suspend fun syncProfileToRemote(
+        primaryProfile: com.nuvio.app.features.profiles.NuvioProfile,
+        allProfiles: List<com.nuvio.app.features.profiles.NuvioProfile>,
+    ): Result<Unit> = runCatching {
+        val current = _state.value as? LicenseState.Active ?: return@runCatching
+        val key = current.info.key
+        val restUrl = supabaseRestUrl()
+        val patchUrl = "$restUrl/license_keys?key=eq.$key"
+
+        val metadata = LicenseProfileMetadata(
+            profileName = primaryProfile.name,
+            avatarId = primaryProfile.avatarId,
+            avatarUrl = primaryProfile.avatarUrl,
+            avatarColorHex = primaryProfile.avatarColorHex,
+            profileBackgroundId = primaryProfile.profileBackgroundId,
+            profileBackgroundUrl = primaryProfile.profileBackgroundUrl,
+            profiles = allProfiles,
+        )
+        val metadataJson = json.encodeToString(metadata)
+        val body = json.encodeToString(
+            mapOf(
+                "notes" to metadataJson,
+                "profile_name" to primaryProfile.name,
+            )
+        )
+        httpRequestRaw(
+            method = "PATCH",
+            url = patchUrl,
+            headers = supabaseHeaders(method = "PATCH", url = patchUrl, body = body),
+            body = body,
+        )
+        val updatedInfo = current.info.copy(
+            profileName = primaryProfile.name,
+            notes = metadataJson,
+        )
+        _state.value = LicenseState.Active(updatedInfo)
+        saveSecureLicensePayload(updatedInfo)
     }
 
     suspend fun updateLicenseProfile(profileName: String): Result<Unit> = runCatching {

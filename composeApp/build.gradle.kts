@@ -129,6 +129,12 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
             )
         }
 
+        val discordClientId = System.getenv("KHAYIN_DISCORD_CLIENT_ID")
+            ?: System.getenv("DISCORD_CLIENT_ID")
+            ?: props.getProperty("KHAYIN_DISCORD_CLIENT_ID")
+            ?: props.getProperty("NUVIO_DISCORD_CLIENT_ID")
+            ?: "1534466770037903421"
+
         outDir.resolve("com/nuvio/app/features/discordrpc").apply {
             mkdirs()
             resolve("DiscordConfig.kt").writeText(
@@ -136,7 +142,7 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 |package com.nuvio.app.features.discordrpc
                 |
                 |object DiscordConfig {
-                |    const val CLIENT_ID = "${props.getProperty("NUVIO_DISCORD_CLIENT_ID", "1538974392376369212")}"
+                |    const val CLIENT_ID = "$discordClientId"
                 |}
                 """.trimMargin()
             )
@@ -606,8 +612,8 @@ val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generat
     supabaseUrl.set(runtimeConfigValue("NUVIO_SUPABASE_URL", "https://api.stream.khayin.net"))
     supabaseAnonKey.set(runtimeConfigValue("NUVIO_SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg3MjIwNTM2LCJleHAiOjE5NDQ5MDA1MzZ9.BpzwMmPVhF3RjDBMgnsKXRqn-3TI-c3QGeRB6-4vs6M"))
     supabaseFallbackUrl.set(runtimeConfigValue("NUVIO_SUPABASE_FALLBACK_URL", "https://api.stream.khayin.net"))
-    sentryDsn.set(runtimeConfigValue("SENTRY_DSN"))
-    sentryDesktopDsn.set(runtimeConfigValue("SENTRY_DESKTOP_DSN"))
+    sentryDsn.set(runtimeConfigValue("SENTRY_DSN", "https://03b275d4c26ccf95402bcd0a9a9f9b7f@o4511970100641792.ingest.us.sentry.io/4511970104705024"))
+    sentryDesktopDsn.set(runtimeConfigValue("SENTRY_DESKTOP_DSN", "https://03b275d4c26ccf95402bcd0a9a9f9b7f@o4511970100641792.ingest.us.sentry.io/4511970104705024"))
     clientRole.set(runtimeConfigValue("NUVIO_CLIENT_ROLE", (findProperty("nuvio.client.role") as? String) ?: "user"))
     sentryEnvironment.set(
         when {
@@ -1345,28 +1351,68 @@ fun renameMacosDmgOutput(release: Boolean) {
     val appDisplayName = if (isAdminClient) "KhaYin Admin" else "KhaYin"
 
     val distributionName = if (release) "main-release" else "main"
+    val appDir = layout.buildDirectory.dir("compose/binaries/$distributionName/app").get().asFile
+    val appBundle = appDir.resolve("$appDisplayName.app")
     val outputDir = layout.buildDirectory.dir("compose/binaries/$distributionName/dmg").get().asFile
+    outputDir.mkdirs()
     val finalDmg = outputDir.resolve("$rolePrefix-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
-    val defaultDmg = outputDir.resolve("$appDisplayName-$desktopReleasePackageVersion.dmg")
-    val standardDefaultDmg = outputDir.resolve("KhaYin-$desktopReleasePackageVersion.dmg")
-    val fallbackOldDefaultDmg = outputDir.resolve("Nuvio-$desktopReleasePackageVersion.dmg")
-    val fallbackOldFinalDmg = outputDir.resolve("Nuvio-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
-    val sourceDmg = defaultDmg.takeIf { it.exists() }
-        ?: standardDefaultDmg.takeIf { it.exists() }
-        ?: finalDmg.takeIf { it.exists() }
-        ?: fallbackOldDefaultDmg.takeIf { it.exists() }
-        ?: fallbackOldFinalDmg.takeIf { it.exists() }
-        ?: outputDir.listFiles()?.firstOrNull { it.name.endsWith(".dmg") }
-        ?: error("Expected macOS DMG output in ${outputDir.absolutePath}")
 
-    if (sourceDmg != finalDmg) {
-        if (finalDmg.exists() && !finalDmg.delete()) {
-            error("Could not replace existing DMG: ${finalDmg.absolutePath}")
+    if (appBundle.exists()) {
+        val stagingDir = layout.buildDirectory.dir("compose/tmp/dmg-staging-$distributionName").get().asFile
+        stagingDir.deleteRecursively()
+        stagingDir.mkdirs()
+
+        val copiedApp = stagingDir.resolve("$appDisplayName.app")
+        ProcessBuilder("ditto", appBundle.absolutePath, copiedApp.absolutePath).inheritIO().start().waitFor()
+
+        // Create /Applications drag-and-drop symlink
+        val appSymlink = stagingDir.resolve("Applications")
+        ProcessBuilder("ln", "-s", "/Applications", appSymlink.absolutePath).inheritIO().start().waitFor()
+
+        // Apply custom KhaYin Volume Icon
+        val iconFile = project.file("src/desktopMain/resources/icons/nuvio-app-icon-transparent.icns")
+        if (iconFile.exists()) {
+            val volumeIcon = stagingDir.resolve(".VolumeIcon.icns")
+            iconFile.copyTo(volumeIcon, overwrite = true)
+            runCatching {
+                ProcessBuilder("/usr/bin/SetFile", "-a", "V", volumeIcon.absolutePath).inheritIO().start().waitFor()
+                ProcessBuilder("/usr/bin/SetFile", "-a", "C", stagingDir.absolutePath).inheritIO().start().waitFor()
+            }
         }
-        if (!sourceDmg.renameTo(finalDmg)) {
-            sourceDmg.copyTo(finalDmg, overwrite = true)
-            if (!sourceDmg.delete()) {
-                logger.warn("Could not delete old DMG after copy: ${sourceDmg.absolutePath}")
+
+        if (finalDmg.exists()) finalDmg.delete()
+        ProcessBuilder(
+            "hdiutil", "create",
+            "-volname", appDisplayName,
+            "-srcfolder", stagingDir.absolutePath,
+            "-ov",
+            "-format", "UDZO",
+            finalDmg.absolutePath,
+        ).inheritIO().start().waitFor()
+
+        stagingDir.deleteRecursively()
+    } else {
+        val defaultDmg = outputDir.resolve("$appDisplayName-$desktopReleasePackageVersion.dmg")
+        val standardDefaultDmg = outputDir.resolve("KhaYin-$desktopReleasePackageVersion.dmg")
+        val fallbackOldDefaultDmg = outputDir.resolve("Nuvio-$desktopReleasePackageVersion.dmg")
+        val fallbackOldFinalDmg = outputDir.resolve("Nuvio-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
+        val sourceDmg = defaultDmg.takeIf { it.exists() }
+            ?: standardDefaultDmg.takeIf { it.exists() }
+            ?: finalDmg.takeIf { it.exists() }
+            ?: fallbackOldDefaultDmg.takeIf { it.exists() }
+            ?: fallbackOldFinalDmg.takeIf { it.exists() }
+            ?: outputDir.listFiles()?.firstOrNull { it.name.endsWith(".dmg") }
+            ?: error("Expected macOS DMG output in ${outputDir.absolutePath}")
+
+        if (sourceDmg != finalDmg) {
+            if (finalDmg.exists() && !finalDmg.delete()) {
+                error("Could not replace existing DMG: ${finalDmg.absolutePath}")
+            }
+            if (!sourceDmg.renameTo(finalDmg)) {
+                sourceDmg.copyTo(finalDmg, overwrite = true)
+                if (!sourceDmg.delete()) {
+                    logger.warn("Could not delete old DMG after copy: ${sourceDmg.absolutePath}")
+                }
             }
         }
     }

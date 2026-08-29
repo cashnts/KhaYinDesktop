@@ -19,6 +19,17 @@ data class LicenseInfo(
 )
 
 @Serializable
+data class LicenseProfileMetadata(
+    @SerialName("profile_name") val profileName: String? = null,
+    @SerialName("avatar_id") val avatarId: String? = null,
+    @SerialName("avatar_url") val avatarUrl: String? = null,
+    @SerialName("avatar_color_hex") val avatarColorHex: String? = null,
+    @SerialName("profile_background_id") val profileBackgroundId: String? = null,
+    @SerialName("profile_background_url") val profileBackgroundUrl: String? = null,
+    val profiles: List<com.nuvio.app.features.profiles.NuvioProfile> = emptyList(),
+)
+
+@Serializable
 data class SupabaseLicenseRecord(
     val key: String,
     val status: String = "active",
@@ -27,6 +38,7 @@ data class SupabaseLicenseRecord(
     @SerialName("expires_at") val expiresAt: String? = null,
     @SerialName("max_devices") val maxDevices: Int = 1,
     @SerialName("active_devices") val activeDevices: Int = 0,
+    @SerialName("profile_name") val profileName: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
     val notes: String? = null,
 ) {
@@ -38,6 +50,7 @@ data class SupabaseLicenseRecord(
         expiresAt = expiresAt,
         maxDevices = maxDevices,
         activeDevices = activeDevices,
+        profileName = profileName ?: customerName,
         createdAt = createdAt,
         notes = notes,
     )
@@ -99,7 +112,9 @@ data class LicenseActivationResponse(
     val status: String? = null,
     val key: String? = null,
     val customerName: String? = null,
+    @SerialName("profile_name") val profileName: String? = null,
     val tier: String? = null,
+    val notes: String? = null,
     val error: String? = null,
 ) {
     val resolvedMaxDevices: Int
@@ -116,7 +131,9 @@ data class LicenseVerifyResponse(
     val status: String? = null,
     val key: String? = null,
     val customerName: String? = null,
+    @SerialName("profile_name") val profileName: String? = null,
     val tier: String? = null,
+    val notes: String? = null,
     val error: String? = null,
 )
 

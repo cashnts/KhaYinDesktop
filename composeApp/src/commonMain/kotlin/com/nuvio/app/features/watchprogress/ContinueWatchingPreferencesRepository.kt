@@ -21,7 +21,7 @@ private data class StoredContinueWatchingPreferences(
     @SerialName("blur_continue_watching_next_up")
     val blurNextUp: Boolean = false,
     val dismissedNextUpKeys: Set<String> = emptySet(),
-    val showResumePromptOnLaunch: Boolean = true,
+    val showResumePromptOnLaunch: Boolean = false,
     @SerialName("sort_mode")
     val sortMode: ContinueWatchingSortMode = ContinueWatchingSortMode.DEFAULT,
 )

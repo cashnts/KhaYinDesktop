@@ -1,6 +1,7 @@
 package com.nuvio.app.features.streams
 
 import com.nuvio.app.core.build.AppFeaturePolicy
+import com.nuvio.app.features.player.PlayerResolutionHelper
 
 object StreamAutoPlaySelector {
 
@@ -168,20 +169,36 @@ object StreamAutoPlaySelector {
                 }
             }
         }
-        if (matchingStreams.isEmpty() && preferredStream == null) return StreamAutoPlayEvaluation()
-
         val readyStreams = buildList {
             preferredStream?.let(::add)
-            matchingStreams
+            val sortedMatching = matchingStreams
                 .filter { it.isAutoPlayable(debridEnabled, activeResolverProviderId) }
                 .filterNot { it == preferredStream }
-                .forEach(::add)
+                .sortedWith(
+                    compareByDescending<StreamItem> { !it.isLowQualitySource }
+                        .thenByDescending { !it.isUncachedStream }
+                        .thenByDescending {
+                            val rank = PlayerResolutionHelper.detectResolutionTier(it).rank
+                            when (rank) {
+                                1 -> 6 // 4K UHD
+                                2 -> 5 // 2K QHD
+                                3 -> 4 // 1080p FHD
+                                4 -> 3 // 720p HD
+                                5 -> 1 // 480p SD
+                                else -> 2 // Unknown
+                            }
+                        }
+                        .thenByDescending { it.playableDirectUrl != null || it.isDirectDebridStream }
+                        .thenByDescending { it.isCachedDebridTorrentStream }
+                        .thenByDescending { it.behaviorHints.videoSize ?: 0L }
+                )
+            sortedMatching.forEach(::add)
         }
-        val selected = readyStreams.firstOrNull()
+        val selected = readyStreams.firstOrNull() ?: matchingStreams.firstOrNull()
         if (selected != null) {
             return StreamAutoPlayEvaluation(
                 stream = selected,
-                readyStreams = readyStreams,
+                readyStreams = if (readyStreams.isNotEmpty()) readyStreams else listOf(selected),
             )
         }
 
@@ -198,6 +215,7 @@ object StreamAutoPlaySelector {
         activeResolverProviderId: String?,
     ): Boolean =
         playableDirectUrl != null ||
+            (url != null && !url.startsWith("magnet:", ignoreCase = true) && !url.startsWith("torrent:", ignoreCase = true)) ||
             (
                 AppFeaturePolicy.p2pEnabled &&
                     needsLocalDebridResolve &&

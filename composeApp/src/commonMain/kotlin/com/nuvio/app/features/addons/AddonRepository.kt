@@ -1,6 +1,7 @@
 package com.nuvio.app.features.addons
 
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.analytics.PostHogAnalytics
 import com.nuvio.app.core.network.SupabaseProvider
 import com.nuvio.app.core.sync.putSyncOriginClientId
 import com.nuvio.app.features.profiles.ProfileRepository
@@ -287,7 +288,49 @@ object AddonRepository {
         }
         persist()
         pushToServer()
+        PostHogAnalytics.trackAddonInstalled(
+            addonName = manifest.name,
+            addonId = manifest.id,
+            manifestUrl = manifestUrl,
+        )
         return AddAddonResult.Success(manifest)
+    }
+
+    suspend fun syncRemotePresetAddons(presetUrls: List<String>, disabledAddons: List<String> = emptyList()) {
+        if (presetUrls.isEmpty() && disabledAddons.isEmpty()) return
+        log.d { "syncRemotePresetAddons() — presetCount=${presetUrls.size}, disabledCount=${disabledAddons.size}" }
+
+        // 1. Remove any currently installed addons that are on the blacklist
+        if (disabledAddons.isNotEmpty()) {
+            val toRemove = _uiState.value.addons.filter { addon ->
+                addon.manifestUrl != DEFAULT_CINEMETA_ADDON_URL && disabledAddons.any { disabled ->
+                    val d = disabled.trim().lowercase()
+                    val norm = addon.manifestUrl.trim().lowercase()
+                    d.isNotBlank() && (norm.contains(d) || d.contains(norm))
+                }
+            }
+            toRemove.forEach { addon ->
+                log.w { "syncRemotePresetAddons() — removing blacklisted addon: ${addon.manifestUrl}" }
+                removeAddon(addon.manifestUrl)
+            }
+        }
+
+        // 2. Install any preset addons not yet installed
+        val currentUrls = _uiState.value.addons.map { it.manifestUrl }.toSet()
+        val toInstall = presetUrls.map { it.trim() }.filter { url ->
+            url.isNotBlank() &&
+                url !in currentUrls &&
+                !disabledAddons.any { disabled ->
+                    val d = disabled.trim().lowercase()
+                    val norm = url.lowercase()
+                    d.isNotBlank() && (norm.contains(d) || d.contains(norm))
+                }
+        }
+
+        toInstall.forEach { manifestUrl ->
+            log.i { "syncRemotePresetAddons() — auto-installing remote preset: $manifestUrl" }
+            addAddon(manifestUrl)
+        }
     }
 
     fun removeAddon(manifestUrl: String) {
@@ -301,6 +344,7 @@ object AddonRepository {
         }
         persist()
         pushToServer()
+        PostHogAnalytics.trackAddonUninstalled(manifestUrl = manifestUrl)
     }
 
     fun moveAddon(fromIndex: Int, toIndex: Int) {

@@ -8,7 +8,7 @@ internal object DiscordRichPresenceRepository {
     val isSupported: Boolean
         get() = DiscordRichPresencePlatform.isSupported
 
-    private val _enabled = MutableStateFlow(false)
+    private val _enabled = MutableStateFlow(true)
     val enabled: StateFlow<Boolean> = _enabled.asStateFlow()
 
     private var hasLoaded = false
@@ -16,7 +16,7 @@ internal object DiscordRichPresenceRepository {
     fun ensureLoaded() {
         if (hasLoaded) return
         hasLoaded = true
-        _enabled.value = DiscordRichPresenceStorage.loadEnabled() ?: false
+        _enabled.value = DiscordRichPresenceStorage.loadEnabled() ?: true
     }
 
     fun setEnabled(enabled: Boolean) {

@@ -32,6 +32,6 @@ internal enum class AppIconOption(
 
     companion object {
         fun fromPlatformName(name: String?): AppIconOption =
-            entries.firstOrNull { it.platformName == name } ?: ORIGINAL
+            entries.firstOrNull { it.platformName == name || it.key.equals(name, ignoreCase = true) } ?: ORIGINAL
     }
 }

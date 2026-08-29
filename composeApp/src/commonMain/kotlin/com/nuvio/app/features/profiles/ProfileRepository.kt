@@ -1,6 +1,7 @@
 package com.nuvio.app.features.profiles
 
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.analytics.PostHogAnalytics
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.auth.isAnonymous
@@ -8,6 +9,7 @@ import com.nuvio.app.core.network.SupabaseProvider
 import com.nuvio.app.core.sync.putSyncOriginClientId
 import com.nuvio.app.core.tracking.ensureTrackingProvidersRegistered
 import com.nuvio.app.features.addons.AddonRepository
+import com.nuvio.app.features.addons.enabledAddons
 import com.nuvio.app.features.collection.CollectionMobileSettingsRepository
 import com.nuvio.app.features.collection.CollectionRepository
 import com.nuvio.app.features.downloads.DownloadsRepository
@@ -107,19 +109,77 @@ object ProfileRepository {
         return loadedCacheForUserId ?: "license_user"
     }
 
+    fun restoreFromLicenseInfo(
+        info: com.nuvio.app.features.license.LicenseInfo?,
+        userId: String = getCurrentUserId(),
+    ): Boolean {
+        val notes = info?.notes?.trim().orEmpty()
+        if (notes.isEmpty() || !notes.startsWith("{")) return false
+
+        val metadata = runCatching {
+            json.decodeFromString<com.nuvio.app.features.license.LicenseProfileMetadata>(notes)
+        }.getOrNull() ?: return false
+
+        if (metadata.profiles.isNotEmpty()) {
+            val mapped = metadata.profiles.map { it.copy(userId = userId) }
+            val currentSelected = mapped.find { it.profileIndex == activeProfileIndex } ?: mapped.firstOrNull()
+            _state.value = ProfileState(
+                profiles = mapped,
+                activeProfile = currentSelected,
+                isLoaded = true,
+                hasEverSelectedProfile = true,
+            )
+            activeProfileIndex = currentSelected?.profileIndex ?: 1
+            persist()
+            return true
+        }
+
+        if (!metadata.avatarId.isNullOrBlank() || !metadata.avatarUrl.isNullOrBlank() || !metadata.profileName.isNullOrBlank()) {
+            val profile = NuvioProfile(
+                id = "",
+                userId = userId,
+                profileIndex = 1,
+                name = metadata.profileName?.takeIf { it.isNotBlank() } ?: info?.customerName ?: "Member",
+                avatarColorHex = metadata.avatarColorHex?.takeIf { it.isNotBlank() } ?: PROFILE_COLORS.first(),
+                avatarId = metadata.avatarId,
+                avatarUrl = metadata.avatarUrl,
+                profileBackgroundId = metadata.profileBackgroundId,
+                profileBackgroundUrl = metadata.profileBackgroundUrl,
+                usesPrimaryAddons = true,
+                usesPrimaryPlugins = true,
+            )
+            _state.value = ProfileState(
+                profiles = listOf(profile),
+                activeProfile = profile,
+                isLoaded = true,
+                hasEverSelectedProfile = true,
+            )
+            activeProfileIndex = 1
+            persist()
+            return true
+        }
+
+        return false
+    }
+
     fun ensureLoaded(userId: String) {
         if (loadedCacheForUserId == userId && _state.value.isLoaded && _state.value.profiles.isNotEmpty()) return
 
         val stored = decodeStoredPayload()
         loadedCacheForUserId = userId
-        if (stored != null && (stored.userId == userId || stored.userId == "license_user" || stored.userId == "default_user" || stored.userId.isBlank())) {
+        if (stored != null && stored.profiles.isNotEmpty() && (stored.userId == userId || stored.userId == "license_user" || stored.userId == "default_user" || stored.userId.isBlank())) {
             applyStoredPayload(stored.copy(userId = userId))
             persist()
             return
         }
 
-        // Initialize fallback profile from active license key
+        // Try to restore from active license notes (e.g. cloud profile metadata)
         val activeLic = (com.nuvio.app.features.license.LicenseRepository.state.value as? com.nuvio.app.features.license.LicenseState.Active)?.info
+        if (restoreFromLicenseInfo(activeLic, userId)) {
+            return
+        }
+
+        // Initialize fallback profile from active license key
         val initialName = activeLic?.profileName?.takeIf { it.isNotBlank() }
             ?: activeLic?.customerName?.takeIf { it.isNotBlank() }
             ?: "Member"
@@ -204,6 +264,10 @@ object ProfileRepository {
             hasEverSelectedProfile = selectedProfile != null || _state.value.hasEverSelectedProfile,
         )
         persist()
+        PostHogAnalytics.trackProfileSwitched(
+            profileIndex = profileIndex,
+            profileName = selectedProfile?.name ?: "Profile $profileIndex",
+        )
         WatchedRepository.onProfileChanged(profileIndex)
         TrackingSettingsRepository.onProfileChanged()
         ensureTrackingProvidersRegistered()
@@ -223,6 +287,8 @@ object ProfileRepository {
         P2pSettingsRepository.onProfileChanged()
         HomeCatalogSettingsRepository.onProfileChanged()
         HomeRepository.clear()
+        HomeCatalogSettingsRepository.syncCatalogs(AddonRepository.uiState.value.addons.enabledAddons())
+        HomeRepository.refresh(AddonRepository.uiState.value.addons.enabledAddons(), force = true)
         MetaScreenSettingsRepository.onProfileChanged()
         ContinueWatchingPreferencesRepository.onProfileChanged()
         com.nuvio.app.features.watchprogress.ContinueWatchingEnrichmentCache.onProfileChanged()
@@ -473,10 +539,10 @@ object ProfileRepository {
         syncPinCache(profiles)
         persist()
         if (com.nuvio.app.core.build.AppFeaturePolicy.isUserClient) {
-            val primaryName = profiles.firstOrNull()?.name
-            if (!primaryName.isNullOrBlank()) {
+            val primary = profiles.firstOrNull()
+            if (primary != null) {
                 scope.launch {
-                    com.nuvio.app.features.license.LicenseRepository.updateLicenseProfile(primaryName)
+                    com.nuvio.app.features.license.LicenseRepository.syncProfileToRemote(primary, profiles)
                 }
             }
         }

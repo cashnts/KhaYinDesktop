@@ -1,5 +1,6 @@
 package com.nuvio.app
 
+import com.nuvio.app.core.analytics.PostHogAnalytics
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalSharedTransitionApi
@@ -1256,6 +1257,7 @@ private fun MainAppContent(
 
     LaunchedEffect(selectedTab) {
         NativeTabBridge.publishSelectedTab(selectedTab.toNativeNavigationTab())
+        PostHogAnalytics.screen(selectedTab.name)
         if (selectedTab != AppScreenTab.Search) {
             searchFocusRequestCount = 0
         }
@@ -4028,23 +4030,6 @@ private fun MainAppContent(
                 )
             }
 
-            NuvioFloatingPrompt(
-                visible = resumePromptItem != null,
-                imageUrl = resumePromptItem?.poster ?: resumePromptItem?.imageUrl,
-                title = resumePromptItem?.title.orEmpty(),
-                subtitle = resumePromptItem?.let { localizedContinueWatchingSubtitle(it) }.orEmpty(),
-                progressFraction = resumePromptItem?.progressFraction ?: 0f,
-                actionLabel = stringResource(Res.string.resume_prompt_action),
-                onAction = {
-                    val item = resumePromptItem ?: return@NuvioFloatingPrompt
-                    resumePromptItem = null
-                    openContinueWatching(item, false, false)
-                },
-                onDismiss = { resumePromptItem = null },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .zIndex(15f),
-            )
 
             NuvioToastHost(
                 modifier = Modifier

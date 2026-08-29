@@ -88,6 +88,69 @@ data class StreamItem(
     val isCachedDebridTorrentStream: Boolean
         get() = isTorrentStream && debridCacheStatus?.state == StreamDebridCacheState.CACHED
 
+    val isUncachedStream: Boolean
+        get() {
+            if (debridCacheStatus?.state == StreamDebridCacheState.NOT_CACHED) return true
+            val checkTexts = listOfNotNull(name, title, description, url, behaviorHints.filename)
+            return checkTexts.any { text ->
+                text.contains("uncached", ignoreCase = true) ||
+                text.contains("torrent_not_downloaded", ignoreCase = true) ||
+                text.contains("not_downloaded", ignoreCase = true) ||
+                text.contains("not downloaded", ignoreCase = true) ||
+                text.contains("[download]", ignoreCase = true) ||
+                text.contains("downloading", ignoreCase = true) ||
+                text.contains("[dl]", ignoreCase = true) ||
+                text.contains("⏳") ||
+                text.contains("caching in progress", ignoreCase = true) ||
+                text.contains("media caching", ignoreCase = true) ||
+                text.contains("[rd download]", ignoreCase = true) ||
+                text.contains("[ad download]", ignoreCase = true) ||
+                text.contains("[pm download]", ignoreCase = true) ||
+                text.contains("[tb download]", ignoreCase = true) ||
+                text.contains("[torbox download]", ignoreCase = true)
+            }
+        }
+
+    val isConfirmedCached: Boolean
+        get() {
+            if (isUncachedStream) return false
+            if (isDirectDebridStream || isCachedDebridTorrentStream) return true
+            val checkTexts = listOfNotNull(name, title, description)
+            return checkTexts.any { text ->
+                text.contains("[rd+]", ignoreCase = true) ||
+                text.contains("[ad+]", ignoreCase = true) ||
+                text.contains("[pm+]", ignoreCase = true) ||
+                text.contains("[tb+]", ignoreCase = true) ||
+                text.contains("[torbox+]", ignoreCase = true) ||
+                text.contains("[debrid+]", ignoreCase = true) ||
+                text.contains("⚡") ||
+                text.contains("instant", ignoreCase = true)
+            }
+        }
+
+    val seedersCount: Int?
+        get() {
+            val check = listOfNotNull(name, title, description).joinToString("\n")
+            Regex("[👤👥]\\s*([0-9]+)").find(check)?.groupValues?.get(1)?.toIntOrNull()?.let { return it }
+            Regex("(?i)\\b([0-9]+)\\s*(?:seeds|seeders|seeder)\\b").find(check)?.groupValues?.get(1)?.toIntOrNull()?.let { return it }
+            Regex("(?i)\\b(?:seeds|seeders|seeder)\\s*[:=]\\s*([0-9]+)\\b").find(check)?.groupValues?.get(1)?.toIntOrNull()?.let { return it }
+            Regex("\\[([0-9]+)/[0-9]+\\]").find(check)?.groupValues?.get(1)?.toIntOrNull()?.let { return it }
+            return null
+        }
+
+    val isLowQualitySource: Boolean
+        get() {
+            val check = listOfNotNull(name, title, description, behaviorHints.filename).joinToString(" ").lowercase()
+            if (listOf("camrip", "hdcam", "telesync", "hdts", "screener", "dvdscr", "cam-rip", "ts-rip", "hdtc", "r5").any { check.contains(it) }) {
+                return true
+            }
+            val seeds = seedersCount
+            if (seeds != null && seeds < 3 && !isConfirmedCached && playableDirectUrl == null) {
+                return true
+            }
+            return false
+        }
+
     val needsLocalDebridResolve: Boolean
         get() = isTorrentStream && playableDirectUrl == null
 
