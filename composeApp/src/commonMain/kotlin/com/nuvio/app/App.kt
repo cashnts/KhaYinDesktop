@@ -284,9 +284,6 @@ import com.nuvio.app.features.tracking.TrackingLibraryTab
 import com.nuvio.app.features.tracking.TrackingMembershipApplyResult
 import com.nuvio.app.features.tracking.TrackingProviderId
 import com.nuvio.app.features.tracking.toggleTrackingLibraryMembership
-import com.nuvio.app.features.updater.AppUpdaterHost
-import com.nuvio.app.features.updater.AppUpdaterPlatform
-import com.nuvio.app.features.updater.rememberAppUpdaterController
 import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watchprogress.ContinueWatchingItem
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepository
@@ -1058,7 +1055,6 @@ private fun MainAppContent(
                 onExternalReplace = onReplace,
             )
         }
-        val appUpdaterController = rememberAppUpdaterController()
         val hapticFeedback = LocalHapticFeedback.current
         val focusManager = LocalFocusManager.current
         val uriHandler = LocalUriHandler.current
@@ -2084,15 +2080,11 @@ private fun MainAppContent(
             selectedContinueWatchingForActions = item
         }
 
-        AppUpdaterHost(
-            controller = appUpdaterController,
-            modifier = Modifier.fillMaxSize(),
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.nuvio.colors.background),
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.nuvio.colors.background),
-            ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -2318,23 +2310,8 @@ private fun MainAppContent(
                                         onLicensesAttributionsSettingsClick = {
                                             navController.navigate(LicensesAttributionsSettingsRoute(licensesSettingsTitle))
                                         },
-                                        onCheckForUpdatesClick = if (AppFeaturePolicy.inAppUpdaterEnabled) {
-                                            {
-                                                appUpdaterController.checkForUpdates(
-                                                    force = true,
-                                                    showNoUpdateFeedback = true,
-                                                )
-                                            }
-                                        } else {
-                                            null
-                                        },
-                                        onTestUpdateBannerClick = if (
-                                            AppFeaturePolicy.inAppUpdaterEnabled && AppUpdaterPlatform.isDebugBuild
-                                        ) {
-                                            appUpdaterController::showDebugTestUpdate
-                                        } else {
-                                            null
-                                        },
+                                        onCheckForUpdatesClick = null,
+                                        onTestUpdateBannerClick = null,
                                         onCollectionsSettingsClick = { navController.navigate(CollectionsRoute(collectionsTitle)) },
                                         onFolderClick = { collectionId, folderId ->
                                             val folderTitle = CollectionRepository.collections.value
@@ -3476,23 +3453,8 @@ private fun MainAppContent(
                         onCollectionsClick = {
                             navController.navigate(CollectionsRoute(collectionsTitle))
                         },
-                        onCheckForUpdatesClick = if (AppFeaturePolicy.inAppUpdaterEnabled) {
-                            {
-                                appUpdaterController.checkForUpdates(
-                                    force = true,
-                                    showNoUpdateFeedback = true,
-                                )
-                            }
-                        } else {
-                            null
-                        },
-                        onTestUpdateBannerClick = if (
-                            AppFeaturePolicy.inAppUpdaterEnabled && AppUpdaterPlatform.isDebugBuild
-                        ) {
-                            appUpdaterController::showDebugTestUpdate
-                        } else {
-                            null
-                        },
+                        onCheckForUpdatesClick = null,
+                        onTestUpdateBannerClick = null,
                     )
                 }
                 entry<DownloadsSettingsRoute> { route ->
@@ -4038,7 +4000,6 @@ private fun MainAppContent(
             )
 
             }
-        }
 }
 
 @Composable

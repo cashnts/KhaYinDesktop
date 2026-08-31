@@ -55,7 +55,6 @@ import com.nuvio.app.features.trakt.TraktSettingsStorage
 import com.nuvio.app.features.simkl.SimklAuthStorage
 import com.nuvio.app.features.simkl.SimklSyncStorage
 import com.nuvio.app.features.tmdb.TmdbSettingsStorage
-import com.nuvio.app.features.updater.AndroidAppUpdaterPlatform
 import com.nuvio.app.core.ui.CardDepthStyleStorage
 import com.nuvio.app.core.ui.PosterCardStyleStorage
 import com.nuvio.app.features.watched.WatchedStorage
@@ -132,7 +131,6 @@ open class MainActivity : AppCompatActivity() {
         DownloadsStorage.initialize(applicationContext)
         DownloadsPlatformDownloader.initialize(applicationContext)
         DownloadsLiveStatusPlatform.initialize(applicationContext)
-        AndroidAppUpdaterPlatform.initialize(applicationContext)
         PlatformLocalAccountDataCleaner.initialize(applicationContext)
         EpisodeReleaseNotificationPlatform.initialize(applicationContext)
         EpisodeReleaseNotificationPlatform.bindActivity(this)
