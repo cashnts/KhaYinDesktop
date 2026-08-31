@@ -17,6 +17,13 @@ import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import java.io.File
+import java.io.IOException
+import java.nio.file.FileVisitResult
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
 import java.util.Properties
 import javax.inject.Inject
 
@@ -1340,6 +1347,69 @@ compose.desktop {
     }
 }
 
+fun safeDeleteRecursively(file: File) {
+    val path = file.toPath()
+    if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(path)) return
+
+    // CRITICAL SYSTEM SAFETY ASSERTION: Never delete Applications, System, Library, or root user directories
+    val normalized = path.toAbsolutePath().normalize().toString()
+    val userHome = System.getProperty("user.home") ?: ""
+    val forbiddenPrefixes = listOf(
+        "/Applications",
+        "/System",
+        "/Library",
+        "/usr",
+        "/bin",
+        "/sbin",
+        "/var",
+        "/etc",
+        "/Volumes",
+        if (userHome.isNotEmpty()) "$userHome/Applications" else "",
+        if (userHome.isNotEmpty()) "$userHome/Desktop" else "",
+        if (userHome.isNotEmpty()) "$userHome/Documents" else "",
+        if (userHome.isNotEmpty()) "$userHome/Downloads" else "",
+    ).filter { it.isNotEmpty() }
+
+    for (forbidden in forbiddenPrefixes) {
+        if (normalized == forbidden || (normalized.startsWith(forbidden) && !normalized.contains("/build/") && !normalized.contains("/compose/"))) {
+            throw IllegalStateException("CRITICAL SAFETY BLOCK: Refusing to delete protected system/user path: $normalized")
+        }
+    }
+
+    if (Files.isSymbolicLink(path)) {
+        Files.deleteIfExists(path)
+        return
+    }
+
+    if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
+        Files.walkFileTree(
+            path,
+            setOf(),
+            Int.MAX_VALUE,
+            object : SimpleFileVisitor<Path>() {
+                override fun visitFile(
+                    f: Path,
+                    attrs: BasicFileAttributes
+                ): FileVisitResult {
+                    Files.deleteIfExists(f)
+                    return FileVisitResult.CONTINUE
+                }
+
+                override fun postVisitDirectory(
+                    d: Path,
+                    exc: IOException?
+                ): FileVisitResult {
+                    if (exc != null) throw exc
+                    Files.deleteIfExists(d)
+                    return FileVisitResult.CONTINUE
+                }
+            }
+        )
+    } else {
+        Files.deleteIfExists(path)
+    }
+}
+
 fun renameMacosDmgOutput(release: Boolean) {
     if (!isMacHost) return
 
@@ -1358,39 +1428,64 @@ fun renameMacosDmgOutput(release: Boolean) {
     val finalDmg = outputDir.resolve("$rolePrefix-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
 
     if (appBundle.exists()) {
-        val stagingDir = layout.buildDirectory.dir("compose/tmp/dmg-staging-$distributionName").get().asFile
-        stagingDir.deleteRecursively()
-        stagingDir.mkdirs()
-
-        val copiedApp = stagingDir.resolve("$appDisplayName.app")
-        ProcessBuilder("ditto", appBundle.absolutePath, copiedApp.absolutePath).inheritIO().start().waitFor()
-
-        // Create /Applications drag-and-drop symlink
-        val appSymlink = stagingDir.resolve("Applications")
-        ProcessBuilder("ln", "-s", "/Applications", appSymlink.absolutePath).inheritIO().start().waitFor()
-
-        // Apply custom KhaYin Volume Icon
+        val createStyledDmgScript = rootProject.file("scripts/create_styled_dmg.py")
         val iconFile = project.file("src/desktopMain/resources/icons/nuvio-app-icon-transparent.icns")
-        if (iconFile.exists()) {
-            val volumeIcon = stagingDir.resolve(".VolumeIcon.icns")
-            iconFile.copyTo(volumeIcon, overwrite = true)
-            runCatching {
-                ProcessBuilder("/usr/bin/SetFile", "-a", "V", volumeIcon.absolutePath).inheritIO().start().waitFor()
-                ProcessBuilder("/usr/bin/SetFile", "-a", "C", stagingDir.absolutePath).inheritIO().start().waitFor()
-            }
+        var styledSuccess = false
+
+        if (createStyledDmgScript.exists()) {
+            val exitCode = ProcessBuilder(
+                "python3",
+                createStyledDmgScript.absolutePath,
+                appBundle.absolutePath,
+                finalDmg.absolutePath,
+                appDisplayName,
+                if (iconFile.exists()) iconFile.absolutePath else "",
+            ).inheritIO().start().waitFor()
+            styledSuccess = (exitCode == 0 && finalDmg.exists())
         }
 
-        if (finalDmg.exists()) finalDmg.delete()
-        ProcessBuilder(
-            "hdiutil", "create",
-            "-volname", appDisplayName,
-            "-srcfolder", stagingDir.absolutePath,
-            "-ov",
-            "-format", "UDZO",
-            finalDmg.absolutePath,
-        ).inheritIO().start().waitFor()
+        if (!styledSuccess) {
+            val stagingDir = layout.buildDirectory.dir("compose/tmp/dmg-staging-$distributionName").get().asFile
+            val appSymlink = stagingDir.resolve("Applications")
+            try {
+                safeDeleteRecursively(stagingDir)
+                stagingDir.mkdirs()
 
-        stagingDir.deleteRecursively()
+                val copiedApp = stagingDir.resolve("$appDisplayName.app")
+                ProcessBuilder("ditto", appBundle.absolutePath, copiedApp.absolutePath).inheritIO().start().waitFor()
+
+                // Create /Applications drag-and-drop symlink
+                ProcessBuilder("ln", "-s", "/Applications", appSymlink.absolutePath).inheritIO().start().waitFor()
+
+                // Apply custom KhaYin Volume Icon
+                if (iconFile.exists()) {
+                    val volumeIcon = stagingDir.resolve(".VolumeIcon.icns")
+                    iconFile.copyTo(volumeIcon, overwrite = true)
+                    runCatching {
+                        ProcessBuilder("/usr/bin/SetFile", "-a", "V", volumeIcon.absolutePath).inheritIO().start().waitFor()
+                        ProcessBuilder("/usr/bin/SetFile", "-a", "C", stagingDir.absolutePath).inheritIO().start().waitFor()
+                    }
+                }
+
+                if (finalDmg.exists()) finalDmg.delete()
+                ProcessBuilder(
+                    "hdiutil", "create",
+                    "-volname", appDisplayName,
+                    "-srcfolder", stagingDir.absolutePath,
+                    "-ov",
+                    "-format", "UDZO",
+                    finalDmg.absolutePath,
+                ).inheritIO().start().waitFor()
+            } finally {
+                // ALWAYS remove /Applications symlink first, then safely remove staging directory
+                try {
+                    if (Files.isSymbolicLink(appSymlink.toPath()) || appSymlink.exists()) {
+                        Files.deleteIfExists(appSymlink.toPath())
+                    }
+                } catch (_: Throwable) {}
+                safeDeleteRecursively(stagingDir)
+            }
+        }
     } else {
         val defaultDmg = outputDir.resolve("$appDisplayName-$desktopReleasePackageVersion.dmg")
         val standardDefaultDmg = outputDir.resolve("KhaYin-$desktopReleasePackageVersion.dmg")

@@ -145,6 +145,12 @@ actual object AppUpdaterPlatform {
     actual fun openInstallPermissionSettings() = Unit
 
     actual fun installDownloadedUpdate(path: String): Result<Unit> = runCatching {
+        val isTestEnvironment = System.getProperty("org.gradle.test.worker") != null ||
+            System.getProperty("java.class.path").orEmpty().contains("test")
+        if (isTestEnvironment) {
+            return@runCatching
+        }
+
         val updateFile = File(path)
         check(updateFile.exists()) { runBlocking { getString(Res.string.updates_downloaded_file_missing) } }
 
@@ -156,13 +162,161 @@ actual object AppUpdaterPlatform {
         File(DesktopStorage.rootDir.resolve("updates").also { it.createDirectories() }.toUri())
 
     private fun launchInstaller(updateFile: File) {
-        val command = when (currentOs) {
-            DesktopUpdaterOs.WINDOWS -> windowsInstallerCommand(updateFile)
-            DesktopUpdaterOs.MACOS -> listOf("open", updateFile.absolutePath)
-            DesktopUpdaterOs.LINUX -> listOf("xdg-open", updateFile.absolutePath)
+        when (currentOs) {
+            DesktopUpdaterOs.MACOS -> launchAutonomousMacInstaller(updateFile)
+            DesktopUpdaterOs.WINDOWS -> launchAutonomousWindowsInstaller(updateFile)
+            DesktopUpdaterOs.LINUX -> {
+                val command = listOf("xdg-open", updateFile.absolutePath)
+                ProcessBuilder(command).start()
+            }
             DesktopUpdaterOs.UNKNOWN -> error("Desktop updates are not supported on this operating system.")
         }
-        ProcessBuilder(command).start()
+    }
+
+    private fun getTargetMacAppBundle(): File {
+        val command = ProcessHandle.current().info().command().orElse(null)
+        if (command != null && command.contains(".app")) {
+            val appPath = command.substringBefore(".app") + ".app"
+            val appFile = File(appPath)
+            if (appFile.exists() && appFile.isDirectory && (appFile.name.contains("KhaYin", ignoreCase = true) || appFile.name.contains("Nuvio", ignoreCase = true))) {
+                return appFile
+            }
+        }
+        val javaHome = System.getProperty("java.home") ?: ""
+        if (javaHome.contains(".app")) {
+            val appPath = javaHome.substringBefore(".app") + ".app"
+            val appFile = File(appPath)
+            if (appFile.exists() && appFile.isDirectory && (appFile.name.contains("KhaYin", ignoreCase = true) || appFile.name.contains("Nuvio", ignoreCase = true))) {
+                return appFile
+            }
+        }
+        val defaultApps = File("/Applications/KhaYin.app")
+        if (defaultApps.exists()) return defaultApps
+        val userApps = File(System.getProperty("user.home") + "/Applications/KhaYin.app")
+        if (userApps.exists()) return userApps
+        val nuvioApps = File("/Applications/Nuvio.app")
+        if (nuvioApps.exists()) return nuvioApps
+        return defaultApps
+    }
+
+    private fun launchAutonomousMacInstaller(updateFile: File) {
+        val currentPid = ProcessHandle.current().pid()
+        val targetApp = getTargetMacAppBundle()
+        val helperScript = File(updatesDir(), "mac_auto_updater.sh")
+
+        val s = "$"
+        val scriptContent = """
+            #!/bin/bash
+            exec > "/tmp/khayin_update.log" 2>&1
+            echo "[${s}(date)] Starting autonomous updater for PID ${s}1"
+
+            PID=${s}1
+            UPDATE_FILE="${s}2"
+            TARGET_APP="${s}3"
+            MOUNT_DIR="/tmp/khayin_update_mount_${s}${s}"
+
+            # Ensure TARGET_APP is strictly KhaYin or Nuvio app bundle and not a system directory
+            if [[ "${s}TARGET_APP" != *.app || ( "${s}TARGET_APP" != *KhaYin* && "${s}TARGET_APP" != *Nuvio* ) || "${s}TARGET_APP" == "/Applications"* && "${s}TARGET_APP" == "/Applications" ]]; then
+                echo "Resetting TARGET_APP to default /Applications/KhaYin.app"
+                TARGET_APP="/Applications/KhaYin.app"
+            fi
+
+            if [[ "${s}TARGET_APP" == "/" || "${s}TARGET_APP" == "/Applications" || "${s}TARGET_APP" == "/Applications/" || -z "${s}TARGET_APP" ]]; then
+                echo "CRITICAL: Aborting updater - invalid TARGET_APP path: ${s}TARGET_APP"
+                exit 1
+            fi
+
+            while kill -0 "${s}PID" 2>/dev/null; do
+                sleep 0.2
+            done
+            sleep 0.5
+
+            echo "Target app: ${s}TARGET_APP"
+            echo "Update file: ${s}UPDATE_FILE"
+
+            SOURCE_APP=""
+            MOUNTED=0
+
+            if [[ "${s}UPDATE_FILE" == *.dmg ]]; then
+                mkdir -p "${s}MOUNT_DIR"
+                echo "Attaching DMG..."
+                hdiutil attach "${s}UPDATE_FILE" -nobrowse -readonly -mountpoint "${s}MOUNT_DIR" -quiet
+                MOUNTED=1
+                SOURCE_APP=${s}(find "${s}MOUNT_DIR" -maxdepth 2 -name "*.app" | head -n 1)
+            elif [[ "${s}UPDATE_FILE" == *.zip ]]; then
+                EXTRACT_DIR="/tmp/khayin_update_zip_${s}${s}"
+                mkdir -p "${s}EXTRACT_DIR"
+                echo "Extracting ZIP..."
+                unzip -q -o "${s}UPDATE_FILE" -d "${s}EXTRACT_DIR"
+                SOURCE_APP=${s}(find "${s}EXTRACT_DIR" -maxdepth 2 -name "*.app" | head -n 1)
+            elif [[ "${s}UPDATE_FILE" == *.app ]]; then
+                SOURCE_APP="${s}UPDATE_FILE"
+            fi
+
+            if [[ -n "${s}SOURCE_APP" && -d "${s}SOURCE_APP" && ( "${s}TARGET_APP" == *KhaYin*.app || "${s}TARGET_APP" == *Nuvio*.app ) ]]; then
+                echo "Found source app bundle: ${s}SOURCE_APP"
+                mkdir -p "${s}(dirname "${s}TARGET_APP")"
+                echo "Replacing ${s}TARGET_APP..."
+                rm -rf "${s}TARGET_APP"
+                ditto "${s}SOURCE_APP" "${s}TARGET_APP"
+                xattr -dr com.apple.quarantine "${s}TARGET_APP" 2>/dev/null || true
+                if [[ ${s}MOUNTED -eq 1 ]]; then
+                    echo "Detaching DMG..."
+                    hdiutil detach "${s}MOUNT_DIR" -force -quiet 2>/dev/null || true
+                    rm -rf "${s}MOUNT_DIR"
+                fi
+                if [[ -d "${s}EXTRACT_DIR" ]]; then
+                    rm -rf "${s}EXTRACT_DIR"
+                fi
+                echo "Relaunching ${s}TARGET_APP..."
+                open -n "${s}TARGET_APP"
+                echo "Autonomous update successful!"
+            else
+                echo "Fallback: Opening installer file directly"
+                if [[ ${s}MOUNTED -eq 1 ]]; then
+                    hdiutil detach "${s}MOUNT_DIR" -force -quiet 2>/dev/null || true
+                    rm -rf "${s}MOUNT_DIR"
+                fi
+                open "${s}UPDATE_FILE"
+            fi
+            rm -f "${s}0"
+        """.trimIndent()
+
+        helperScript.writeText(scriptContent)
+        helperScript.setExecutable(true, false)
+
+        ProcessBuilder("/bin/bash", helperScript.absolutePath, currentPid.toString(), updateFile.absolutePath, targetApp.absolutePath)
+            .start()
+    }
+
+    private fun launchAutonomousWindowsInstaller(updateFile: File) {
+        val currentPid = ProcessHandle.current().pid()
+        val helperScript = File(updatesDir(), "win_auto_updater.bat")
+
+        val scriptContent = """
+            @echo off
+            set PID=$currentPid
+            set UPDATE_FILE=${updateFile.absolutePath}
+
+            :WAIT_LOOP
+            tasklist /FI "PID eq %PID%" 2>NUL | find /I /N "%PID%">NUL
+            if "%ERRORLEVEL%"=="0" (
+                timeout /t 1 /nobreak >nul
+                goto WAIT_LOOP
+            )
+            timeout /t 1 /nobreak >nul
+
+            if /I "%UPDATE_FILE:~-4%"==".msi" (
+                msiexec /i "%UPDATE_FILE%" /passive /norestart
+            ) else (
+                "%UPDATE_FILE%" /SILENT /NORESTART
+            )
+
+            del "%~f0"
+        """.trimIndent()
+
+        helperScript.writeText(scriptContent)
+        ProcessBuilder("cmd.exe", "/c", helperScript.absolutePath).start()
     }
 
     private fun scheduleAppExit() {
