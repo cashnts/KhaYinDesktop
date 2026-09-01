@@ -8,6 +8,8 @@ import com.pavi2410.appupdater.GitHubUpdateSource
 import com.pavi2410.appupdater.UpdateState
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.defaultRequest
+import io.ktor.client.request.header
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +41,9 @@ actual object PlatformAppUpdater {
                 requestTimeoutMillis = null
                 socketTimeoutMillis = 120_000L
                 connectTimeoutMillis = 30_000L
+            }
+            defaultRequest {
+                header("Accept-Encoding", "identity")
             }
         }
     }
