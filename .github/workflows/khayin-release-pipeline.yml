@@ -68,10 +68,10 @@ jobs:
             RAW_VERSION="${{ inputs.version_override }}"
           elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             RAW_VERSION="${GITHUB_REF_NAME#v}"
-          elif [ -f "iosApp/Configuration/Version.xcconfig" ]; then
-            RAW_VERSION=$(grep "^MARKETING_VERSION" iosApp/Configuration/Version.xcconfig | cut -d'=' -f2 | tr -d ' \r\n')
           elif [ -f "composeApp/Configuration/DesktopVersion.properties" ]; then
             RAW_VERSION=$(grep "^VERSION_NAME=" composeApp/Configuration/DesktopVersion.properties | cut -d'=' -f2 | tr -d '\r\n')
+          elif [ -f "iosApp/Configuration/Version.xcconfig" ]; then
+            RAW_VERSION=$(grep "^MARKETING_VERSION" iosApp/Configuration/Version.xcconfig | cut -d'=' -f2 | tr -d ' \r\n')
           else
             RAW_VERSION="5.4"
           fi
