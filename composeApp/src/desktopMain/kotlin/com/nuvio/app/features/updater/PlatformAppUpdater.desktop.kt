@@ -66,7 +66,7 @@ actual object PlatformAppUpdater {
                 owner = GITHUB_OWNER,
                 repo = GITHUB_REPO,
                 includePreReleases = false,
-                httpClient = updateHttpClient,
+                httpClient = null,
             ),
             downloader = DesktopAssetDownloader(
                 downloadDir = downloadDir,
