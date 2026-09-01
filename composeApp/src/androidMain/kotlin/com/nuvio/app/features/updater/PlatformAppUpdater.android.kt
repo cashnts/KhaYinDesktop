@@ -66,6 +66,7 @@ actual object PlatformAppUpdater {
                         _state.update {
                             it.copy(
                                 status = AppUpdateStatus.UpdateAvailable(info),
+                                availableUpdate = info,
                                 isDialogVisible = true,
                                 lastCheckedTimestamp = System.currentTimeMillis(),
                             )

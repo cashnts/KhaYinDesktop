@@ -75,6 +75,7 @@ actual object PlatformAppUpdater {
                         _state.update {
                             it.copy(
                                 status = AppUpdateStatus.UpdateAvailable(info),
+                                availableUpdate = info,
                                 isDialogVisible = true,
                                 lastCheckedTimestamp = System.currentTimeMillis(),
                             )
@@ -120,9 +121,9 @@ actual object PlatformAppUpdater {
             }
         }
 
-        // Start background periodic check (initial check after 10s, then every 24h)
+        // Start background periodic check (initial check after 2s, then every 24h)
         scope.launch {
-            delay(10.seconds)
+            delay(2.seconds)
             while (isActive) {
                 try {
                     appUpdater.checkForUpdate()
@@ -161,7 +162,10 @@ actual object PlatformAppUpdater {
                 u.downloadUpdate()
             } catch (t: Throwable) {
                 _state.update {
-                    it.copy(status = AppUpdateStatus.Error(t.message ?: "Download failed"))
+                    it.copy(
+                        status = AppUpdateStatus.Error(t.message ?: "Download failed"),
+                        isDialogVisible = true,
+                    )
                 }
             }
         }

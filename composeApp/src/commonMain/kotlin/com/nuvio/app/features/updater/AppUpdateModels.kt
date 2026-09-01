@@ -25,13 +25,11 @@ sealed interface AppUpdateStatus {
 
 data class AppUpdateState(
     val status: AppUpdateStatus = AppUpdateStatus.Idle,
+    val availableUpdate: AppUpdateInfo? = null,
     val isDialogVisible: Boolean = false,
     val showUpToDateFeedback: Boolean = false,
     val lastCheckedTimestamp: Long? = null,
 ) {
     val isChecking: Boolean
         get() = status is AppUpdateStatus.Checking
-
-    val availableUpdate: AppUpdateInfo?
-        get() = (status as? AppUpdateStatus.UpdateAvailable)?.info
 }

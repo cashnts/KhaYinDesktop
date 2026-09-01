@@ -37,6 +37,7 @@ class AppUpdateStateTest {
         )
         val state = AppUpdateState(
             status = AppUpdateStatus.UpdateAvailable(info),
+            availableUpdate = info,
             isDialogVisible = true,
         )
 
