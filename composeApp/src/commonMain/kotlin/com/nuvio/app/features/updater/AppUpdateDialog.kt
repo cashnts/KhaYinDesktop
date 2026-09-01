@@ -288,9 +288,11 @@ fun AppUpdateDialog(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .heightIn(max = 100.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(Color(0xFFEF5350).copy(alpha = 0.12f))
-                                .padding(12.dp),
+                                .padding(12.dp)
+                                .verticalScroll(rememberScrollState()),
                         ) {
                             Text(
                                 text = status.message,
@@ -345,6 +347,18 @@ fun AppUpdateDialog(
                                 shape = RoundedCornerShape(8.dp),
                             ) {
                                 Text("Downloading...")
+                            }
+                        }
+                        is AppUpdateStatus.Error -> {
+                            Button(
+                                onClick = { PlatformAppUpdater.downloadUpdate() },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = tokens.colors.accent,
+                                    contentColor = Color.White,
+                                ),
+                            ) {
+                                Text(stringResource(Res.string.action_retry))
                             }
                         }
                         else -> {

@@ -2,8 +2,13 @@ package com.nuvio.app.features.updater
 
 import com.nuvio.app.core.build.AppVersionPolicy
 import com.pavi2410.appupdater.AppUpdater
+import com.pavi2410.appupdater.DesktopAssetDownloader
+import com.pavi2410.appupdater.DesktopAssetInstaller
+import com.pavi2410.appupdater.GitHubUpdateSource
 import com.pavi2410.appupdater.UpdateState
-import com.pavi2410.appupdater.github
+import io.ktor.client.HttpClient
+import io.ktor.client.plugins.HttpTimeout
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,6 +33,16 @@ actual object PlatformAppUpdater {
     private var updater: AppUpdater? = null
     private var isInitialized = false
 
+    private val updateHttpClient by lazy {
+        HttpClient {
+            install(HttpTimeout) {
+                requestTimeoutMillis = null
+                socketTimeoutMillis = 120_000L
+                connectTimeoutMillis = 30_000L
+            }
+        }
+    }
+
     private val desktopAssetMatcher: (String) -> Boolean = { fileName ->
         val os = System.getProperty("os.name").lowercase()
         when {
@@ -44,10 +59,20 @@ actual object PlatformAppUpdater {
         isInitialized = true
 
         val currentVersion = AppVersionPolicy.displayVersionName.ifBlank { "1.0.0" }
-        val appUpdater = AppUpdater.github(
-            owner = GITHUB_OWNER,
-            repo = GITHUB_REPO,
+        val downloadDir = File(System.getProperty("java.io.tmpdir"), "kmp-app-updater").apply { mkdirs() }
+        val appUpdater = AppUpdater(
             currentVersion = currentVersion,
+            source = GitHubUpdateSource(
+                owner = GITHUB_OWNER,
+                repo = GITHUB_REPO,
+                includePreReleases = false,
+                httpClient = updateHttpClient,
+            ),
+            downloader = DesktopAssetDownloader(
+                downloadDir = downloadDir,
+                httpClient = updateHttpClient,
+            ),
+            installer = DesktopAssetInstaller(),
             assetMatcher = desktopAssetMatcher,
         )
         updater = appUpdater
