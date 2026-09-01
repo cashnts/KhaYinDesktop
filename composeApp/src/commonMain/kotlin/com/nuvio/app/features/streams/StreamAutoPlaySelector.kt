@@ -174,31 +174,14 @@ object StreamAutoPlaySelector {
             val sortedMatching = matchingStreams
                 .filter { it.isAutoPlayable(debridEnabled, activeResolverProviderId) }
                 .filterNot { it == preferredStream }
-                .sortedWith(
-                    compareByDescending<StreamItem> { !it.isLowQualitySource }
-                        .thenByDescending { !it.isUncachedStream }
-                        .thenByDescending {
-                            val rank = PlayerResolutionHelper.detectResolutionTier(it).rank
-                            when (rank) {
-                                1 -> 6 // 4K UHD
-                                2 -> 5 // 2K QHD
-                                3 -> 4 // 1080p FHD
-                                4 -> 3 // 720p HD
-                                5 -> 1 // 480p SD
-                                else -> 2 // Unknown
-                            }
-                        }
-                        .thenByDescending { it.playableDirectUrl != null || it.isDirectDebridStream }
-                        .thenByDescending { it.isCachedDebridTorrentStream }
-                        .thenByDescending { it.behaviorHints.videoSize ?: 0L }
-                )
+                .sortedByDescending { PlayerResolutionHelper.calculateStreamQualityScore(it) }
             sortedMatching.forEach(::add)
         }
-        val selected = readyStreams.firstOrNull() ?: matchingStreams.firstOrNull()
+        val selected = readyStreams.firstOrNull()
         if (selected != null) {
             return StreamAutoPlayEvaluation(
                 stream = selected,
-                readyStreams = if (readyStreams.isNotEmpty()) readyStreams else listOf(selected),
+                readyStreams = readyStreams,
             )
         }
 

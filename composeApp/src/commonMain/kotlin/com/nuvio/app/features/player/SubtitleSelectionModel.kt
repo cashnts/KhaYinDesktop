@@ -37,10 +37,11 @@ internal fun buildSubtitleLanguageItems(
     secondaryPreferredLanguage: String?,
     showOnlyPreferredLanguages: Boolean,
     selectedLanguageKey: String,
+    filterByLicense: Boolean = true,
 ): List<SubtitleLanguageItem> {
     val isPlus = com.nuvio.app.features.license.LicenseRepository.isPlusMember
-    val validSubtitleTracks = subtitleTracks.filter { isAllowedSubtitleTrack(it, isPlus) }
-    val validAddonSubtitles = addonSubtitles.filter { isAllowedAddonSubtitle(it, isPlus) }
+    val validSubtitleTracks = if (filterByLicense) subtitleTracks.filter { isAllowedSubtitleTrack(it, isPlus) } else subtitleTracks
+    val validAddonSubtitles = if (filterByLicense) addonSubtitles.filter { isAllowedAddonSubtitle(it, isPlus) } else addonSubtitles
 
     val counts = linkedMapOf<String, Int>()
     validSubtitleTracks.forEach { track ->

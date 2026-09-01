@@ -225,26 +225,16 @@ private fun ResolutionOptionCard(
                 }
             }
 
-            val subtitleText = buildString {
-                append(stream.addonName.ifBlank { "Primary Server" })
-                if (streamSize != null) {
-                    append(" • ")
-                    append(streamSize)
-                }
-                if (stream.isDirectDebridStream || stream.isCachedDebridTorrentStream) {
-                    append(" • Fast Cloud")
-                }
+            if (streamSize != null) {
+                Text(
+                    text = streamSize,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 12.sp,
+                    ),
+                    maxLines = 1,
+                )
             }
-
-            Text(
-                text = subtitleText,
-                style = MaterialTheme.typography.bodySmall.copy(
-                    color = Color.White.copy(alpha = 0.5f),
-                    fontSize = 12.sp,
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
         }
 
         if (option.isActive) {

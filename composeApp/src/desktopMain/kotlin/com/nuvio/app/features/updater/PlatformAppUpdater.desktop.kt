@@ -205,6 +205,12 @@ actual object PlatformAppUpdater {
         val u = updater ?: return
         try {
             u.installUpdate()
+            // After launching the installer / mounting DMG, exit the running app
+            // so the application bundle is not locked and can be replaced in Applications.
+            scope.launch {
+                delay(1.seconds)
+                kotlin.system.exitProcess(0)
+            }
         } catch (t: Throwable) {
             _state.update {
                 it.copy(status = AppUpdateStatus.Error(t.message ?: "Installation failed"))

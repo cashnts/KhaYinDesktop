@@ -195,35 +195,6 @@ fun AppUpdateDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Release notes / description
-                if (info.changelog.isNotBlank()) {
-                    Text(
-                        text = stringResource(Res.string.updates_release_notes),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = tokens.colors.textSecondary,
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 160.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(tokens.colors.background.copy(alpha = 0.5f))
-                            .border(1.dp, tokens.colors.borderSubtle, RoundedCornerShape(8.dp))
-                            .padding(12.dp)
-                            .verticalScroll(rememberScrollState()),
-                    ) {
-                        Text(
-                            text = info.changelog.trim(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = tokens.colors.textPrimary,
-                            lineHeight = 18.sp,
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
-
                 // Progress / State info
                 when (status) {
                     is AppUpdateStatus.Downloading -> {

@@ -1265,14 +1265,19 @@ compose.desktop {
         mainClass = "com.nuvio.app.MainKt"
         val smokePlayerUrl = providers.gradleProperty("nuvio.desktop.smokePlayerUrl").orNull
             ?: System.getenv("NUVIO_DESKTOP_SMOKE_PLAYER_URL")
-        jvmArgs += listOfNotNull(
+        val jvmArgsList = mutableListOf(
             "-Dapple.awt.application.appearance=NSAppearanceNameDarkAqua",
             "--add-opens=java.desktop/java.awt=ALL-UNNAMED",
             "--add-opens=java.desktop/sun.lwawt=ALL-UNNAMED",
-            "--add-opens=java.desktop/sun.lwawt.macosx=ALL-UNNAMED",
-            "--add-opens=java.desktop/sun.awt.windows=ALL-UNNAMED",
-            smokePlayerUrl?.takeIf { it.isNotBlank() }?.let { "-Dnuvio.desktop.smokePlayerUrl=$it" },
         )
+        if (isMacHost) {
+            jvmArgsList += "--add-opens=java.desktop/sun.lwawt.macosx=ALL-UNNAMED"
+        }
+        if (isWindowsHost) {
+            jvmArgsList += "--add-opens=java.desktop/sun.awt.windows=ALL-UNNAMED"
+        }
+        smokePlayerUrl?.takeIf { it.isNotBlank() }?.let { jvmArgsList += "-Dnuvio.desktop.smokePlayerUrl=$it" }
+        jvmArgs += jvmArgsList
         val clientRoleValue = (findProperty("nuvio.client.role") as? String)
             ?: System.getenv("NUVIO_CLIENT_ROLE")
             ?: "user"

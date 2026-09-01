@@ -24,6 +24,7 @@ class SubtitleSelectionModelTest {
             secondaryPreferredLanguage = "fr",
             showOnlyPreferredLanguages = false,
             selectedLanguageKey = "en",
+            filterByLicense = false,
         )
 
         assertEquals(
@@ -45,6 +46,7 @@ class SubtitleSelectionModelTest {
             secondaryPreferredLanguage = null,
             showOnlyPreferredLanguages = true,
             selectedLanguageKey = "ja",
+            filterByLicense = false,
         )
 
         assertEquals(listOf(SubtitleOffLanguageKey, "en", "ja"), items.map { it.key })
@@ -62,6 +64,7 @@ class SubtitleSelectionModelTest {
             secondaryPreferredLanguage = null,
             showOnlyPreferredLanguages = false,
             selectedLanguageKey = SubtitleOffLanguageKey,
+            filterByLicense = false,
         )
 
         assertEquals(
