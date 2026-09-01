@@ -35,8 +35,11 @@ desugarJdkLibs = "2.1.5"
 sentry = "8.47.0"
 sentryDesktop = "8.52.0"
 sentryGradle = "6.18.0"
+kmpAppUpdater = "0.1.0"
 
 [libraries]
+kmp-app-updater-core = { module = "com.pavi2410.kmp-app-updater:core", version.ref = "kmpAppUpdater" }
+kmp-app-updater-compose-ui = { module = "com.pavi2410.kmp-app-updater:compose-ui", version.ref = "kmpAppUpdater" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlin-testJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
 junit = { module = "junit:junit", version.ref = "junit" }

@@ -1173,6 +1173,8 @@ kotlin {
                 implementation(libs.androidx.media3.container)
                 implementation(libs.androidx.media3.extractor)
                 implementation(libs.mpv.android.lib)
+                implementation(libs.kmp.app.updater.core)
+                implementation(libs.kmp.app.updater.compose.ui)
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
                 implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("lib-*.aar"))))
                 if (androidDistribution == "full") {
@@ -1203,6 +1205,8 @@ kotlin {
                 implementation(libs.quickjs.kt)
                 implementation(libs.ksoup)
                 implementation(libs.sentry.jvm)
+                implementation(libs.kmp.app.updater.core)
+                implementation(libs.kmp.app.updater.compose.ui)
             }
         }
         val androidHostTest by getting {

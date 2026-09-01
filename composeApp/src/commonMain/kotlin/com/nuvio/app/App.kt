@@ -141,6 +141,8 @@ import com.nuvio.app.core.ui.platformExitApp
 import com.nuvio.app.core.ui.configurePlatformImageLoader
 import com.nuvio.app.core.ui.NuvioToastHost
 import com.nuvio.app.core.ui.NuvioToastController
+import com.nuvio.app.features.updater.AppUpdateDialog
+import com.nuvio.app.features.updater.PlatformAppUpdater
 import com.nuvio.app.core.ui.NuvioFloatingPrompt
 import com.nuvio.app.core.ui.ProfileMeshBackground
 import com.nuvio.app.core.ui.TrackingListPickerDialog
@@ -2310,8 +2312,8 @@ private fun MainAppContent(
                                         onLicensesAttributionsSettingsClick = {
                                             navController.navigate(LicensesAttributionsSettingsRoute(licensesSettingsTitle))
                                         },
-                                        onCheckForUpdatesClick = null,
-                                        onTestUpdateBannerClick = null,
+                                        onCheckForUpdatesClick = { PlatformAppUpdater.checkForUpdate(manual = true) },
+                                        onTestUpdateBannerClick = { PlatformAppUpdater.showUpdateDialog() },
                                         onCollectionsSettingsClick = { navController.navigate(CollectionsRoute(collectionsTitle)) },
                                         onFolderClick = { collectionId, folderId ->
                                             val folderTitle = CollectionRepository.collections.value
@@ -3453,8 +3455,8 @@ private fun MainAppContent(
                         onCollectionsClick = {
                             navController.navigate(CollectionsRoute(collectionsTitle))
                         },
-                        onCheckForUpdatesClick = null,
-                        onTestUpdateBannerClick = null,
+                        onCheckForUpdatesClick = { PlatformAppUpdater.checkForUpdate(manual = true) },
+                        onTestUpdateBannerClick = { PlatformAppUpdater.showUpdateDialog() },
                     )
                 }
                 entry<DownloadsSettingsRoute> { route ->
@@ -3998,6 +4000,8 @@ private fun MainAppContent(
                     .align(Alignment.TopCenter)
                     .zIndex(20f),
             )
+
+            AppUpdateDialog()
 
             }
 }

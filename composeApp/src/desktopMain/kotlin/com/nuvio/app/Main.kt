@@ -62,6 +62,7 @@ fun main(args: Array<String>) {
     ProfileRepository.loadCachedProfiles()
     AppIconRepository.ensureLoaded()
     DiscordPresenceManager.start()
+    com.nuvio.app.features.updater.PlatformAppUpdater.initialize()
 
     application {
         val appIconState by AppIconRepository.state.collectAsState()

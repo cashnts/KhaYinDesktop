@@ -118,6 +118,7 @@ open class MainActivity : AppCompatActivity() {
         SimklSyncStorage.initialize(applicationContext)
         LibraryDisplaySettingsStorage.initialize(applicationContext)
         ContinueWatchingPreferencesStorage.initialize(applicationContext)
+        com.nuvio.app.features.updater.PlatformAppUpdater.initializeWithContext(applicationContext)
         ResumePromptStorage.initialize(applicationContext)
         ContinueWatchingEnrichmentStorage.initialize(applicationContext)
         EpisodeReleaseNotificationsStorage.initialize(applicationContext)
