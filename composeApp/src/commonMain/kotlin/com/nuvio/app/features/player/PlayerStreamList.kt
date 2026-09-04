@@ -61,9 +61,7 @@ internal fun PlayerStreamList(
         StreamBadgeSettingsRepository.ensureLoaded()
         StreamBadgeSettingsRepository.uiState
     }.collectAsStateWithLifecycle()
-    val streams: List<StreamItem> = remember(streamsUiState.allStreams) {
-        PlayerResolutionHelper.filterBestStreams(streamsUiState.allStreams)
-    }
+    val streams: List<StreamItem> = streamsUiState.allStreams
     val visibleGroups = streamsUiState.filteredGroups
 
     when {
@@ -99,73 +97,19 @@ internal fun PlayerStreamList(
                     key = { index, _ -> streamKeys[index] },
                 ) { _, stream ->
                     val isCurrent = stream.isCurrentPlayerStream(currentStreamUrl, currentStreamName)
-                    val tier = PlayerResolutionHelper.detectResolutionTier(stream)
-                    val title = if (tier != VideoResolutionTier.UNKNOWN) tier.label else stream.streamLabel
-                    val sizeText = if (streamBadgeSettings.showFileSizeBadges) {
-                        PlayerResolutionHelper.formatStreamVideoSize(stream.behaviorHints.videoSize)
-                    } else null
                     val isEnabled = stream.isSelectableForPlayback(debridSettings.canResolvePlayableLinks)
 
-                    Surface(
-                        onClick = { onStreamSelected(stream) },
+                    StreamCard(
+                        stream = stream,
                         enabled = isEnabled,
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (isCurrent) {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-                        } else {
-                            Color.White.copy(alpha = 0.06f)
-                        },
-                        border = if (isCurrent) {
-                            BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
-                        } else {
-                            BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                if (isCurrent) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = "Active",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                } else {
-                                    Box(modifier = Modifier.size(18.dp))
-                                }
-                                Text(
-                                    text = title,
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
-                                    ),
-                                    color = if (isCurrent) Color.White else Color.White.copy(alpha = 0.9f),
-                                )
-                            }
-                            if (!sizeText.isNullOrBlank()) {
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = Color.White.copy(alpha = 0.12f),
-                                ) {
-                                    Text(
-                                        text = sizeText,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color.White.copy(alpha = 0.8f),
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                    )
-                                }
-                            }
-                        }
-                    }
+                        appendInstantServiceToDefaultName = true,
+                        showFileSizeBadges = streamBadgeSettings.showFileSizeBadges,
+                        showAddonLogo = streamBadgeSettings.showAddonLogo,
+                        badgePlacement = streamBadgeSettings.badgePlacement,
+                        onClick = { onStreamSelected(stream) },
+                        isCurrent = isCurrent,
+                        currentLabel = currentLabel,
+                    )
                 }
                 if (streamsUiState.isAnyLoading) {
                     item {

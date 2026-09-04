@@ -196,8 +196,9 @@ object StreamAutoPlaySelector {
     private fun StreamItem.isAutoPlayable(
         debridEnabled: Boolean,
         activeResolverProviderId: String?,
-    ): Boolean =
-        playableDirectUrl != null ||
+    ): Boolean {
+        if (isUncachedStream) return false
+        return playableDirectUrl != null ||
             (url != null && !url.startsWith("magnet:", ignoreCase = true) && !url.startsWith("torrent:", ignoreCase = true)) ||
             (
                 AppFeaturePolicy.p2pEnabled &&
@@ -206,6 +207,7 @@ object StreamAutoPlaySelector {
                     !isPendingDebridAutoPlay(debridEnabled, activeResolverProviderId)
             ) ||
             (debridEnabled && isAddonDebridCandidate && isReadyDebridAutoPlay(activeResolverProviderId))
+    }
 
     private fun StreamItem.isReadyDebridAutoPlay(activeResolverProviderId: String?): Boolean =
         when {

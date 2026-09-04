@@ -32,21 +32,24 @@ internal class TorboxFileSelector {
             }
         }
 
+        val nonSamplePlayable = playable.filterNot { isSampleOrExtraFileName(it.displayName()) }
+        val candidates = nonSamplePlayable.ifEmpty { playable }
+
         resolve.fileIdx?.let { fileIdx ->
-            files.getOrNull(fileIdx)?.takeIf { it.isPlayableVideo() }?.let {
+            files.getOrNull(fileIdx)?.takeIf { it in candidates }?.let {
                 return it
             }
             if (fileIdx > 0) {
-                files.getOrNull(fileIdx - 1)?.takeIf { it.isPlayableVideo() }?.let {
+                files.getOrNull(fileIdx - 1)?.takeIf { it in candidates }?.let {
                     return it
                 }
             }
-            playable.firstOrNull { it.id == fileIdx }?.let {
+            candidates.firstOrNull { it.id == fileIdx }?.let {
                 return it
             }
         }
 
-        return playable.maxByOrNull { it.size ?: 0L }
+        return candidates.maxByOrNull { it.size ?: 0L }
     }
 
     private fun TorboxTorrentFileDto.isPlayableVideo(): Boolean {
@@ -86,21 +89,24 @@ internal class RealDebridFileSelector {
             }
         }
 
+        val nonSamplePlayable = playable.filterNot { isSampleOrExtraFileName(it.displayName()) }
+        val candidates = nonSamplePlayable.ifEmpty { playable }
+
         resolve.fileIdx?.let { fileIdx ->
-            files.getOrNull(fileIdx)?.takeIf { it.isPlayableVideo() }?.let {
+            files.getOrNull(fileIdx)?.takeIf { it in candidates }?.let {
                 return it
             }
             if (fileIdx > 0) {
-                files.getOrNull(fileIdx - 1)?.takeIf { it.isPlayableVideo() }?.let {
+                files.getOrNull(fileIdx - 1)?.takeIf { it in candidates }?.let {
                     return it
                 }
             }
-            playable.firstOrNull { it.id == fileIdx }?.let {
+            candidates.firstOrNull { it.id == fileIdx }?.let {
                 return it
             }
         }
 
-        return playable.maxByOrNull { it.bytes ?: 0L }
+        return candidates.maxByOrNull { it.bytes ?: 0L }
     }
 
     private fun RealDebridTorrentFileDto.isPlayableVideo(): Boolean =
@@ -137,22 +143,31 @@ internal class PremiumizeDirectDownloadFileSelector {
             }
         }
 
+        val nonSamplePlayable = playable.filterNot { isSampleOrExtraFileName(it.displayName()) }
+        val candidates = nonSamplePlayable.ifEmpty { playable }
+
         resolve.fileIdx?.let { fileIdx ->
-            files.getOrNull(fileIdx)?.takeIf { it.isPlayableVideo() }?.let {
+            files.getOrNull(fileIdx)?.takeIf { it in candidates }?.let {
                 return it
             }
             if (fileIdx > 0) {
-                files.getOrNull(fileIdx - 1)?.takeIf { it.isPlayableVideo() }?.let {
+                files.getOrNull(fileIdx - 1)?.takeIf { it in candidates }?.let {
                     return it
                 }
             }
         }
 
-        return playable.maxByOrNull { it.size ?: 0L }
+        return candidates.maxByOrNull { it.size ?: 0L }
     }
 
     private fun PremiumizeDirectDownloadFileDto.isPlayableVideo(): Boolean =
         !link.isNullOrBlank() && displayName().lowercase().hasVideoExtension()
+}
+
+internal fun isSampleOrExtraFileName(name: String): Boolean {
+    val lower = name.lowercase()
+    val patterns = listOf("sample", "trailer", "featurette", "bonus", "preview", "promo", "extras")
+    return patterns.any { lower.contains(it) }
 }
 
 internal fun PremiumizeDirectDownloadFileDto.displayName(): String =
