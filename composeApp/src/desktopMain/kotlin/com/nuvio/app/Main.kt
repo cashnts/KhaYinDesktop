@@ -16,6 +16,9 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.unit.dp
+import com.nuvio.app.core.analytics.PostHogAnalytics
+import com.nuvio.app.core.analytics.PostHogLogger
+import com.nuvio.app.core.analytics.PostHogTracer
 import com.nuvio.app.core.deeplink.handleAppUrl
 import com.nuvio.app.features.discordrpc.DiscordPresenceManager
 import com.nuvio.app.features.p2p.P2pStreamingEngine

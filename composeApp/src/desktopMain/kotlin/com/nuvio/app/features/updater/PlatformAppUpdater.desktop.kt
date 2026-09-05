@@ -253,7 +253,8 @@ actual object PlatformAppUpdater {
         try {
             com.nuvio.app.features.p2p.P2pStreamingEngine.shutdown()
             com.nuvio.app.features.discordrpc.DiscordPresenceManager.shutdown()
-            com.nuvio.app.core.diagnostics.SentryInitializer.close()
+            com.nuvio.app.core.analytics.PostHogLogger.flush()
+            com.nuvio.app.core.analytics.PostHogTracer.flush()
         } catch (_: Throwable) {}
 
         // Launch helper script detached
@@ -289,7 +290,8 @@ actual object PlatformAppUpdater {
         try {
             com.nuvio.app.features.p2p.P2pStreamingEngine.shutdown()
             com.nuvio.app.features.discordrpc.DiscordPresenceManager.shutdown()
-            com.nuvio.app.core.diagnostics.SentryInitializer.close()
+            com.nuvio.app.core.analytics.PostHogLogger.flush()
+            com.nuvio.app.core.analytics.PostHogTracer.flush()
         } catch (_: Throwable) {}
 
         ProcessBuilder("cmd.exe", "/c", scriptFile.absolutePath).start()

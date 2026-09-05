@@ -1,6 +1,7 @@
 package com.nuvio.app.features.addons
 
 import com.nuvio.app.core.build.AppVersionConfig
+import com.nuvio.app.core.diagnostics.PostHogNetworkLogInterceptor
 import com.nuvio.app.core.storage.DesktopStorage
 import com.nuvio.app.core.network.DesktopIPv4FirstDns
 import kotlinx.coroutines.Dispatchers
@@ -54,8 +55,6 @@ internal actual object AddonStorage {
         store.putString("addon_enabled_states_$profileId", json.encodeToString(updated))
     }
 }
-
-import com.nuvio.app.core.diagnostics.PostHogNetworkLogInterceptor
 
 private val desktopHttpClient = OkHttpClient.Builder()
     .dns(DesktopIPv4FirstDns())

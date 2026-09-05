@@ -1,8 +1,8 @@
 package com.nuvio.app.core.analytics
 
 import co.touchlab.kermit.Logger
-import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.features.addons.httpRequestRaw
+import com.nuvio.app.features.watched.WatchedClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -16,9 +16,12 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
+import kotlin.concurrent.Volatile
 import kotlin.random.Random
 
 /**
@@ -84,7 +87,7 @@ object PostHogTracer {
         val parentSpanId: String? = null,
         val name: String,
         val kind: SpanKind = SpanKind.INTERNAL,
-        val startTimeNano: Long = platformCurrentTimeMillis() * 1_000_000L
+        val startTimeNano: Long = WatchedClock.nowEpochMs() * 1_000_000L
     ) {
         private val attributes = mutableMapOf<String, Any>()
         private var statusCode = StatusCode.OK
@@ -120,7 +123,7 @@ object PostHogTracer {
         fun end() {
             if (ended) return
             ended = true
-            val endTimeNano = platformCurrentTimeMillis() * 1_000_000L
+            val endTimeNano = WatchedClock.nowEpochMs() * 1_000_000L
             val record = SpanRecord(
                 traceId = traceId,
                 spanId = spanId,
@@ -265,13 +268,13 @@ object PostHogTracer {
             )
 
             val result = httpRequestRaw(
-                url = url,
                 method = "POST",
+                url = url,
                 headers = headers,
-                body = jsonString.encodeToByteArray()
+                body = jsonString
             )
-            if (result.statusCode !in 200..299) {
-                log.w { "PostHog traces export returned HTTP ${result.statusCode}: ${result.statusText}" }
+            if (result.status !in 200..299) {
+                log.w { "PostHog traces export returned HTTP ${result.status}: ${result.statusText}" }
             }
         } catch (e: Throwable) {
             log.w(e) { "Failed to flush PostHog traces batch" }
@@ -411,9 +414,15 @@ object PostHogTracer {
             is JsonElement -> {
                 when (value) {
                     is JsonPrimitive -> {
-                        value.booleanOrNull?.let { put("boolValue", it) }
-                            ?: value.longOrNull?.let { put("intValue", it) }
-                            ?: put("stringValue", value.content)
+                        val boolVal = value.booleanOrNull
+                        val longVal = value.longOrNull
+                        if (boolVal != null) {
+                            put("boolValue", boolVal)
+                        } else if (longVal != null) {
+                            put("intValue", longVal)
+                        } else {
+                            put("stringValue", value.content)
+                        }
                     }
                     is JsonNull -> put("stringValue", "")
                     else -> put("stringValue", value.toString())

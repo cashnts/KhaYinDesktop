@@ -20,6 +20,8 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
+import kotlin.concurrent.Volatile
+
 /**
  * Multiplatform OpenTelemetry (OTLP) HTTP log forwarder for PostHog Logs.
  * Batches structured application logs and sends them to PostHog's `/i/v1/logs` endpoint.
@@ -133,7 +135,7 @@ object PostHogLogger {
             enrichedAttributes["exception.stacktrace"] = throwable.stackTraceToString().take(4000)
         }
 
-        val currentTimeMs = com.nuvio.app.features.player.platformCurrentTimeMillis()
+        val currentTimeMs = com.nuvio.app.features.watched.WatchedClock.nowEpochMs()
         val record = LogRecord(
             timestampNano = currentTimeMs * 1_000_000L,
             severityNumber = sevNum,
