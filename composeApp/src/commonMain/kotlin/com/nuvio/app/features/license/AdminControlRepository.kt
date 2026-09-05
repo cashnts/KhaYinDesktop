@@ -75,6 +75,7 @@ data class LicenseAnalyticsRecord(
 data class PostHogSessionRecord(
     val sessionId: String,
     val licenseKey: String,
+    val customerName: String? = null,
     val deviceId: String,
     val platform: String,
     val version: String,
@@ -88,6 +89,8 @@ data class PostHogSessionRecord(
     val searches: List<String>,
     val isLive: Boolean,
     val hasErrors: Boolean,
+    val activePlaybackTitle: String? = null,
+    val activePlaybackProgress: Float? = null,
     val records: List<LicenseAnalyticsRecord>,
 )
 
@@ -275,6 +278,7 @@ object AdminControlRepository {
         personProps: kotlinx.serialization.json.JsonObject?,
     ): LicenseAnalyticsRecord {
         val platform = (props?.get("platform") as? kotlinx.serialization.json.JsonPrimitive)?.content
+            ?: (props?.get("os_name") as? kotlinx.serialization.json.JsonPrimitive)?.content
             ?: (props?.get("\$os") as? kotlinx.serialization.json.JsonPrimitive)?.content
             ?: (props?.get("\$lib") as? kotlinx.serialization.json.JsonPrimitive)?.content
             ?: "App"
@@ -285,11 +289,14 @@ object AdminControlRepository {
             ?: ""
 
         val deviceId = (props?.get("device_id") as? kotlinx.serialization.json.JsonPrimitive)?.content
+            ?: (props?.get("device_model") as? kotlinx.serialization.json.JsonPrimitive)?.content
             ?: (props?.get("\$device_id") as? kotlinx.serialization.json.JsonPrimitive)?.content
             ?: ""
 
         val city = (props?.get("\$geoip_city_name") as? kotlinx.serialization.json.JsonPrimitive)?.content
+            ?: (personProps?.get("\$geoip_city_name") as? kotlinx.serialization.json.JsonPrimitive)?.content
         val country = (props?.get("\$geoip_country_name") as? kotlinx.serialization.json.JsonPrimitive)?.content
+            ?: (personProps?.get("\$geoip_country_name") as? kotlinx.serialization.json.JsonPrimitive)?.content
         val location = listOfNotNull(city, country).filter { it.isNotBlank() }.joinToString(", ").takeIf { it.isNotBlank() }
 
         val customerName = (personProps?.get("customer_name") as? kotlinx.serialization.json.JsonPrimitive)?.content
@@ -302,9 +309,12 @@ object AdminControlRepository {
             ?: (props?.get("\$exception_message") as? kotlinx.serialization.json.JsonPrimitive)?.content
             ?: (props?.get("error_message") as? kotlinx.serialization.json.JsonPrimitive)?.content
             ?: (props?.get("message") as? kotlinx.serialization.json.JsonPrimitive)?.content
+            ?: (props?.get("\$screen_name") as? kotlinx.serialization.json.JsonPrimitive)?.content
+            ?: (props?.get("screen_name") as? kotlinx.serialization.json.JsonPrimitive)?.content
 
         val sessionId = (props?.get("\$session_id") as? kotlinx.serialization.json.JsonPrimitive)?.content
             ?: (props?.get("session_id") as? kotlinx.serialization.json.JsonPrimitive)?.content
+            ?: (props?.get("\$window_id") as? kotlinx.serialization.json.JsonPrimitive)?.content
 
         val mediaTitle = (props?.get("media_title") as? kotlinx.serialization.json.JsonPrimitive)?.content
             ?: (props?.get("title") as? kotlinx.serialization.json.JsonPrimitive)?.content
@@ -312,9 +322,10 @@ object AdminControlRepository {
         val streamName = (props?.get("stream_name") as? kotlinx.serialization.json.JsonPrimitive)?.content
         val addonName = (props?.get("addon_name") as? kotlinx.serialization.json.JsonPrimitive)?.content
         val searchQuery = (props?.get("query") as? kotlinx.serialization.json.JsonPrimitive)?.content
-        val durationMs = (props?.get("duration_ms") as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull()
-        val positionMs = (props?.get("position_ms") as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull()
-        val progressPercent = (props?.get("progress_percent") as? kotlinx.serialization.json.JsonPrimitive)?.content?.toFloatOrNull()
+            ?: (props?.get("search_query") as? kotlinx.serialization.json.JsonPrimitive)?.content
+        val durationMs = (props?.get("duration_ms") as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()?.toLong()
+        val positionMs = (props?.get("position_ms") as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()?.toLong()
+        val progressPercent = (props?.get("progress_percent") as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()?.toFloat()
 
         val licenseKey = if (distinctId.isNotBlank() && !distinctId.startsWith("anon_")) {
             distinctId
@@ -450,6 +461,9 @@ object AdminControlRepository {
         cleaned.toLongOrNull()?.let { num ->
             return if (num < 100_000_000_000L) num * 1000L else num
         }
+        val directInstant = runCatching { kotlinx.datetime.Instant.parse(cleaned).toEpochMilliseconds() }.getOrNull()
+        if (directInstant != null) return directInstant
+
         var normalized = cleaned.replace(" ", "T")
         val hasOffset = normalized.length > 10 && (
             normalized.substring(10).contains("+") ||
@@ -459,16 +473,6 @@ object AdminControlRepository {
         if (!hasOffset) {
             normalized += "Z"
         }
-        val dotIndex = normalized.indexOf('.')
-        if (dotIndex != -1) {
-            val nonDigitAfterDot = normalized.indexOfFirst { it !in '0'..'9' && normalized.indexOf(it) > dotIndex }
-            val endOfFraction = if (nonDigitAfterDot != -1) nonDigitAfterDot else normalized.length
-            val fraction = normalized.substring(dotIndex + 1, endOfFraction)
-            val trimmedFraction = if (fraction.length > 3) fraction.take(3) else fraction.padEnd(3, '0')
-            val suffix = if (nonDigitAfterDot != -1) normalized.substring(nonDigitAfterDot) else ""
-            normalized = normalized.substring(0, dotIndex + 1) + trimmedFraction + suffix
-        }
-
         return runCatching {
             kotlinx.datetime.Instant.parse(normalized).toEpochMilliseconds()
         }.getOrElse { 0L }
@@ -496,6 +500,7 @@ object AdminControlRepository {
             val licenseKey = sessionRecords.firstNotNullOfOrNull { it.license_key?.takeIf { k -> k.isNotBlank() && !k.startsWith("anon_") } }
                 ?: sessionRecords.firstNotNullOfOrNull { it.license_key?.takeIf { k -> k.isNotBlank() } }
                 ?: "Anonymous"
+            val customerName = sessionRecords.firstNotNullOfOrNull { it.customer_name?.takeIf { c -> c.isNotBlank() } }
             val deviceId = sessionRecords.firstNotNullOfOrNull { it.device_id?.takeIf { d -> d.isNotBlank() } } ?: "Device"
             val platform = sessionRecords.firstNotNullOfOrNull { it.platform?.takeIf { p -> p.isNotBlank() } } ?: "Desktop / Mobile"
             val version = sessionRecords.firstNotNullOfOrNull { it.version?.takeIf { v -> v.isNotBlank() } } ?: ""
@@ -505,7 +510,8 @@ object AdminControlRepository {
             val searches = sessionRecords.mapNotNull { it.search_query?.takeIf { q -> q.isNotBlank() } }.distinct()
 
             val hasErrors = sessionRecords.any { r ->
-                r.event == "\$exception" || r.event == "playback_failed" || r.log_level?.equals("error", ignoreCase = true) == true
+                val evt = r.event.orEmpty().lowercase()
+                evt == "\$exception" || evt.contains("error") || evt == "playback_failed" || r.log_level?.equals("error", ignoreCase = true) == true
             }
 
             val startIso = first.created_at ?: ""
@@ -521,9 +527,9 @@ object AdminControlRepository {
                 else -> "${durationSeconds / 3600}h ${(durationSeconds % 3600) / 60}m"
             }
 
-            // A session is LIVE only if a heartbeat or user action was received within the last 90 seconds
+            // A session is LIVE if an event was received within the last 180 seconds (with clock skew buffer)
             val diffMs = nowEpochMs - lastEpoch
-            val isLive = (lastEpoch > 0L) && (diffMs <= 90 * 1000L)
+            val isLive = (lastEpoch > 0L) && (diffMs <= 180 * 1000L)
 
             // Find the most recent meaningful action (ignoring routine heartbeats)
             val latestAction = sortedSessionRecords.lastOrNull {
@@ -531,19 +537,29 @@ object AdminControlRepository {
                 evt != "heartbeat" && !evt.startsWith("\$identify") && !evt.startsWith("\$set") && !evt.startsWith("\$create_alias")
             } ?: latest
 
+            var activePlaybackTitle: String? = null
+            var activePlaybackProgress: Float? = null
+
             val recentActivity = when {
                 latestAction.event?.startsWith("playback_started", ignoreCase = true) == true ||
                 latestAction.event?.startsWith("playback_resumed", ignoreCase = true) == true -> {
                     val title = latestAction.media_title ?: mediaPlayed.lastOrNull() ?: "Media"
-                    if (isLive) "Watching: $title" else "Watched: $title"
-                }
-                latestAction.event?.startsWith("playback_stopped", ignoreCase = true) == true -> {
-                    val title = latestAction.media_title ?: mediaPlayed.lastOrNull()
-                    if (title != null) "Finished: $title" else "Stopped Playback"
+                    activePlaybackTitle = title
+                    activePlaybackProgress = latestAction.progress_percent
+                    val progressStr = latestAction.progress_percent?.let { " (${it.toInt()}%)" } ?: ""
+                    if (isLive) "Watching: $title$progressStr" else "Watched: $title"
                 }
                 latestAction.event?.startsWith("playback_paused", ignoreCase = true) == true -> {
+                    val title = latestAction.media_title ?: mediaPlayed.lastOrNull() ?: "Media"
+                    activePlaybackTitle = title
+                    activePlaybackProgress = latestAction.progress_percent
+                    val progressStr = latestAction.progress_percent?.let { " (${it.toInt()}%)" } ?: ""
+                    "Paused: $title$progressStr"
+                }
+                latestAction.event?.startsWith("playback_stopped", ignoreCase = true) == true ||
+                latestAction.event?.startsWith("playback_finished", ignoreCase = true) == true -> {
                     val title = latestAction.media_title ?: mediaPlayed.lastOrNull()
-                    if (title != null) "Paused: $title" else "Playback Paused"
+                    if (title != null) "Finished: $title" else "Stopped Playback"
                 }
                 latestAction.event?.startsWith("playback_failed", ignoreCase = true) == true -> "Playback Failed"
                 latestAction.event?.startsWith("search", ignoreCase = true) == true -> {
@@ -551,7 +567,7 @@ object AdminControlRepository {
                     if (q != null) "Searched: \"$q\"" else "Searching"
                 }
                 latestAction.event?.startsWith("stream_fetch", ignoreCase = true) == true -> {
-                    val title = latestAction.media_title ?: "Media"
+                    val title = latestAction.media_title ?: "Streams"
                     "Browsing Streams ($title)"
                 }
                 latestAction.event?.equals("profile_switched", ignoreCase = true) == true -> "Switched Profile"
@@ -561,13 +577,14 @@ object AdminControlRepository {
                     val scr = latestAction.log_message?.takeIf { it.isNotBlank() } ?: "App"
                     "Navigating ($scr)"
                 }
-                isLive -> "Navigating App"
+                isLive -> "Active in App"
                 else -> "Session Ended"
             }
 
             PostHogSessionRecord(
                 sessionId = sessionId,
                 licenseKey = licenseKey,
+                customerName = customerName,
                 deviceId = deviceId,
                 platform = platform,
                 version = version,
@@ -581,6 +598,8 @@ object AdminControlRepository {
                 searches = searches,
                 isLive = isLive,
                 hasErrors = hasErrors,
+                activePlaybackTitle = activePlaybackTitle,
+                activePlaybackProgress = activePlaybackProgress,
                 records = sortedSessionRecords.reversed(),
             )
         }.sortedWith(compareByDescending<PostHogSessionRecord> { it.isLive }.thenByDescending { parseIsoEpochMs(it.lastSeenTime) })
