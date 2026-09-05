@@ -13,21 +13,32 @@ on:
           - windows
         default: all
       version_override:
-        description: 'Optional version tag override (e.g. 1.0.0 or 1). Leave empty to use DesktopVersion.properties'
+        description: 'Optional version tag override (e.g. 1.0.6). Leave empty to use DesktopVersion.properties'
         required: false
         type: string
         default: ''
+      channel:
+        description: 'Target channel (auto, dev, release)'
+        required: true
+        type: choice
+        options:
+          - auto
+          - dev
+          - release
+        default: auto
       upload_to_r2:
         description: 'Upload release artifacts to Cloudflare R2'
         required: true
         type: boolean
         default: true
       create_github_release:
-        description: 'Publish or update GitHub Release'
+        description: 'Publish or update GitHub Release (only for release channel/tags)'
         required: true
         type: boolean
         default: true
   push:
+    branches:
+      - dev
     tags:
       - 'v*'
 
@@ -46,18 +57,13 @@ jobs:
   metadata:
     name: Resolve Version Metadata
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     outputs:
       version: ${{ steps.version_step.outputs.version }}
       clean_version: ${{ steps.version_step.outputs.clean_version }}
+      channel: ${{ steps.version_step.outputs.channel }}
+      target_dir: ${{ steps.version_step.outputs.target_dir }}
+      is_release: ${{ steps.version_step.outputs.is_release }}
     steps:
-      - name: Validate Branch
-        run: |
-          if [[ "${{ github.ref }}" == "refs/heads/dev" || "${{ github.ref_name }}" == "dev" ]]; then
-            echo "Error: Actions compilation is strictly forbidden on dev branch." >&2
-            exit 1
-          fi
-
       - name: Checkout Code
         uses: actions/checkout@v4
 
@@ -73,13 +79,28 @@ jobs:
           elif [ -f "iosApp/Configuration/Version.xcconfig" ]; then
             RAW_VERSION=$(grep "^MARKETING_VERSION" iosApp/Configuration/Version.xcconfig | cut -d'=' -f2 | tr -d ' \r\n')
           else
-            RAW_VERSION="5.4"
+            RAW_VERSION="1.0.6"
           fi
           
           CLEAN_VERSION=$(echo "${RAW_VERSION}" | tr -cd '[:alnum:]._-')
+          
+          # Determine channel: release if tagged v* or inputs.channel == 'release', else dev
+          if [[ "${{ github.ref }}" == refs/tags/v* ]] || [[ "${{ inputs.channel }}" == "release" ]]; then
+            CHANNEL="release"
+            TARGET_DIR="v${CLEAN_VERSION}"
+            IS_RELEASE="true"
+          else
+            CHANNEL="dev"
+            TARGET_DIR="dev/${CLEAN_VERSION}"
+            IS_RELEASE="false"
+          fi
+
           echo "version=${CLEAN_VERSION}" >> "$GITHUB_OUTPUT"
           echo "clean_version=${CLEAN_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Resolved version: ${CLEAN_VERSION}"
+          echo "channel=${CHANNEL}" >> "$GITHUB_OUTPUT"
+          echo "target_dir=${TARGET_DIR}" >> "$GITHUB_OUTPUT"
+          echo "is_release=${IS_RELEASE}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${CLEAN_VERSION}, channel: ${CHANNEL}, target R2 dir: ${TARGET_DIR}"
 
   # ---------------------------------------------------------------------------
   # 2. Build macOS (Apple Silicon ARM64)
@@ -256,7 +277,7 @@ jobs:
           fi
           
           R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
-          TARGET_DIR="v${VERSION}"
+          TARGET_DIR="${{ needs.metadata.outputs.target_dir }}"
           
           echo "Uploading release artifacts to Cloudflare R2: s3://${R2_BUCKET_NAME}/${TARGET_DIR}/"
           
@@ -272,9 +293,9 @@ jobs:
           
           echo "Cloudflare R2 upload completed successfully!"
 
-      # Create GitHub Release with binaries attached
+      # Create GitHub Release with binaries attached (only for release tags / release channel)
       - name: Create GitHub Release
-        if: ${{ github.event_name == 'push' || inputs.create_github_release != false }}
+        if: needs.metadata.outputs.is_release == 'true' && (github.event_name == 'push' || inputs.create_github_release != false)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "v${{ needs.metadata.outputs.version }}"

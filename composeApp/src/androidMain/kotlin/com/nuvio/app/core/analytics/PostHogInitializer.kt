@@ -36,9 +36,11 @@ object PostHogInitializer {
 
         SentrySettingsRepository.ensureLoaded()
         PostHogLogger.isEnabled = SentrySettingsRepository.enabled.value
+        PostHogTracer.isEnabled = SentrySettingsRepository.enabled.value
         scope.launch {
             SentrySettingsRepository.enabled.collect { enabled ->
                 PostHogLogger.isEnabled = enabled
+                PostHogTracer.isEnabled = enabled
             }
         }
 
@@ -58,6 +60,7 @@ object PostHogInitializer {
                     properties = mapOf("thread_name" to thread.name)
                 )
                 PostHogLogger.flush()
+                PostHogTracer.flush()
             } catch (_: Throwable) {
             } finally {
                 originalHandler?.uncaughtException(thread, throwable)

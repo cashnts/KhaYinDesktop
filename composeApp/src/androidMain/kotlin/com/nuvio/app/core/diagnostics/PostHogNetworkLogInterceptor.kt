@@ -1,23 +1,45 @@
 package com.nuvio.app.core.diagnostics
 
 import com.nuvio.app.core.analytics.PostHogAnalytics
+import com.nuvio.app.core.analytics.PostHogTracer
 import okhttp3.HttpUrl
 import okhttp3.Interceptor
 import okhttp3.Response
 import java.io.IOException
 
 /**
- * Interceptor that logs network errors (HTTP 4xx/5xx) and slow requests (> 3s)
- * directly into PostHog Logs.
+ * Interceptor that creates OpenTelemetry trace spans and logs network errors / slow requests
+ * directly into PostHog.
  */
 class PostHogNetworkLogInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
-        val request = chain.request()
+        val originalRequest = chain.request()
+        val span = PostHogTracer.startSpan(
+            name = "HTTP ${originalRequest.method}",
+            kind = PostHogTracer.SpanKind.CLIENT,
+            attributes = mapOf(
+                "http.method" to originalRequest.method,
+                "http.url" to scrubbedUrl(originalRequest.url)
+            )
+        )
+
+        val request = if (originalRequest.header("traceparent") == null) {
+            originalRequest.newBuilder()
+                .header("traceparent", "00-${span.traceId}-${span.spanId}-01")
+                .build()
+        } else {
+            originalRequest
+        }
+
         val startedAtNs = System.nanoTime()
         try {
             val response = chain.proceed(request)
             val elapsedMs = (System.nanoTime() - startedAtNs) / 1_000_000L
-            if (response.code >= 400 || elapsedMs > 3_000L) {
+            span.setAttribute("http.status_code", response.code)
+            span.setAttribute("http.duration_ms", elapsedMs)
+
+            if (response.code >= 400) {
+                span.setStatus(PostHogTracer.StatusCode.ERROR, "HTTP ${response.code}")
                 record(
                     url = request.url,
                     method = request.method,
@@ -25,20 +47,26 @@ class PostHogNetworkLogInterceptor : Interceptor {
                     elapsedMs = elapsedMs,
                     error = null
                 )
+            } else {
+                span.setStatus(PostHogTracer.StatusCode.OK)
+                if (elapsedMs > 3_000L) {
+                    record(
+                        url = request.url,
+                        method = request.method,
+                        statusCode = response.code,
+                        elapsedMs = elapsedMs,
+                        error = null
+                    )
+                }
             }
+            span.end()
             return response
-        } catch (error: IOException) {
+        } catch (error: Throwable) {
             val elapsedMs = (System.nanoTime() - startedAtNs) / 1_000_000L
-            record(
-                url = request.url,
-                method = request.method,
-                statusCode = null,
-                elapsedMs = elapsedMs,
-                error = error
-            )
-            throw error
-        } catch (error: RuntimeException) {
-            val elapsedMs = (System.nanoTime() - startedAtNs) / 1_000_000L
+            span.setAttribute("http.duration_ms", elapsedMs)
+            span.recordException(error)
+            span.end()
+
             record(
                 url = request.url,
                 method = request.method,

@@ -82,6 +82,17 @@ object PostHogAnalytics {
             brand = deviceBrand
         )
 
+        PostHogTracer.initialize(
+            service = serviceName,
+            version = version,
+            platformName = platform,
+            deviceTypeName = deviceType,
+            os = osName,
+            osVer = osVersion,
+            model = deviceModel,
+            brand = deviceBrand
+        )
+
         log.i { "Initialized PostHog for $platform ($deviceType, version=$version, distinctId=$currentDistinctId, sessionId=$currentSessionId)" }
     }
 

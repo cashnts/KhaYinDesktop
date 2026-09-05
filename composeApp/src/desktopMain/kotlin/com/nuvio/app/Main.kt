@@ -71,6 +71,7 @@ fun main(args: Array<String>) {
                 properties = mapOf("thread_name" to thread.name)
             )
             com.nuvio.app.core.analytics.PostHogLogger.flush()
+            com.nuvio.app.core.analytics.PostHogTracer.flush()
         } catch (_: Throwable) {
         } finally {
             defaultHandler?.uncaughtException(thread, throwable)
@@ -149,6 +150,7 @@ fun main(args: Array<String>) {
                 P2pStreamingEngine.shutdown()
                 DiscordPresenceManager.shutdown()
                 PostHogLogger.flush()
+                PostHogTracer.flush()
                 exitApplication()
             },
             title = if (smokePlayerUrl == null) {
