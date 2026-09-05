@@ -36,7 +36,13 @@ object PostHogAnalytics {
     fun initialize(
         platform: String = "Desktop",
         version: String = "",
-        distinctId: String? = null
+        distinctId: String? = null,
+        deviceType: String = "desktop",
+        osName: String = "Unknown",
+        osVersion: String = "Unknown",
+        deviceModel: String = "Unknown",
+        deviceBrand: String = "Unknown",
+        serviceName: String = "khayin-desktop"
     ) {
         if (isAnalyticsDisabled) {
             log.d { "Analytics disabled for Admin Client." }
@@ -48,10 +54,35 @@ object PostHogAnalytics {
             currentDistinctId = distinctId
         }
         superProperties["platform"] = platform
+        superProperties["device_type"] = deviceType
         if (version.isNotBlank()) {
             superProperties["app_version"] = version
         }
-        log.i { "Initialized PostHog for $platform (version=$version, distinctId=$currentDistinctId, sessionId=$currentSessionId)" }
+        if (osName.isNotBlank() && osName != "Unknown") {
+            superProperties["os_name"] = osName
+        }
+        if (osVersion.isNotBlank() && osVersion != "Unknown") {
+            superProperties["os_version"] = osVersion
+        }
+        if (deviceModel.isNotBlank() && deviceModel != "Unknown") {
+            superProperties["device_model"] = deviceModel
+        }
+        if (deviceBrand.isNotBlank() && deviceBrand != "Unknown") {
+            superProperties["device_brand"] = deviceBrand
+        }
+
+        PostHogLogger.initialize(
+            service = serviceName,
+            version = version,
+            platformName = platform,
+            deviceTypeName = deviceType,
+            os = osName,
+            osVer = osVersion,
+            model = deviceModel,
+            brand = deviceBrand
+        )
+
+        log.i { "Initialized PostHog for $platform ($deviceType, version=$version, distinctId=$currentDistinctId, sessionId=$currentSessionId)" }
     }
 
     fun getDistinctId(): String = currentDistinctId
@@ -83,6 +114,22 @@ object PostHogAnalytics {
         )
     }
 
+    fun d(tag: String, message: String, properties: Map<String, Any>? = null) {
+        log(level = "DEBUG", tag = tag, message = message, properties = properties)
+    }
+
+    fun i(tag: String, message: String, properties: Map<String, Any>? = null) {
+        log(level = "INFO", tag = tag, message = message, properties = properties)
+    }
+
+    fun w(tag: String, message: String, throwable: Throwable? = null, properties: Map<String, Any>? = null) {
+        log(level = "WARN", tag = tag, message = message, throwable = throwable, properties = properties)
+    }
+
+    fun e(tag: String, message: String, throwable: Throwable? = null, properties: Map<String, Any>? = null) {
+        log(level = "ERROR", tag = tag, message = message, throwable = throwable, properties = properties)
+    }
+
     fun log(
         level: String = "INFO",
         tag: String = "App",
@@ -90,48 +137,55 @@ object PostHogAnalytics {
         throwable: Throwable? = null,
         properties: Map<String, Any>? = null
     ) {
-        val logProps = buildMap<String, Any> {
-            put("\$level", level.lowercase())
-            put("\$message", message)
-            put("tag", tag)
-            if (throwable != null) {
-                put("error_message", throwable.message ?: "")
-                put("stack_trace", throwable.stackTraceToString().take(2000))
-            }
-            if (properties != null) {
-                putAll(properties)
-            }
-        }
-        capture(event = "\$log", properties = logProps)
-        if (level.equals("ERROR", ignoreCase = true) || throwable != null) {
-            capture(
-                event = "\$exception",
-                properties = buildMap {
-                    put("\$exception_message", throwable?.message ?: message)
-                    put("\$exception_type", throwable?.let { it::class.simpleName } ?: "Error")
-                    put("tag", tag)
-                    if (throwable != null) {
-                        put("\$exception_stack_trace_raw", throwable.stackTraceToString().take(4000))
-                    }
-                    if (properties != null) {
-                        putAll(properties)
-                    }
+        // Forward to PostHog Logs (OTLP)
+        PostHogLogger.log(
+            level = level,
+            tag = tag,
+            message = message,
+            throwable = throwable,
+            attributes = properties
+        )
+
+        // If error/fatal, also report into PostHog Error Tracking ($exception)
+        if (level.equals("ERROR", ignoreCase = true) || level.equals("FATAL", ignoreCase = true) || throwable != null) {
+            val exProps = buildMap<String, Any> {
+                put("\$exception_message", throwable?.message ?: message)
+                put("\$exception_type", throwable?.let { it::class.simpleName } ?: "ApplicationError")
+                put("tag", tag)
+                put("\$exception_handled", !level.equals("FATAL", ignoreCase = true))
+                if (throwable != null) {
+                    put("\$exception_stack_trace_raw", throwable.stackTraceToString().take(6000))
                 }
-            )
+                if (properties != null) {
+                    putAll(properties)
+                }
+            }
+            capture(event = "\$exception", properties = exProps)
         }
     }
 
     fun captureException(
         throwable: Throwable,
         tag: String = "Error",
+        isUnhandled: Boolean = false,
         properties: Map<String, Any>? = null
     ) {
-        log(
-            level = "ERROR",
+        val exProps = buildMap<String, Any> {
+            put("tag", tag)
+            put("\$exception_type", throwable::class.simpleName ?: "Exception")
+            put("\$exception_message", throwable.message ?: (throwable::class.simpleName ?: "Exception"))
+            put("\$exception_stack_trace_raw", throwable.stackTraceToString().take(8000))
+            put("\$exception_handled", !isUnhandled)
+            if (properties != null) putAll(properties)
+        }
+        capture(event = "\$exception", properties = exProps)
+
+        PostHogLogger.log(
+            level = if (isUnhandled) "FATAL" else "ERROR",
             tag = tag,
-            message = throwable.message ?: "Exception occurred",
+            message = "${throwable::class.simpleName}: ${throwable.message}",
             throwable = throwable,
-            properties = properties
+            attributes = properties
         )
     }
 
@@ -267,6 +321,12 @@ object PostHogAnalytics {
                 if (sourceUrl != null) put("source_url", sourceUrl.take(300))
             }
         )
+        log(
+            level = "ERROR",
+            tag = "Player",
+            message = "Playback failed for '$mediaTitle': $errorMessage",
+            properties = mapOf("video_id" to (videoId ?: ""), "source_url" to (sourceUrl ?: ""))
+        )
     }
 
     fun trackStreamFetchStarted(
@@ -391,6 +451,37 @@ object PostHogAnalytics {
                 "profile_name" to profileName,
                 "is_kid" to isKid
             )
+        )
+    }
+
+    fun trackSubtitleError(
+        errorType: String,
+        errorMessage: String,
+        subtitleId: String? = null,
+        subtitleUrl: String? = null,
+        language: String? = null,
+        addonName: String? = null,
+        mimeType: String? = null,
+        throwable: Throwable? = null,
+        extra: Map<String, Any>? = null,
+    ) {
+        val props = buildMap<String, Any> {
+            put("error_type", errorType)
+            put("error_message", errorMessage)
+            if (subtitleId != null) put("subtitle_id", subtitleId)
+            if (subtitleUrl != null) put("subtitle_url", subtitleUrl.take(300))
+            if (language != null) put("language", language)
+            if (addonName != null) put("addon_name", addonName)
+            if (mimeType != null) put("mime_type", mimeType)
+            if (extra != null) putAll(extra)
+        }
+        capture(event = "subtitle_error", properties = props)
+        log(
+            level = "ERROR",
+            tag = "Subtitle",
+            message = "Subtitle error [$errorType]: $errorMessage (lang=$language, addon=$addonName, id=$subtitleId)",
+            throwable = throwable,
+            properties = props
         )
     }
 

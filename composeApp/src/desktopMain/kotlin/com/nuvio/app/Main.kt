@@ -17,7 +17,6 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.deeplink.handleAppUrl
-import com.nuvio.app.core.diagnostics.SentryInitializer
 import com.nuvio.app.features.discordrpc.DiscordPresenceManager
 import com.nuvio.app.features.p2p.P2pStreamingEngine
 import com.nuvio.app.features.plugins.configureDesktopQuickJsLibrary
@@ -44,13 +43,40 @@ private const val MacosDarkAquaAppearance = "NSAppearanceNameDarkAqua"
 
 fun main(args: Array<String>) {
     applyDesktopRendererPreference()
-    SentryInitializer.start()
     val lastKnownLicense = com.nuvio.app.features.license.LicenseStorage.loadLastKnownKey()?.takeIf { it.isNotBlank() }
+    val osName = System.getProperty("os.name") ?: "Desktop"
+    val osVersion = System.getProperty("os.version") ?: "unknown"
+    val osArch = System.getProperty("os.arch") ?: "unknown"
+    val hostOsName = com.nuvio.app.features.player.desktop.DesktopHostOs.current.name
+
     com.nuvio.app.core.analytics.PostHogAnalytics.initialize(
-        platform = "Desktop-${com.nuvio.app.features.player.desktop.DesktopHostOs.current.name}",
+        platform = "Desktop-$hostOsName",
         version = com.nuvio.app.core.build.AppVersionConfig.VERSION_NAME,
-        distinctId = lastKnownLicense
+        distinctId = lastKnownLicense,
+        deviceType = "desktop",
+        osName = osName,
+        osVersion = osVersion,
+        deviceModel = hostOsName,
+        deviceBrand = osArch,
+        serviceName = "khayin-desktop"
     )
+
+    val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+    Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+        try {
+            com.nuvio.app.core.analytics.PostHogAnalytics.captureException(
+                throwable = throwable,
+                tag = "UncaughtCrash",
+                isUnhandled = true,
+                properties = mapOf("thread_name" to thread.name)
+            )
+            com.nuvio.app.core.analytics.PostHogLogger.flush()
+        } catch (_: Throwable) {
+        } finally {
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
+    }
+
     com.nuvio.app.core.analytics.PostHogAnalytics.capture("app_launched")
     configureDesktopQuickJsLibrary()
     configureDesktopChrome()
@@ -122,7 +148,7 @@ fun main(args: Array<String>) {
             onCloseRequest = {
                 P2pStreamingEngine.shutdown()
                 DiscordPresenceManager.shutdown()
-                SentryInitializer.close()
+                PostHogLogger.flush()
                 exitApplication()
             },
             title = if (smokePlayerUrl == null) {

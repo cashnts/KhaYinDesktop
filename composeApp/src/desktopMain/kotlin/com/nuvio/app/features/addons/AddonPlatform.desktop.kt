@@ -55,6 +55,8 @@ internal actual object AddonStorage {
     }
 }
 
+import com.nuvio.app.core.diagnostics.PostHogNetworkLogInterceptor
+
 private val desktopHttpClient = OkHttpClient.Builder()
     .dns(DesktopIPv4FirstDns())
     .connectTimeout(60, TimeUnit.SECONDS)
@@ -62,6 +64,7 @@ private val desktopHttpClient = OkHttpClient.Builder()
     .writeTimeout(60, TimeUnit.SECONDS)
     .followRedirects(true)
     .followSslRedirects(true)
+    .addInterceptor(PostHogNetworkLogInterceptor())
     .build()
 
 private const val truncationSuffix = "\n...[truncated]"

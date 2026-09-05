@@ -1,8 +1,7 @@
 package com.nuvio.app.features.addons
 
 import android.content.Context
-import android.content.SharedPreferences
-import com.nuvio.app.core.diagnostics.SentryNetworkBreadcrumbInterceptor
+import com.nuvio.app.core.diagnostics.PostHogNetworkLogInterceptor
 import com.nuvio.app.core.network.IPv4FirstDns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -105,7 +104,7 @@ private fun buildAddonHttpClient(cache: Cache? = null): OkHttpClient =
         .writeTimeout(60, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
-        .addInterceptor(SentryNetworkBreadcrumbInterceptor())
+        .addInterceptor(PostHogNetworkLogInterceptor())
         .proxy(Proxy.NO_PROXY)
         .apply {
             if (cache != null) {

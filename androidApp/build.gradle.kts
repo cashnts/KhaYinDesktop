@@ -16,7 +16,6 @@ fun readXcconfigValue(file: File, key: String): String? {
 
 plugins {
     alias(libs.plugins.androidApplication)
-    alias(libs.plugins.sentry.android.gradle)
 }
 
 val localProps = Properties().apply {
@@ -45,10 +44,6 @@ val hasReleaseSigning = releaseKeystore != null && releaseKeystore.isFile &&
     !releaseKeyAlias.isNullOrBlank() &&
     !releaseKeyPassword.isNullOrBlank()
 
-val sentryAuthToken = envOrLocalProperty("SENTRY_AUTH_TOKEN")
-val sentryOrg = envOrLocalProperty("SENTRY_ORG")
-val sentryProject = envOrLocalProperty("SENTRY_PROJECT")
-val sentryMappingUploadEnabled = sentryAuthToken != null && sentryOrg != null && sentryProject != null
 val appVersionConfigFile = rootProject.file("iosApp/Configuration/Version.xcconfig")
 val releaseAppVersionName = readXcconfigValue(appVersionConfigFile, "MARKETING_VERSION")
     ?: error("MARKETING_VERSION is missing from ${appVersionConfigFile.path}")
@@ -159,28 +154,6 @@ android {
 androidComponents {
     onVariants(selector().withBuildType("debug")) { variant ->
         variant.applicationId.set("dev.khayin.app.debug")
-    }
-}
-
-sentry {
-    includeProguardMapping.set(true)
-    autoUploadProguardMapping.set(sentryMappingUploadEnabled)
-    uploadNativeSymbols.set(false)
-    autoUploadNativeSymbols.set(false)
-    includeNativeSources.set(false)
-    includeSourceContext.set(false)
-    autoUploadSourceContext.set(false)
-    includeDependenciesReport.set(false)
-    telemetry.set(false)
-    sentryAuthToken?.let(authToken::set)
-    sentryOrg?.let(org::set)
-    sentryProject?.let(projectName::set)
-    ignoredBuildTypes.set(setOf("debug"))
-    autoInstallation {
-        enabled.set(false)
-    }
-    tracingInstrumentation {
-        enabled.set(false)
     }
 }
 

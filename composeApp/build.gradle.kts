@@ -57,15 +57,6 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
     abstract val supabaseFallbackUrl: Property<String>
 
     @get:Input
-    abstract val sentryDsn: Property<String>
-
-    @get:Input
-    abstract val sentryDesktopDsn: Property<String>
-
-    @get:Input
-    abstract val sentryEnvironment: Property<String>
-
-    @get:Input
     abstract val clientRole: Property<String>
 
     @TaskAction
@@ -89,20 +80,8 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
             )
         }
 
-        outDir.resolve("com/nuvio/app/core/diagnostics").apply {
-            mkdirs()
-            resolve("SentryConfig.kt").writeText(
-                """
-                |package com.nuvio.app.core.diagnostics
-                |
-                |object SentryConfig {
-                |    const val DSN = "${sentryDsn.get()}"
-                |    const val DESKTOP_DSN = "${sentryDesktopDsn.get()}"
-                |    const val ENVIRONMENT = "${sentryEnvironment.get()}"
-                |}
-                """.trimMargin()
-            )
-        }
+        outDir.resolve("com/nuvio/app/core/diagnostics/SentryConfig.kt").delete()
+        outDir.resolve("com/nuvio/app/core/diagnostics/PostHogConfig.kt").delete()
 
         outDir.resolve("com/nuvio/app/features/tmdb/TmdbConfig.kt").delete()
 
@@ -550,7 +529,6 @@ val fullCommonSourceDir = project.file("src/fullCommonMain/kotlin")
 val fullPluginSourceDir = fullCommonSourceDir.resolve("com/nuvio/app/features/plugins")
 val fullTrailerSourceDir = fullCommonSourceDir.resolve("com/nuvio/app/features/trailer")
 val generatedRuntimeConfigDir = layout.buildDirectory.dir("generated/runtime-config/kotlin")
-val desktopSentryResourceDir = rootProject.layout.projectDirectory.dir("desktopSentry/build/generated/sentry")
 val requestedGradleTasks = gradle.startParameter.taskNames.map { taskName ->
     taskName.substringAfterLast(':').lowercase()
 }
@@ -619,16 +597,7 @@ val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generat
     supabaseUrl.set(runtimeConfigValue("NUVIO_SUPABASE_URL", "https://api.stream.khayin.net"))
     supabaseAnonKey.set(runtimeConfigValue("NUVIO_SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg3MjIwNTM2LCJleHAiOjE5NDQ5MDA1MzZ9.BpzwMmPVhF3RjDBMgnsKXRqn-3TI-c3QGeRB6-4vs6M"))
     supabaseFallbackUrl.set(runtimeConfigValue("NUVIO_SUPABASE_FALLBACK_URL", "https://api.stream.khayin.net"))
-    sentryDsn.set(runtimeConfigValue("SENTRY_DSN", "https://03b275d4c26ccf95402bcd0a9a9f9b7f@o4511970100641792.ingest.us.sentry.io/4511970104705024"))
-    sentryDesktopDsn.set(runtimeConfigValue("SENTRY_DESKTOP_DSN", "https://03b275d4c26ccf95402bcd0a9a9f9b7f@o4511970100641792.ingest.us.sentry.io/4511970104705024"))
     clientRole.set(runtimeConfigValue("NUVIO_CLIENT_ROLE", (findProperty("nuvio.client.role") as? String) ?: "user"))
-    sentryEnvironment.set(
-        when {
-            requestedGradleTasks.any { "benchmark" in it } -> "benchmark"
-            requestedGradleTasks.any { "debug" in it } -> "debug"
-            else -> "production"
-        }
-    )
 }
 
 val isMacHost = System.getProperty("os.name").contains("mac", ignoreCase = true)
@@ -1160,7 +1129,6 @@ kotlin {
                 implementation("com.google.code.gson:gson:2.11.0")
                 implementation("io.github.peerless2012:ass-media:0.4.0-beta01")
                 implementation(libs.ktor.client.okhttp)
-                implementation(libs.sentry.android)
                 implementation(libs.androidx.media3.exoplayer.hls)
                 implementation(libs.androidx.media3.exoplayer.dash)
                 implementation(libs.androidx.media3.exoplayer.smoothstreaming)
@@ -1193,7 +1161,6 @@ kotlin {
                     "src/nonWindowsDesktopMain/kotlin"
                 },
             )
-            resources.srcDir(desktopSentryResourceDir)
             dependencies {
                 implementation(compose.desktop.currentOs)
                 if (!isWindowsHost) {
@@ -1204,7 +1171,6 @@ kotlin {
                 implementation("com.squareup.okhttp3:okhttp:4.12.0")
                 implementation(libs.quickjs.kt)
                 implementation(libs.ksoup)
-                implementation(libs.sentry.jvm)
                 implementation(libs.kmp.app.updater.core)
                 implementation(libs.kmp.app.updater.compose.ui)
             }
@@ -1252,12 +1218,6 @@ kotlin {
             implementation(libs.kotlin.test)
         }
     }
-}
-
-tasks.matching {
-    it.name == "desktopProcessResources" || it.name == "processDesktopMainResources"
-}.configureEach {
-    dependsOn(":desktopSentry:generateSentryDebugMetaPropertiesjava")
 }
 
 compose.desktop {
