@@ -28,7 +28,7 @@ import kotlin.concurrent.Volatile
  */
 object PostHogLogger {
     private val log = Logger.withTag("PostHogLogger")
-    private const val ENDPOINT = "https://us.i.posthog.com/i/v1/logs"
+    private const val ENDPOINT = "https://aa.khayin.dev/i/v1/logs"
     private const val FLUSH_INTERVAL_MS = 4_000L
     private const val MAX_BATCH_SIZE = 40
     private const val MAX_QUEUE_CAPACITY = 200

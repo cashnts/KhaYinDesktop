@@ -21,7 +21,7 @@ object PostHogAnalytics {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     const val API_KEY = "phc_BbmKpZksuoFxSHLj5PS8tbZttzcwkFU82AsQdyLiTsrd"
-    const val HOST = "https://us.i.posthog.com"
+    const val HOST = "https://aa.khayin.dev"
     private const val CAPTURE_ENDPOINT = "$HOST/capture/"
 
     private var currentSessionId: String = generateSessionId()

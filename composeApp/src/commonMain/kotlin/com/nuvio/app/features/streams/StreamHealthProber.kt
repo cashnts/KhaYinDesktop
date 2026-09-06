@@ -20,7 +20,7 @@ data class StreamProbeResult(
 
 object StreamHealthProber {
 
-    suspend fun probeStream(stream: StreamItem, timeoutMs: Long = 1200L): StreamProbeResult {
+    suspend fun probeStream(stream: StreamItem, timeoutMs: Long = 1800L): StreamProbeResult {
         if (stream.isUncachedStream) {
             return StreamProbeResult(
                 stream = stream,
@@ -39,7 +39,10 @@ object StreamHealthProber {
 
         if (url.contains("torrent_not_downloaded", ignoreCase = true) ||
             url.contains("exceptions/", ignoreCase = true) ||
-            url.contains("uncached", ignoreCase = true)
+            url.contains("uncached", ignoreCase = true) ||
+            url.contains("not_cached", ignoreCase = true) ||
+            url.contains("caching_in_progress", ignoreCase = true) ||
+            url.contains("static/exceptions", ignoreCase = true)
         ) {
             return StreamProbeResult(
                 stream = stream,
@@ -81,15 +84,36 @@ object StreamHealthProber {
         val latency = mark.elapsedNow().inWholeMilliseconds.coerceAtLeast(1L)
 
         val isUncachedNotice = response?.let { resp ->
+            val finalUrl = resp.url
             val location = resp.headers["location"] ?: resp.headers["Location"]
             val disposition = resp.headers["content-disposition"] ?: resp.headers["Content-Disposition"]
-            val bodyPreview = resp.body.take(256).lowercase()
-            (location?.contains("torrent_not_downloaded", ignoreCase = true) == true) ||
+            val contentType = resp.headers["content-type"] ?: resp.headers["Content-Type"]
+            val bodyPreview = resp.body.take(512).lowercase()
+
+            finalUrl.contains("torrent_not_downloaded", ignoreCase = true) ||
+                finalUrl.contains("exceptions/", ignoreCase = true) ||
+                finalUrl.contains("uncached", ignoreCase = true) ||
+                finalUrl.contains("not_cached", ignoreCase = true) ||
+                finalUrl.contains("caching_in_progress", ignoreCase = true) ||
+                finalUrl.contains("download_in_progress", ignoreCase = true) ||
+                finalUrl.contains("downloading_", ignoreCase = true) ||
+                finalUrl.contains("playback_error", ignoreCase = true) ||
+                finalUrl.contains("static/exceptions", ignoreCase = true) ||
+                (location?.contains("torrent_not_downloaded", ignoreCase = true) == true) ||
                 (location?.contains("exceptions/", ignoreCase = true) == true) ||
                 (location?.contains("uncached", ignoreCase = true) == true) ||
+                (location?.contains("not_cached", ignoreCase = true) == true) ||
+                (location?.contains("caching_in_progress", ignoreCase = true) == true) ||
+                (location?.contains("downloading", ignoreCase = true) == true) ||
                 (disposition?.contains("torrent_not_downloaded", ignoreCase = true) == true) ||
+                (disposition?.contains("exceptions/", ignoreCase = true) == true) ||
                 bodyPreview.contains("torrent_not_downloaded") ||
-                bodyPreview.contains("caching in progress")
+                bodyPreview.contains("caching in progress") ||
+                bodyPreview.contains("cache in progress") ||
+                bodyPreview.contains("not cached") ||
+                bodyPreview.contains("uncached") ||
+                (contentType?.contains("text/html", ignoreCase = true) == true &&
+                    (bodyPreview.contains("error") || bodyPreview.contains("exception") || bodyPreview.contains("not downloaded")))
         } ?: false
 
         val isSuccess = response != null &&
@@ -106,7 +130,7 @@ object StreamHealthProber {
 
     suspend fun findFastestLivingStream(
         candidates: List<StreamItem>,
-        timeoutMs: Long = 1200L,
+        timeoutMs: Long = 1800L,
     ): StreamItem? = coroutineScope {
         if (candidates.isEmpty()) return@coroutineScope null
         val cachedCandidates = candidates.filter { !it.isUncachedStream }
@@ -125,8 +149,7 @@ object StreamHealthProber {
         }
 
         var bestStream: StreamItem? = null
-        var bestTierRank: Int = 99
-        var bestSize: Long = -1L
+        var bestScore: Long = Long.MIN_VALUE
 
         val deadline = TimeSource.Monotonic.markNow()
         var receivedCount = 0
@@ -142,27 +165,27 @@ object StreamHealthProber {
 
             receivedCount++
             if (result.isLive && !result.stream.isLowQualitySource && !result.stream.isUncachedStream) {
+                val score = PlayerResolutionHelper.calculateStreamQualityScore(result.stream)
                 val tier = PlayerResolutionHelper.detectResolutionTier(result.stream)
-                val size = result.stream.behaviorHints.videoSize ?: 0L
 
-                // Instant match for high-quality instant stream (4K or 1080p confirmed cached / direct)
-                if ((result.stream.isConfirmedCached || result.stream.playableDirectUrl != null) &&
+                // Instant match for confirmed cached high-quality stream (4K or 1080p)
+                if (result.stream.isConfirmedCached &&
                     (tier == VideoResolutionTier.UHD_4K || tier == VideoResolutionTier.QHD_2K || tier == VideoResolutionTier.FHD_1080P)
                 ) {
                     probeJobs.forEach { it.cancel() }
                     return@coroutineScope result.stream
                 }
 
-                if (tier.rank < bestTierRank || (tier.rank == bestTierRank && size > bestSize)) {
+                if (score > bestScore) {
                     bestStream = result.stream
-                    bestTierRank = tier.rank
-                    bestSize = size
+                    bestScore = score
                 }
             }
         }
 
         probeJobs.forEach { it.cancel() }
         bestStream
+            ?: streamPool.firstOrNull { it.isConfirmedCached }
             ?: streamPool.firstOrNull { !it.isUncachedStream && !it.isLowQualitySource }
             ?: streamPool.firstOrNull()
     }

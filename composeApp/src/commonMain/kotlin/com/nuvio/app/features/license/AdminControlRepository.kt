@@ -362,7 +362,7 @@ object AdminControlRepository {
         val key = apiKey?.trim()?.takeIf { it.isNotBlank() } ?: getEffectivePostHogApiKey()
         if (key.isBlank()) return@runCatching emptyList()
 
-        val postHogQueryUrl = "https://us.i.posthog.com/api/projects/583868/query/"
+        val postHogQueryUrl = "https://aa.khayin.dev/api/projects/583868/query/"
         val hogQlQuery = "SELECT event, distinct_id, timestamp, properties, person.properties FROM events ORDER BY timestamp DESC LIMIT $limit"
         val queryBody = json.encodeToString(
             mapOf(
@@ -415,7 +415,7 @@ object AdminControlRepository {
 
         // Fallback to legacy endpoint if query returned empty or failed
         if (records.isEmpty()) {
-            val fallbackUrl = "https://us.i.posthog.com/api/projects/583868/events/?limit=$limit&orderBy=%5B%22-timestamp%22%5D"
+            val fallbackUrl = "https://aa.khayin.dev/api/projects/583868/events/?limit=$limit&orderBy=%5B%22-timestamp%22%5D"
             val fallbackResp = httpRequestRaw(
                 method = "GET",
                 url = fallbackUrl,

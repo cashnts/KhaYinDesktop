@@ -296,7 +296,10 @@ object StreamsRepository {
                         val anyLoading = _uiState.value.isAnyLoading
 
                         if (directCandidates.isNotEmpty() || !anyLoading) {
-                            val candidatePool = if (directCandidates.isNotEmpty()) {
+                            val confirmedCached = directCandidates.filter { it.isConfirmedCached || it.isDirectDebridStream || it.isCachedDebridTorrentStream }
+                            val candidatePool = if (confirmedCached.isNotEmpty()) {
+                                confirmedCached
+                            } else if (directCandidates.isNotEmpty()) {
                                 directCandidates
                             } else {
                                 val cachedOrGood = evaluation.readyStreams.filter { !it.isUncachedStream && !it.isLowQualitySource }
@@ -304,7 +307,9 @@ object StreamsRepository {
                             }
                             autoSelectTriggered = true
                             launch {
-                                val fastestStream = StreamHealthProber.findFastestLivingStream(candidatePool, timeoutMs = 600L)
+                                val fastestStream = StreamHealthProber.findFastestLivingStream(candidatePool, timeoutMs = 1500L)
+                                    ?: candidatePool.firstOrNull { it.isConfirmedCached }
+                                    ?: candidatePool.firstOrNull { !it.isUncachedStream }
                                     ?: candidatePool.firstOrNull()
                                 if (fastestStream != null) {
                                     _uiState.update {
