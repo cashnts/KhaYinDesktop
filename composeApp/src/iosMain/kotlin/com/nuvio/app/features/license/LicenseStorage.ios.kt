@@ -39,4 +39,18 @@ actual object LicenseStorage {
     actual fun saveDismissedBroadcastTimestamp(timestamp: Long) {
         NSUserDefaults.standardUserDefaults.setObject(timestamp.toString(), forKey = dismissedBroadcastKey)
     }
+
+    actual fun isFreeMode(): Boolean =
+        NSUserDefaults.standardUserDefaults.boolForKey("is_free_mode")
+
+    actual fun saveFreeMode(isFree: Boolean) {
+        NSUserDefaults.standardUserDefaults.setBool(isFree, forKey = "is_free_mode")
+    }
+
+    actual fun loadMmsubQuotaData(): String? =
+        NSUserDefaults.standardUserDefaults.stringForKey("mmsub_quota_data")
+
+    actual fun saveMmsubQuotaData(data: String) {
+        NSUserDefaults.standardUserDefaults.setObject(data, forKey = "mmsub_quota_data")
+    }
 }

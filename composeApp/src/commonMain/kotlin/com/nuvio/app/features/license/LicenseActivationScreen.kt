@@ -27,6 +27,7 @@ import androidx.compose.material.icons.rounded.AdminPanelSettings
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -64,6 +65,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun LicenseActivationScreen(
     onActivated: (LicenseInfo) -> Unit,
+    onContinueForFree: () -> Unit = {},
     onOpenAdminPanel: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -321,6 +323,42 @@ fun LicenseActivationScreen(
                                 style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp),
                             )
                         }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Button(
+                    onClick = {
+                        focusManager.clearFocus()
+                        LicenseRepository.continueForFree()
+                        onContinueForFree()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White.copy(alpha = 0.08f),
+                        contentColor = Color.White,
+                    ),
+                    enabled = !isSubmitting,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = Color(0xFF00E699),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Continue for Free (with Ads)",
+                            style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp),
+                        )
                     }
                 }
             }

@@ -54,12 +54,14 @@ object SubtitleRepository {
             val addons = AddonRepository.uiState.value.addons.enabledAddons()
             val allSubs = mutableListOf<AddonSubtitle>()
             val isPlus = com.nuvio.app.features.license.LicenseRepository.isPlusMember
+            val isLicensed = com.nuvio.app.features.license.LicenseRepository.isLicensed
+            val canAccessMmsub = isPlus || (!isLicensed && com.nuvio.app.features.license.MyanmarSubLimiter.canAccessMyanmarSub(videoId))
 
             for (addon in addons) {
                 val manifest = addon.manifest ?: continue
                 val isKhayinSource = manifest.transportUrl.contains("stream.khayin.net", ignoreCase = true) ||
                     addon.manifest?.transportUrl?.contains("stream.khayin.net", ignoreCase = true) == true
-                if (isKhayinSource && !isPlus) {
+                if (isKhayinSource && !canAccessMmsub) {
                     continue
                 }
 
@@ -85,7 +87,7 @@ object SubtitleRepository {
                         val id = obj.stringValue("id")
                             ?: "${manifest.id}_${allSubs.size}"
                         val url = obj.stringValue("url") ?: continue
-                        if (url.contains("stream.khayin.net", ignoreCase = true) && !isPlus) {
+                        if (url.contains("stream.khayin.net", ignoreCase = true) && !canAccessMmsub) {
                             continue
                         }
                         val rawLang = obj.subtitleLanguage() ?: "unknown"
@@ -102,7 +104,7 @@ object SubtitleRepository {
                             ),
                             addonName = addon.displayTitle,
                         )
-                        if (isAllowedAddonSubtitle(sub, isPlus)) {
+                        if (isAllowedAddonSubtitle(sub, isPlus, videoId)) {
                             allSubs.add(sub)
                         }
                     }

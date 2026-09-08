@@ -41,7 +41,7 @@ object LicenseRepository {
                     LicenseState.Active(cached.copy(status = "active"))
                 }
             } else null
-        } ?: LicenseState.Loading
+        } ?: if (LicenseStorage.isFreeMode()) LicenseState.Free else LicenseState.Loading
     )
     val state: StateFlow<LicenseState> = _state.asStateFlow()
 
@@ -54,6 +54,15 @@ object LicenseRepository {
             val current = (_state.value as? LicenseState.Active)?.info
             return current?.isPlus == true
         }
+
+    val isLicensed: Boolean
+        get() = _state.value is LicenseState.Active
+
+    val isFreeUser: Boolean
+        get() = _state.value !is LicenseState.Active
+
+    val hasAdFreeAccess: Boolean
+        get() = isLicensed
 
     private var initialized = false
     private var verifyJob: Job? = null
@@ -111,11 +120,19 @@ object LicenseRepository {
                     "device_id" to getOrCreateDeviceId()
                 ))
             }
+        } else if (LicenseStorage.isFreeMode()) {
+            _state.value = LicenseState.Free
         } else {
             _state.value = LicenseState.Unlicensed
         }
 
         startHeartbeat()
+    }
+
+    fun continueForFree() {
+        LicenseStorage.saveFreeMode(true)
+        _state.value = LicenseState.Free
+        _error.value = null
     }
 
     fun startHeartbeat() {
@@ -314,6 +331,7 @@ object LicenseRepository {
 
             saveSecureLicensePayload(info)
             LicenseStorage.saveLastKnownKey(info.key)
+            LicenseStorage.saveFreeMode(false)
             syncSupabaseIdentity(info.key)
             _state.value = LicenseState.Active(info)
             com.nuvio.app.features.profiles.ProfileRepository.restoreFromLicenseInfo(info, info.key)
@@ -520,6 +538,7 @@ object LicenseRepository {
         heartbeatJob?.cancel()
         heartbeatJob = null
         LicenseStorage.clearLicensePayload()
+        LicenseStorage.saveFreeMode(false)
         AuthStorage.clearAnonymousUserId()
         LocalAccountDataCleaner.wipe()
         _state.value = LicenseState.Unlicensed

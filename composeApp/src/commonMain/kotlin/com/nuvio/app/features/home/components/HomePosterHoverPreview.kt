@@ -32,7 +32,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CheckCircleOutline
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -553,7 +553,7 @@ private fun HomePosterPreviewCard(
                         icon = if (isWatched) {
                             Icons.Default.CheckCircle
                         } else {
-                            Icons.Default.CheckCircleOutline
+                            Icons.Outlined.CheckCircle
                         },
                         active = isWatched,
                         progress = 1f,

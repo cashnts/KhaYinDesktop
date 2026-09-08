@@ -10,4 +10,8 @@ internal expect object LicenseStorage {
     fun saveDeviceId(deviceId: String)
     fun loadDismissedBroadcastTimestamp(): Long
     fun saveDismissedBroadcastTimestamp(timestamp: Long)
+    fun isFreeMode(): Boolean
+    fun saveFreeMode(isFree: Boolean)
+    fun loadMmsubQuotaData(): String?
+    fun saveMmsubQuotaData(data: String)
 }

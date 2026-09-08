@@ -537,6 +537,7 @@ object WatchProgressRepository {
         profileId: Int,
         operationGeneration: Long,
     ) {
+        if (com.nuvio.app.features.license.LicenseRepository.isFreeUser) return
         if (!isActiveOperation(profileId, operationGeneration)) return
         log.d {
             "Watch progress delta sync start: profile=$profileId entries=${localEntryCount()} " +
@@ -666,6 +667,7 @@ object WatchProgressRepository {
         operationGeneration: Long,
         preserveLocalEntries: Boolean = true,
     ) {
+        if (com.nuvio.app.features.license.LicenseRepository.isFreeUser) return
         val serverEntries = syncAdapter.pull(profileId = profileId)
         if (!isActiveOperation(profileId, operationGeneration)) return
         log.d {
@@ -1310,6 +1312,7 @@ object WatchProgressRepository {
     }
 
     private fun pushScrobbleToServer(entry: WatchProgressEntry, profileId: Int) {
+        if (com.nuvio.app.features.license.LicenseRepository.isFreeUser) return
         val operationGeneration = profileGeneration.takeIf { profileId == currentProfileId }
         accountScopeSnapshot().launch {
             runCatching {
@@ -1326,6 +1329,7 @@ object WatchProgressRepository {
     }
 
     private fun pushDeleteToServer(entries: Collection<WatchProgressEntry>) {
+        if (com.nuvio.app.features.license.LicenseRepository.isFreeUser) return
         if (activeSource.providerId != null) return
         val profileId = currentProfileId
         accountScopeSnapshot().launch {

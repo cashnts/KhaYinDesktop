@@ -2113,6 +2113,7 @@ const renderChrome = () => {
   const showError = renderPlaybackError();
   root.classList.toggle("chrome-hidden", Boolean(showError || !state.controlsVisible));
   root.classList.toggle("source-visible", Boolean(!showError && !isPlaying && !state.isLoading && (state.streamTitle || state.providerName)));
+  root.classList.toggle("preroll-active", Boolean(state.isPrerollActive));
   syncHiddenCursor();
   const showOpening = renderOpeningOverlay(showError);
   renderPauseMetadataOverlay(showOpening || showError);
@@ -2709,6 +2710,7 @@ nextEpisodeCard.addEventListener("click", event => {
 });
 
 seek.addEventListener("input", () => {
+  if (state.isPrerollActive) return;
   noteChromeActivity();
   isScrubbing = true;
   scrubPositionMs = rangePositionMs();
@@ -2717,6 +2719,7 @@ seek.addEventListener("input", () => {
 });
 
 seek.addEventListener("change", () => {
+  if (state.isPrerollActive) return;
   noteChromeActivity();
   scrubPositionMs = rangePositionMs();
   isScrubbing = false;

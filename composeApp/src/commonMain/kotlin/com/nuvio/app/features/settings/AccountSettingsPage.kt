@@ -267,16 +267,24 @@ private fun SubscriptionSettingsBody(
                     }
                 }
             } else {
+                AccountInfoRow(
+                    label = stringResource(Res.string.settings_subscription_package_tier),
+                    value = "Free Tier (Guest)",
+                    valueColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = stringResource(Res.string.settings_subscription_no_license),
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
 
+        val isLicensed = licenseInfo != null && licenseInfo.status.equals("active", ignoreCase = true)
         SubscriptionPlansCard(
-            isPlusActive = licenseInfo?.isPlus == true,
+            isLicensed = isLicensed,
+            isPlusActive = isLicensed && licenseInfo?.isPlus == true,
             isTablet = isTablet,
         )
 
@@ -492,12 +500,16 @@ private fun AccountInfoRow(
 
 @Composable
 private fun SubscriptionPlansCard(
+    isLicensed: Boolean,
     isPlusActive: Boolean,
     isTablet: Boolean,
 ) {
     val standardTitle = stringResource(Res.string.settings_subscription_plan_standard)
     val plusTitle = stringResource(Res.string.settings_subscription_plan_plus)
     val recommendedBadge = stringResource(Res.string.settings_subscription_recommended_badge)
+
+    val isStandardActive = isLicensed && !isPlusActive
+    val isPlusPlanActive = isLicensed && isPlusActive
 
     val standardFeatures = listOf(
         stringResource(Res.string.settings_subscription_feature_en_zh_subs) to true,
@@ -541,7 +553,7 @@ private fun SubscriptionPlansCard(
             ) {
                 PlanTierCard(
                     title = standardTitle,
-                    isCurrentPlan = !isPlusActive,
+                    isCurrentPlan = isStandardActive,
                     accentColor = Color(0xFF9E9EA7),
                     modifier = Modifier
                         .weight(1f)
@@ -550,7 +562,7 @@ private fun SubscriptionPlansCard(
                 )
                 PlanTierCard(
                     title = plusTitle,
-                    isCurrentPlan = isPlusActive,
+                    isCurrentPlan = isPlusPlanActive,
                     accentColor = MaterialTheme.colorScheme.primary,
                     highlightBadge = recommendedBadge,
                     modifier = Modifier
@@ -563,13 +575,13 @@ private fun SubscriptionPlansCard(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 PlanTierCard(
                     title = standardTitle,
-                    isCurrentPlan = !isPlusActive,
+                    isCurrentPlan = isStandardActive,
                     accentColor = Color(0xFF9E9EA7),
                     features = standardFeatures,
                 )
                 PlanTierCard(
                     title = plusTitle,
-                    isCurrentPlan = isPlusActive,
+                    isCurrentPlan = isPlusPlanActive,
                     accentColor = MaterialTheme.colorScheme.primary,
                     highlightBadge = recommendedBadge,
                     features = plusFeatures,

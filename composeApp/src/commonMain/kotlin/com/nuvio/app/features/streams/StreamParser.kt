@@ -33,9 +33,30 @@ object StreamParser {
             if (url == null && infoHash == null && externalUrl == null && clientResolve == null) return@mapNotNull null
 
             val hintsObj = obj["behaviorHints"] as? JsonObject
+            val prerollObj = obj["preroll"] as? JsonObject
             val proxyHeaders = hintsObj
                 ?.objectValue("proxyHeaders")
                 ?.toProxyHeaders()
+            val prerollUrl = obj.string("prerollUrl")
+                ?: hintsObj?.string("prerollUrl")
+                ?: prerollObj?.string("url")
+            val prerollDuration = hintsObj?.int("prerollDuration")
+                ?: prerollObj?.int("duration")
+                ?: 15
+            val prerollTitle = hintsObj?.string("prerollTitle")
+                ?: prerollObj?.string("title")
+                ?: "KhaYin Spotlight"
+            val prerollSkippableAfter = hintsObj?.int("prerollSkippableAfter")
+                ?: prerollObj?.int("skippableAfter")
+                ?: 5
+            val preroll = prerollUrl?.takeIf { it.isNotBlank() }?.let {
+                StreamPreroll(
+                    url = it,
+                    duration = prerollDuration,
+                    title = prerollTitle,
+                    skippableAfter = prerollSkippableAfter,
+                )
+            }
             StreamItem(
                 name = obj.string("name"),
                 title = obj.string("title"),
@@ -57,7 +78,12 @@ object StreamParser {
                     videoSize = hintsObj?.long("videoSize"),
                     filename = hintsObj?.string("filename"),
                     proxyHeaders = proxyHeaders,
+                    prerollUrl = prerollUrl,
+                    prerollDuration = prerollDuration,
+                    prerollTitle = prerollTitle,
+                    prerollSkippableAfter = prerollSkippableAfter,
                 ),
+                preroll = preroll,
             )
         }
     }

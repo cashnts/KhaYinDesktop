@@ -223,6 +223,15 @@ button:disabled {
   pointer-events: none;
 }
 
+.player.preroll-active .progress,
+.player.preroll-active #seek,
+.player.preroll-active .time-row,
+.player.preroll-active .time-label,
+.player.preroll-active #submitIntroButton,
+.player.preroll-active #videoSettingsButton {
+  display: none !important;
+}
+
 .player-toast {
   position: absolute;
   top: calc(20px + env(safe-area-inset-top));

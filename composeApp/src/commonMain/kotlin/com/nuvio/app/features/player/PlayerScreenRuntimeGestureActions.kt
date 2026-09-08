@@ -99,6 +99,7 @@ internal fun PlayerScreenRuntime.showSeekFeedback(direction: PlayerSeekDirection
 }
 
 internal fun PlayerScreenRuntime.showHorizontalSeekPreview(previewPositionMs: Long, baselinePositionMs: Long) {
+    if (isPrerollActive) return
     val deltaMs = previewPositionMs - baselinePositionMs
     val direction = if (deltaMs < 0L) PlayerSeekDirection.Backward else PlayerSeekDirection.Forward
     liveGestureFeedback = GestureFeedbackState(
@@ -208,6 +209,7 @@ private fun PlayerScreenRuntime.handleDoubleTapSeek(
     direction: PlayerSeekDirection,
     sendToController: Boolean,
 ) {
+    if (isPrerollActive) return
     val currentPositionMs = playbackSnapshot.positionMs.coerceAtLeast(0L)
     val currentSeekState = accumulatedSeekState
     val nextState = if (currentSeekState?.direction == direction) {
@@ -346,6 +348,7 @@ internal fun PlayerScreenRuntime.rememberSurfaceGestureCallbacks(): PlayerSurfac
         currentPositionMs = rememberUpdatedState(playbackSnapshot.positionMs.coerceAtLeast(0L)),
         currentDurationMs = rememberUpdatedState(playbackSnapshot.durationMs),
         commitHorizontalSeek = rememberUpdatedState { targetPositionMs: Long ->
+            if (isPrerollActive) return@rememberUpdatedState
             playerController?.seekTo(targetPositionMs)
             scheduleProgressSyncAfterSeek()
         },

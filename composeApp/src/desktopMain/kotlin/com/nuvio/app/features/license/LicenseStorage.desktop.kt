@@ -34,10 +34,27 @@ internal actual object LicenseStorage {
         store.putString(deviceIdKey, deviceId)
     }
 
+    private const val freeModeKey = "is_free_mode"
+    private const val mmsubQuotaKey = "mmsub_quota_data"
+
     actual fun loadDismissedBroadcastTimestamp(): Long =
         store.getString(dismissedBroadcastKey)?.toLongOrNull() ?: 0L
 
     actual fun saveDismissedBroadcastTimestamp(timestamp: Long) {
         store.putString(dismissedBroadcastKey, timestamp.toString())
+    }
+
+    actual fun isFreeMode(): Boolean =
+        store.getBoolean(freeModeKey) ?: false
+
+    actual fun saveFreeMode(isFree: Boolean) {
+        store.putBoolean(freeModeKey, isFree)
+    }
+
+    actual fun loadMmsubQuotaData(): String? =
+        store.getString(mmsubQuotaKey)
+
+    actual fun saveMmsubQuotaData(data: String) {
+        store.putString(mmsubQuotaKey, data)
     }
 }

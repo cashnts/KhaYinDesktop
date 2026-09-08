@@ -54,7 +54,9 @@ fun main(args: Array<String>) {
 
     com.nuvio.app.core.analytics.PostHogAnalytics.initialize(
         platform = "Desktop-$hostOsName",
-        version = com.nuvio.app.core.build.AppVersionConfig.VERSION_NAME,
+        version = com.nuvio.app.core.build.AppVersionConfig.DESKTOP_VERSION_NAME.ifBlank {
+            com.nuvio.app.core.build.AppVersionConfig.VERSION_NAME
+        },
         distinctId = lastKnownLicense,
         deviceType = "desktop",
         osName = osName,

@@ -38,10 +38,11 @@ internal fun buildSubtitleLanguageItems(
     showOnlyPreferredLanguages: Boolean,
     selectedLanguageKey: String,
     filterByLicense: Boolean = true,
+    contentId: String? = null,
 ): List<SubtitleLanguageItem> {
     val isPlus = com.nuvio.app.features.license.LicenseRepository.isPlusMember
-    val validSubtitleTracks = if (filterByLicense) subtitleTracks.filter { isAllowedSubtitleTrack(it, isPlus) } else subtitleTracks
-    val validAddonSubtitles = if (filterByLicense) addonSubtitles.filter { isAllowedAddonSubtitle(it, isPlus) } else addonSubtitles
+    val validSubtitleTracks = if (filterByLicense) subtitleTracks.filter { isAllowedSubtitleTrack(it, isPlus, contentId) } else subtitleTracks
+    val validAddonSubtitles = if (filterByLicense) addonSubtitles.filter { isAllowedAddonSubtitle(it, isPlus, contentId) } else addonSubtitles
 
     val counts = linkedMapOf<String, Int>()
     validSubtitleTracks.forEach { track ->
@@ -76,16 +77,17 @@ internal fun buildSubtitleSelectionOptions(
     languageKey: String,
     subtitleTracks: List<SubtitleTrack>,
     addonSubtitles: List<AddonSubtitle>,
+    contentId: String? = null,
 ): List<SubtitleSelectionOption> {
     if (languageKey == SubtitleOffLanguageKey) return emptyList()
 
     val isPlus = com.nuvio.app.features.license.LicenseRepository.isPlusMember
     val builtInOptions = subtitleTracks
-        .filter { isAllowedSubtitleTrack(it, isPlus) && it.subtitleLanguageKey() == languageKey }
+        .filter { isAllowedSubtitleTrack(it, isPlus, contentId) && it.subtitleLanguageKey() == languageKey }
         .map { SubtitleSelectionOption.BuiltIn(it) }
     val seenAddonIds = mutableSetOf<String>()
     val addonOptions = addonSubtitles
-        .filter { isAllowedAddonSubtitle(it, isPlus) && subtitleLanguageKey(it.language) == languageKey }
+        .filter { isAllowedAddonSubtitle(it, isPlus, contentId) && subtitleLanguageKey(it.language) == languageKey }
         .map(SubtitleSelectionOption::Addon)
         .filter { seenAddonIds.add(it.id) }
 

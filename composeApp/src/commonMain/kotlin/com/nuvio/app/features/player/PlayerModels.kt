@@ -46,6 +46,11 @@ data class PlayerLaunch(
     val initialPositionMs: Long = 0L,
     val initialProgressFraction: Float? = null,
     val contentLanguage: String? = null,
+    val prerollUrl: String? = null,
+    val prerollDuration: Int? = null,
+    val prerollTitle: String? = null,
+    val prerollSkippableAfter: Int? = null,
+    val prerollId: String? = null,
 )
 
 object PlayerLaunchStore {

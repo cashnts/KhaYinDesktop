@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.analytics.PostHogAnalytics
 import com.nuvio.app.core.format.formatReleaseDateForDisplay
 import com.nuvio.app.core.i18n.localizedByteUnit
 import com.nuvio.app.core.ui.AppPresenceState
@@ -53,6 +54,12 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
     val episodeNumber = activeEpisodeNumber
     val episodeTitle = activeEpisodeTitle
     val isEpisode = seasonNumber != null && episodeNumber != null
+
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose {
+            com.nuvio.app.features.subtitles.jit.SubtitleJitManager.stopSession()
+        }
+    }
 
     LaunchedEffect(runtime.title, runtime.poster, seasonNumber, episodeNumber, episodeTitle, playbackSnapshot.isPlaying) {
         val episodeLabel = if (isEpisode) {
@@ -153,7 +160,27 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
             (bufferedSeconds / 10f).coerceIn(0f, 1f)
         }
     }
-    val playerSurfaceSourceUrl = if (isP2pPlaybackActive) p2pResolvedSourceUrl else activeSourceUrl
+    LaunchedEffect(isPrerollActive, prerollSkippableAfter) {
+        if (isPrerollActive) {
+            PostHogAnalytics.trackAdStarted(
+                adId = prerollId,
+                adTitle = prerollTitle,
+                adUrl = prerollUrl,
+                durationSeconds = prerollDuration,
+                skippableAfter = prerollSkippableAfter,
+                mediaTitle = title,
+                videoId = activeVideoId
+            )
+            val skippableSec = prerollSkippableAfter.coerceAtLeast(0)
+            canSkipPreroll = skippableSec == 0
+            if (skippableSec > 0) {
+                kotlinx.coroutines.delay(skippableSec * 1000L)
+                canSkipPreroll = true
+            }
+        }
+    }
+
+    val playerSurfaceSourceUrl = if (isPrerollActive) prerollUrl else if (isP2pPlaybackActive) p2pResolvedSourceUrl else activeSourceUrl
     val initialPositionRequestKey = currentInitialPositionRequestKey()
     val openingOverlayWanted = playerSettingsUiState.showLoadingOverlay &&
         !initialLoadCompleted &&
@@ -322,6 +349,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         isLocked = playerControlsLocked,
         lockedOverlayVisible = lockedOverlayVisible,
         controlsVisible = controlsVisible && !playerControlsLocked,
+        isPrerollActive = isPrerollActive,
         parentalWarnings = parentalWarnings,
         showParentalGuide = showParentalGuide,
         showSubmitIntro = isSeries &&
@@ -435,26 +463,30 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         if (playerSurfaceSourceUrl != null) {
             PlatformPlayerSurface(
                 sourceUrl = playerSurfaceSourceUrl,
-                sourceAudioUrl = activeSourceAudioUrl,
-                sourceHeaders = activeSourceHeaders,
-                sourceResponseHeaders = activeSourceResponseHeaders,
-                externalSubtitles = externalSubtitles,
-                streamType = activeStreamType,
+                sourceAudioUrl = if (isPrerollActive) null else activeSourceAudioUrl,
+                sourceHeaders = if (isPrerollActive) emptyMap() else activeSourceHeaders,
+                sourceResponseHeaders = if (isPrerollActive) emptyMap() else activeSourceResponseHeaders,
+                externalSubtitles = if (isPrerollActive) emptyList() else externalSubtitles,
+                streamType = if (isPrerollActive) null else activeStreamType,
                 modifier = Modifier.fillMaxSize(),
                 playWhenReady = shouldPlay,
-                initialPositionMs = activeInitialPositionMs.takeIf { it > 0L },
+                initialPositionMs = if (isPrerollActive) null else activeInitialPositionMs.takeIf { it > 0L },
                 initialPositionRequestKey = initialPositionRequestKey,
                 resizeMode = resizeMode,
                 playerControlsState = playerControlsState,
                 onPlayerControlsAction = { action -> handlePlayerControlsAction(action) },
                 onPlayerControlsEvent = { type, value -> handlePlayerControlsEvent(type, value) },
                 onPlayerControlsScrubChange = { positionMs ->
-                    handlePlayerControlsScrubChange(positionMs)
-                    true
+                    if (isPrerollActive) false else {
+                        handlePlayerControlsScrubChange(positionMs)
+                        true
+                    }
                 },
                 onPlayerControlsScrubFinished = { positionMs ->
-                    handlePlayerControlsScrubFinished(positionMs)
-                    true
+                    if (isPrerollActive) false else {
+                        handlePlayerControlsScrubFinished(positionMs)
+                        true
+                    }
                 },
                 onInitialPositionHandled = { key, handled ->
                     if (key == currentInitialPositionRequestKey()) {
@@ -468,12 +500,46 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                 onSnapshot = { snapshot ->
                     playbackSnapshot = snapshot
                     if (!snapshot.isLoading) initialLoadCompleted = true
+                    if (!isPrerollActive) {
+                        com.nuvio.app.features.subtitles.jit.SubtitleJitManager.updatePlaybackProgress(
+                            currentTimeSec = snapshot.positionMs / 1000.0,
+                            isPlaying = snapshot.isPlaying,
+                            durationSec = snapshot.durationMs / 1000.0
+                        )
+                    }
                     if (snapshot.isEnded) {
-                        shouldPlay = false
-                        controlsVisible = !playerControlsLocked
+                        if (isPrerollActive) {
+                            if (snapshot.positionMs > 1000L || (snapshot.durationMs > 0L && snapshot.positionMs >= snapshot.durationMs - 2000L)) {
+                                PostHogAnalytics.trackAdCompleted(
+                                    adId = prerollId,
+                                    adTitle = prerollTitle,
+                                    adUrl = prerollUrl,
+                                    durationSeconds = prerollDuration,
+                                    mediaTitle = title,
+                                    videoId = activeVideoId
+                                )
+                                finishPreroll()
+                            }
+                        } else {
+                            shouldPlay = false
+                            controlsVisible = !playerControlsLocked
+                        }
                     }
                 },
                 onError = { message ->
+                    if (isPrerollActive) {
+                        playerControlsLog.w { "Preroll playback error: $message; skipping to main content" }
+                        PostHogAnalytics.trackAdFailed(
+                            adId = prerollId,
+                            adTitle = prerollTitle,
+                            adUrl = prerollUrl,
+                            errorMessage = message ?: "Unknown error",
+                            mediaTitle = title,
+                            videoId = activeVideoId
+                        )
+                        finishPreroll()
+                        return@PlatformPlayerSurface
+                    }
                     if (message != null && tryRefreshCredentialedSourceAfterError(message)) {
                         return@PlatformPlayerSurface
                     }
@@ -487,7 +553,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         }
 
         AnimatedVisibility(
-            visible = pausedOverlayVisible && !controlsVisible && !playerControlsLocked,
+            visible = pausedOverlayVisible && !controlsVisible && !playerControlsLocked && !isPrerollActive,
             enter = fadeIn(animationSpec = tween(durationMillis = 220)),
             exit = fadeOut(animationSpec = tween(durationMillis = 180)),
         ) {
@@ -506,7 +572,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
             )
         }
 
-        if (!isDesktop) {
+        if (!isDesktop && !isPrerollActive) {
             RenderPlayerControls(displayedPositionMs = displayedPositionMs, isEpisode = isEpisode)
         }
         RenderPlaybackOverlays(
@@ -518,8 +584,34 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
             showP2pRebufferStats = showP2pRebufferStats,
             p2pRebufferMessage = p2pRebufferMessage,
             p2pRebufferProgress = p2pRebufferProgress,
-            suppressOpeningOverlay = isDesktop && playerSurfaceSourceUrl != null,
+            suppressOpeningOverlay = (isDesktop && playerSurfaceSourceUrl != null) || isPrerollActive,
         )
+        if (isPrerollActive) {
+            PrerollNoticeOverlay(
+                visible = true,
+                title = prerollTitle,
+                notice = "Spotlight • Movie starts shortly",
+                canSkip = canSkipPreroll,
+                skippableAfter = prerollSkippableAfter,
+                onSkip = {
+                    PostHogAnalytics.trackAdSkipped(
+                        adId = prerollId,
+                        adTitle = prerollTitle,
+                        adUrl = prerollUrl,
+                        timeWatchedMs = playbackSnapshot.positionMs,
+                        durationSeconds = prerollDuration,
+                        mediaTitle = title,
+                        videoId = activeVideoId
+                    )
+                    finishPreroll()
+                },
+                onBack = {
+                    flushWatchProgress()
+                    args.onBack()
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         RenderPlayerModals(displayedPositionMs = displayedPositionMs)
     }
 }
@@ -563,6 +655,7 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long, 
             resizeMode = resizeMode,
             isLocked = playerControlsLocked,
             showPlaybackControls = controlsVisible,
+            isPrerollActive = isPrerollActive,
             onLockToggle = {
                 if (playerControlsLocked) unlockPlayerControls() else lockPlayerControls()
             },
@@ -639,14 +732,18 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long, 
             showParentalGuide = showParentalGuide,
             onParentalGuideAnimationComplete = { showParentalGuide = false },
             onScrubChange = { positionMs ->
-                isScrubbingTimeline = true
-                scrubbingPositionMs = positionMs
+                if (!isPrerollActive) {
+                    isScrubbingTimeline = true
+                    scrubbingPositionMs = positionMs
+                }
             },
             onScrubFinished = { positionMs ->
-                isScrubbingTimeline = false
-                scrubbingPositionMs = null
-                playerController?.seekTo(positionMs)
-                scheduleProgressSyncAfterSeek()
+                if (!isPrerollActive) {
+                    isScrubbingTimeline = false
+                    scrubbingPositionMs = null
+                    playerController?.seekTo(positionMs)
+                    scheduleProgressSyncAfterSeek()
+                }
             },
             horizontalSafePadding = horizontalSafePadding,
             modifier = Modifier.fillMaxSize(),
@@ -678,18 +775,22 @@ private fun PlayerScreenRuntime.handlePlayerControlsAction(action: PlayerControl
             return false
         }
         PlayerControlsAction.SeekBack -> {
+            if (isPrerollActive) return true
             prepareSeekByForNativeFallback(-10_000L)
             return false
         }
         PlayerControlsAction.KeyboardSeekBack -> {
+            if (isPrerollActive) return true
             prepareSeekByForNativeFallback(-10_000L, revealControls = false)
             return false
         }
         PlayerControlsAction.SeekForward -> {
+            if (isPrerollActive) return true
             prepareSeekByForNativeFallback(10_000L)
             return false
         }
         PlayerControlsAction.KeyboardSeekForward -> {
+            if (isPrerollActive) return true
             prepareSeekByForNativeFallback(10_000L, revealControls = false)
             return false
         }
@@ -727,10 +828,12 @@ private fun PlayerScreenRuntime.handlePlayerControlsAction(action: PlayerControl
             }
         }
         PlayerControlsAction.DoubleTapSeekBack -> {
+            if (isPrerollActive) return true
             prepareDoubleTapSeekForNativeFallback(PlayerSeekDirection.Backward)
             return false
         }
         PlayerControlsAction.DoubleTapSeekForward -> {
+            if (isPrerollActive) return true
             prepareDoubleTapSeekForNativeFallback(PlayerSeekDirection.Forward)
             return false
         }
@@ -1081,12 +1184,14 @@ private fun formatPlayerControlsSeconds(seconds: Double): String {
 }
 
 private fun PlayerScreenRuntime.handlePlayerControlsScrubChange(positionMs: Long) {
+    if (isPrerollActive) return
     playerControlsLog.d { "scrubChange positionMs=$positionMs ${playerControlLogContext()}" }
     isScrubbingTimeline = true
     scrubbingPositionMs = positionMs
 }
 
 private fun PlayerScreenRuntime.handlePlayerControlsScrubFinished(positionMs: Long) {
+    if (isPrerollActive) return
     playerControlsLog.d { "scrubFinished positionMs=$positionMs controller=${playerController != null} ${playerControlLogContext()}" }
     isScrubbingTimeline = false
     scrubbingPositionMs = null

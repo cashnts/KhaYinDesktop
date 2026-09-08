@@ -648,7 +648,7 @@ fun isAllowedAudioTrack(track: AudioTrack): Boolean {
     return isEnglish || isChinese || isGenericOrBlank
 }
 
-fun isAllowedSubtitleTrack(track: SubtitleTrack, isPlus: Boolean): Boolean {
+fun isAllowedSubtitleTrack(track: SubtitleTrack, isPlus: Boolean, contentId: String? = null): Boolean {
     val code = track.language?.trim().orEmpty()
     val lbl = track.label.trim()
     val combined = "$code $lbl".trim()
@@ -672,23 +672,24 @@ fun isAllowedSubtitleTrack(track: SubtitleTrack, isPlus: Boolean): Boolean {
                     code.equals("chi", ignoreCase = true) ||
                     code.equals("zho", ignoreCase = true)
 
-    val isBurmese = normalizedCode == "my" || normalizedCode == "mya" || normalizedCode == "bur" ||
-                    normalizedLabel == "my" || normalizedLabel == "mya" || normalizedLabel == "bur" ||
-                    combined.contains("burmese", ignoreCase = true) ||
-                    combined.contains("myanmar", ignoreCase = true) ||
-                    combined.contains("mmsub", ignoreCase = true) ||
-                    combined.contains("မြန်မာ", ignoreCase = true) ||
-                    code.equals("my", ignoreCase = true) ||
-                    code.equals("bur", ignoreCase = true) ||
-                    code.equals("mya", ignoreCase = true)
+    val isBurmese = com.nuvio.app.features.license.MyanmarSubLimiter.isMyanmarSubtitle(
+        code = code,
+        label = lbl,
+    )
+
+    val allowsBurmese = when {
+        isPlus -> true
+        com.nuvio.app.features.license.LicenseRepository.isLicensed -> false // Standard excludes MMSub
+        else -> com.nuvio.app.features.license.MyanmarSubLimiter.canAccessMyanmarSub(contentId)
+    }
 
     return when {
-        isPlus -> isEnglish || isChinese || isBurmese
+        isBurmese -> allowsBurmese
         else -> isEnglish || isChinese
     }
 }
 
-fun isAllowedAddonSubtitle(subtitle: AddonSubtitle, isPlus: Boolean): Boolean {
+fun isAllowedAddonSubtitle(subtitle: AddonSubtitle, isPlus: Boolean, contentId: String? = null): Boolean {
     val code = subtitle.language.trim()
     val lbl = subtitle.display.trim()
     val addon = subtitle.addonName?.trim().orEmpty()
@@ -713,19 +714,21 @@ fun isAllowedAddonSubtitle(subtitle: AddonSubtitle, isPlus: Boolean): Boolean {
                     code.equals("chi", ignoreCase = true) ||
                     code.equals("zho", ignoreCase = true)
 
-    val isBurmese = normalizedCode == "my" || normalizedCode == "mya" || normalizedCode == "bur" ||
-                    normalizedLabel == "my" || normalizedLabel == "mya" || normalizedLabel == "bur" ||
-                    combined.contains("burmese", ignoreCase = true) ||
-                    combined.contains("myanmar", ignoreCase = true) ||
-                    combined.contains("mmsub", ignoreCase = true) ||
-                    combined.contains("မြန်မာ", ignoreCase = true) ||
-                    subtitle.url.contains("stream.khayin.net", ignoreCase = true) ||
-                    code.equals("my", ignoreCase = true) ||
-                    code.equals("bur", ignoreCase = true) ||
-                    code.equals("mya", ignoreCase = true)
+    val isBurmese = com.nuvio.app.features.license.MyanmarSubLimiter.isMyanmarSubtitle(
+        code = code,
+        label = lbl,
+        addon = addon,
+        url = subtitle.url,
+    )
+
+    val allowsBurmese = when {
+        isPlus -> true
+        com.nuvio.app.features.license.LicenseRepository.isLicensed -> false // Standard excludes MMSub
+        else -> com.nuvio.app.features.license.MyanmarSubLimiter.canAccessMyanmarSub(contentId)
+    }
 
     return when {
-        isPlus -> isEnglish || isChinese || isBurmese
+        isBurmese -> allowsBurmese
         else -> isEnglish || isChinese
     }
 }

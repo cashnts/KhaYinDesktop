@@ -68,12 +68,22 @@ data class SupabaseErrorResponse(
 sealed interface LicenseState {
     data object Loading : LicenseState
     data object Unlicensed : LicenseState
+    data object Free : LicenseState
     data class Active(val info: LicenseInfo) : LicenseState
     data class Expired(val info: LicenseInfo) : LicenseState
     data class Revoked(val info: LicenseInfo) : LicenseState
 }
 
 val LicenseState.isActive: Boolean
+    get() = this is LicenseState.Active
+
+val LicenseState.isFree: Boolean
+    get() = this is LicenseState.Free || this is LicenseState.Unlicensed
+
+val LicenseState.isLicensed: Boolean
+    get() = this is LicenseState.Active
+
+val LicenseState.hasAdFreeAccess: Boolean
     get() = this is LicenseState.Active
 
 val LicenseState.isExpired: Boolean

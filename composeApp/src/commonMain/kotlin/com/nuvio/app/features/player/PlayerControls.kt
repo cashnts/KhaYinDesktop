@@ -77,6 +77,7 @@ internal fun PlayerControlsShell(
     resizeMode: PlayerResizeMode,
     isLocked: Boolean,
     showPlaybackControls: Boolean = true,
+    isPrerollActive: Boolean = false,
     onLockToggle: () -> Unit,
     onBack: () -> Unit,
     onTogglePlayback: () -> Unit,
@@ -179,7 +180,7 @@ internal fun PlayerControlsShell(
                 )
             }
 
-            if (showPlaybackControls) {
+            if (showPlaybackControls && !isPrerollActive) {
                 ProgressControls(
                     playbackSnapshot = playbackSnapshot,
                     displayedPositionMs = displayedPositionMs,
@@ -195,6 +196,7 @@ internal fun PlayerControlsShell(
                     activeResolutionLabel = activeResolutionLabel,
                     onSourcesClick = onSourcesClick,
                     onEpisodesClick = onEpisodesClick,
+                    isPrerollActive = isPrerollActive,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
@@ -503,6 +505,7 @@ private fun ProgressControls(
     activeResolutionLabel: String? = null,
     onSourcesClick: (() -> Unit)? = null,
     onEpisodesClick: (() -> Unit)? = null,
+    isPrerollActive: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val durationMs = playbackSnapshot.durationMs.coerceAtLeast(1L)
@@ -511,26 +514,28 @@ private fun ProgressControls(
     val audioPainter = appIconPainter(AppIconResource.PlayerAudioFilled)
 
     Column(modifier = modifier) {
-        Slider(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(metrics.sliderTouchHeight)
-                .graphicsLayer(scaleY = metrics.sliderScaleY),
-            value = displayedPositionMs.coerceIn(0L, durationMs).toFloat(),
-            onValueChange = { value -> onScrubChange(value.toLong()) },
-            onValueChangeFinished = { onScrubFinished(displayedPositionMs.coerceIn(0L, durationMs)) },
-            valueRange = 0f..durationMs.toFloat(),
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp)
-                .padding(top = 4.dp, bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TimePill(text = formatPlaybackTime(displayedPositionMs), fontSize = metrics.timeSize)
-            TimePill(text = formatPlaybackTime(durationMs), fontSize = metrics.timeSize)
+        if (!isPrerollActive) {
+            Slider(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(metrics.sliderTouchHeight)
+                    .graphicsLayer(scaleY = metrics.sliderScaleY),
+                value = displayedPositionMs.coerceIn(0L, durationMs).toFloat(),
+                onValueChange = { value -> onScrubChange(value.toLong()) },
+                onValueChangeFinished = { onScrubFinished(displayedPositionMs.coerceIn(0L, durationMs)) },
+                valueRange = 0f..durationMs.toFloat(),
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp)
+                    .padding(top = 4.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TimePill(text = formatPlaybackTime(displayedPositionMs), fontSize = metrics.timeSize)
+                TimePill(text = formatPlaybackTime(durationMs), fontSize = metrics.timeSize)
+            }
         }
         Row(
             modifier = Modifier.fillMaxWidth(),

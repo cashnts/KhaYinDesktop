@@ -39,4 +39,9 @@ internal data class PlayerScreenArgs(
     val initialPositionMs: Long,
     val initialProgressFraction: Float?,
     val contentLanguage: String? = null,
+    val prerollUrl: String? = null,
+    val prerollDuration: Int? = null,
+    val prerollTitle: String? = null,
+    val prerollSkippableAfter: Int? = null,
+    val prerollId: String? = null,
 )

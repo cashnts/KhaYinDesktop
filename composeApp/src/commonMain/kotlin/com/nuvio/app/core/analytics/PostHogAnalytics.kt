@@ -496,6 +496,216 @@ object PostHogAnalytics {
         )
     }
 
+    fun trackAdRequested(
+        adType: String = "preroll",
+        mediaTitle: String? = null,
+        videoId: String? = null,
+        isFreeUser: Boolean = true,
+    ) {
+        capture(
+            event = "ad_requested",
+            properties = buildMap {
+                put("ad_type", adType)
+                if (mediaTitle != null) put("media_title", mediaTitle)
+                if (videoId != null) put("video_id", videoId)
+                put("is_free_user", isFreeUser)
+            }
+        )
+    }
+
+    fun trackAdLoaded(
+        adId: String? = null,
+        adTitle: String? = null,
+        adUrl: String? = null,
+        durationSeconds: Int = 0,
+        skippableAfter: Int = 5,
+        adType: String = "preroll",
+        mediaTitle: String? = null,
+        videoId: String? = null,
+    ) {
+        val effectiveAdId = adId?.takeIf { it.isNotBlank() && it != "preroll" } ?: adUrl ?: adId
+        val effectiveAdUrl = adUrl?.takeIf { it.isNotBlank() } ?: adId?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+        capture(
+            event = "ad_loaded",
+            properties = buildMap {
+                if (effectiveAdId != null) put("ad_id", effectiveAdId)
+                if (effectiveAdUrl != null) put("ad_url", effectiveAdUrl)
+                if (adTitle != null) put("ad_title", adTitle)
+                put("duration_seconds", durationSeconds)
+                put("skippable_after", skippableAfter)
+                put("ad_type", adType)
+                if (mediaTitle != null) put("media_title", mediaTitle)
+                if (videoId != null) put("video_id", videoId)
+            }
+        )
+    }
+
+    fun trackAdUnavailable(
+        reason: String,
+        adType: String = "preroll",
+        adUrl: String? = null,
+        adId: String? = null,
+        mediaTitle: String? = null,
+        videoId: String? = null,
+    ) {
+        val effectiveAdId = adId?.takeIf { it.isNotBlank() && it != "preroll" } ?: adUrl ?: adId
+        val effectiveAdUrl = adUrl?.takeIf { it.isNotBlank() } ?: adId?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+        capture(
+            event = "ad_unavailable",
+            properties = buildMap {
+                put("reason", reason)
+                put("ad_type", adType)
+                if (effectiveAdId != null) put("ad_id", effectiveAdId)
+                if (effectiveAdUrl != null) put("ad_url", effectiveAdUrl)
+                if (mediaTitle != null) put("media_title", mediaTitle)
+                if (videoId != null) put("video_id", videoId)
+            }
+        )
+    }
+
+    fun trackAdStarted(
+        adId: String? = null,
+        adTitle: String? = null,
+        adUrl: String? = null,
+        durationSeconds: Int = 0,
+        skippableAfter: Int = 5,
+        adType: String = "preroll",
+        mediaTitle: String? = null,
+        videoId: String? = null,
+    ) {
+        val effectiveAdId = adId?.takeIf { it.isNotBlank() && it != "preroll" } ?: adUrl ?: adId
+        val effectiveAdUrl = adUrl?.takeIf { it.isNotBlank() } ?: adId?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+        capture(
+            event = "ad_started",
+            properties = buildMap {
+                if (effectiveAdId != null) put("ad_id", effectiveAdId)
+                if (effectiveAdUrl != null) put("ad_url", effectiveAdUrl)
+                if (adTitle != null) put("ad_title", adTitle)
+                put("duration_seconds", durationSeconds)
+                put("skippable_after", skippableAfter)
+                put("ad_type", adType)
+                if (mediaTitle != null) put("media_title", mediaTitle)
+                if (videoId != null) put("video_id", videoId)
+            }
+        )
+        log(
+            level = "INFO",
+            tag = "Ads",
+            message = "Ad started: ${adTitle ?: "Unknown"} (id=${effectiveAdId ?: "unknown"})",
+            properties = buildMap {
+                if (effectiveAdId != null) put("ad_id", effectiveAdId)
+                if (effectiveAdUrl != null) put("ad_url", effectiveAdUrl)
+                if (adTitle != null) put("ad_title", adTitle)
+            }
+        )
+    }
+
+    fun trackAdSkipped(
+        adId: String? = null,
+        adTitle: String? = null,
+        adUrl: String? = null,
+        timeWatchedMs: Long = 0L,
+        durationSeconds: Int = 0,
+        adType: String = "preroll",
+        mediaTitle: String? = null,
+        videoId: String? = null,
+    ) {
+        val effectiveAdId = adId?.takeIf { it.isNotBlank() && it != "preroll" } ?: adUrl ?: adId
+        val effectiveAdUrl = adUrl?.takeIf { it.isNotBlank() } ?: adId?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+        capture(
+            event = "ad_skipped",
+            properties = buildMap {
+                if (effectiveAdId != null) put("ad_id", effectiveAdId)
+                if (effectiveAdUrl != null) put("ad_url", effectiveAdUrl)
+                if (adTitle != null) put("ad_title", adTitle)
+                put("time_watched_ms", timeWatchedMs)
+                put("duration_seconds", durationSeconds)
+                put("ad_type", adType)
+                if (mediaTitle != null) put("media_title", mediaTitle)
+                if (videoId != null) put("video_id", videoId)
+            }
+        )
+        log(
+            level = "INFO",
+            tag = "Ads",
+            message = "Ad skipped: ${adTitle ?: "Unknown"} after ${timeWatchedMs}ms",
+            properties = buildMap {
+                if (effectiveAdId != null) put("ad_id", effectiveAdId)
+                if (effectiveAdUrl != null) put("ad_url", effectiveAdUrl)
+                put("time_watched_ms", timeWatchedMs.toString())
+            }
+        )
+    }
+
+    fun trackAdCompleted(
+        adId: String? = null,
+        adTitle: String? = null,
+        adUrl: String? = null,
+        durationSeconds: Int = 0,
+        adType: String = "preroll",
+        mediaTitle: String? = null,
+        videoId: String? = null,
+    ) {
+        val effectiveAdId = adId?.takeIf { it.isNotBlank() && it != "preroll" } ?: adUrl ?: adId
+        val effectiveAdUrl = adUrl?.takeIf { it.isNotBlank() } ?: adId?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+        capture(
+            event = "ad_completed",
+            properties = buildMap {
+                if (effectiveAdId != null) put("ad_id", effectiveAdId)
+                if (effectiveAdUrl != null) put("ad_url", effectiveAdUrl)
+                if (adTitle != null) put("ad_title", adTitle)
+                put("duration_seconds", durationSeconds)
+                put("ad_type", adType)
+                if (mediaTitle != null) put("media_title", mediaTitle)
+                if (videoId != null) put("video_id", videoId)
+            }
+        )
+        log(
+            level = "INFO",
+            tag = "Ads",
+            message = "Ad completed: ${adTitle ?: "Unknown"}",
+            properties = buildMap {
+                if (effectiveAdId != null) put("ad_id", effectiveAdId)
+                if (effectiveAdUrl != null) put("ad_url", effectiveAdUrl)
+            }
+        )
+    }
+
+    fun trackAdFailed(
+        adId: String? = null,
+        adTitle: String? = null,
+        adUrl: String? = null,
+        errorMessage: String,
+        adType: String = "preroll",
+        mediaTitle: String? = null,
+        videoId: String? = null,
+    ) {
+        val effectiveAdId = adId?.takeIf { it.isNotBlank() && it != "preroll" } ?: adUrl ?: adId
+        val effectiveAdUrl = adUrl?.takeIf { it.isNotBlank() } ?: adId?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+        capture(
+            event = "ad_failed",
+            properties = buildMap {
+                if (effectiveAdId != null) put("ad_id", effectiveAdId)
+                if (effectiveAdUrl != null) put("ad_url", effectiveAdUrl)
+                if (adTitle != null) put("ad_title", adTitle)
+                put("error_message", errorMessage)
+                put("ad_type", adType)
+                if (mediaTitle != null) put("media_title", mediaTitle)
+                if (videoId != null) put("video_id", videoId)
+            }
+        )
+        log(
+            level = "ERROR",
+            tag = "Ads",
+            message = "Ad failed: ${adTitle ?: "Unknown"} - $errorMessage",
+            properties = buildMap {
+                if (effectiveAdId != null) put("ad_id", effectiveAdId)
+                if (effectiveAdUrl != null) put("ad_url", effectiveAdUrl)
+                put("error", errorMessage)
+            }
+        )
+    }
+
     fun capture(
         event: String,
         properties: Map<String, Any>? = null

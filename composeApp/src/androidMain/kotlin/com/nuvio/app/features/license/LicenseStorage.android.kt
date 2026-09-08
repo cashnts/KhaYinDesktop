@@ -47,4 +47,18 @@ actual object LicenseStorage {
     actual fun saveDismissedBroadcastTimestamp(timestamp: Long) {
         preferences?.edit()?.putLong(dismissedBroadcastKey, timestamp)?.apply()
     }
+
+    actual fun isFreeMode(): Boolean =
+        preferences?.getBoolean("is_free_mode", false) ?: false
+
+    actual fun saveFreeMode(isFree: Boolean) {
+        preferences?.edit()?.putBoolean("is_free_mode", isFree)?.apply()
+    }
+
+    actual fun loadMmsubQuotaData(): String? =
+        preferences?.getString("mmsub_quota_data", null)
+
+    actual fun saveMmsubQuotaData(data: String) {
+        preferences?.edit()?.putString("mmsub_quota_data", data)?.apply()
+    }
 }

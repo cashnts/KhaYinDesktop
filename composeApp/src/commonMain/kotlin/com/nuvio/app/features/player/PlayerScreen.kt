@@ -41,6 +41,11 @@ fun PlayerScreen(
     initialPositionMs: Long = 0L,
     initialProgressFraction: Float? = null,
     contentLanguage: String? = null,
+    prerollUrl: String? = null,
+    prerollDuration: Int? = null,
+    prerollTitle: String? = null,
+    prerollSkippableAfter: Int? = null,
+    prerollId: String? = null,
 ) {
     PlayerScreenContent(
         PlayerScreenArgs(
@@ -80,6 +85,11 @@ fun PlayerScreen(
             initialPositionMs = initialPositionMs,
             initialProgressFraction = initialProgressFraction,
             contentLanguage = contentLanguage,
+            prerollUrl = prerollUrl,
+            prerollDuration = prerollDuration,
+            prerollTitle = prerollTitle,
+            prerollSkippableAfter = prerollSkippableAfter,
+            prerollId = prerollId,
         )
     )
 }

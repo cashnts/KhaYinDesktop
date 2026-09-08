@@ -1171,6 +1171,7 @@ kotlin {
                 implementation("com.squareup.okhttp3:okhttp:4.12.0")
                 implementation(libs.quickjs.kt)
                 implementation(libs.ksoup)
+                implementation(compose.materialIconsExtended)
                 implementation(libs.kmp.app.updater.core)
                 implementation(libs.kmp.app.updater.compose.ui)
             }

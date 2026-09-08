@@ -232,6 +232,7 @@ object SyncManager {
     )
 
     fun pullAllForProfile(profileId: Int) {
+        if (com.nuvio.app.features.license.LicenseRepository.isFreeUser) return
         startFullProfilePull(profileId = profileId, reason = "requested")
     }
 

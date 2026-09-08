@@ -35,7 +35,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CheckCircleOutline
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAddCheckCircle
@@ -2167,7 +2167,7 @@ private fun ConfiguredMetaSections(
                             icon = if (isWatched) {
                                 Icons.Default.CheckCircle
                             } else {
-                                Icons.Default.CheckCircleOutline
+                                Icons.Outlined.CheckCircle
                             },
                             isActive = isWatched,
                             onClick = onWatchedClick,

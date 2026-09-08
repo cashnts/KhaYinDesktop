@@ -24,7 +24,7 @@ import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CheckCircleOutline
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -269,7 +269,7 @@ fun DesktopDetailHero(
                         icon = if (isWatched) {
                             Icons.Default.CheckCircle
                         } else {
-                            Icons.Default.CheckCircleOutline
+                            Icons.Outlined.CheckCircle
                         },
                         isActive = isWatched,
                         onClick = onWatchedClick,

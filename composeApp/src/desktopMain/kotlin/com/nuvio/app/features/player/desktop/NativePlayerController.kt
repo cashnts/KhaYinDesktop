@@ -940,6 +940,8 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =
         append(',')
         appendJsonField("controlsVisible", controlsVisible)
         append(',')
+        appendJsonField("isPrerollActive", isPrerollActive)
+        append(',')
         appendJsonArrayField("parentalWarnings", parentalWarnings) { appendParentalWarningJson(it) }
         append(',')
         appendJsonField("showParentalGuide", showParentalGuide)

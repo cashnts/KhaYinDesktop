@@ -93,6 +93,26 @@ internal class PlayerScreenRuntime(
 
     var gestureController: PlayerGestureController? = null
 
+    val prerollUrl: String? get() = args.prerollUrl
+    val prerollDuration: Int get() = args.prerollDuration ?: 15
+    val prerollTitle: String get() = args.prerollTitle ?: "KhaYin Spotlight"
+    val prerollSkippableAfter: Int get() = args.prerollSkippableAfter ?: 5
+    val prerollId: String? get() = args.prerollId
+
+    var isPrerollActive by mutableStateOf(!args.prerollUrl.isNullOrBlank() && com.nuvio.app.features.license.LicenseRepository.isFreeUser)
+    var canSkipPreroll by mutableStateOf(false)
+
+    fun finishPreroll() {
+        if (!isPrerollActive) return
+        isPrerollActive = false
+        canSkipPreroll = false
+        activeSourceUrl = sourceUrl
+        activeInitialPositionMs = initialPositionMs
+        activeInitialProgressFraction = initialProgressFraction
+        initialSeekApplied = false
+        shouldPlay = true
+    }
+
     var controlsVisible by mutableStateOf(true)
     var controlsActivityTick by mutableStateOf(0)
     var playerControlsLocked by mutableStateOf(false)
