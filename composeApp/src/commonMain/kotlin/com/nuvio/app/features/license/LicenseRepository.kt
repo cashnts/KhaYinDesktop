@@ -55,6 +55,13 @@ object LicenseRepository {
             return current?.isPlus == true
         }
 
+    val canAccessSports: Boolean
+        get() {
+            if (com.nuvio.app.core.build.AppFeaturePolicy.isAdminClient) return true
+            if (com.nuvio.app.core.analytics.PostHogAnalytics.isSportsFreeForAll()) return true
+            return isPlusMember
+        }
+
     val isLicensed: Boolean
         get() = _state.value is LicenseState.Active
 
@@ -120,16 +127,31 @@ object LicenseRepository {
                     "device_id" to getOrCreateDeviceId()
                 ))
             }
-        } else if (LicenseStorage.isFreeMode()) {
+        } else if (LicenseStorage.isFreeMode() && com.nuvio.app.core.analytics.PostHogAnalytics.isFreeTierEnabled()) {
             _state.value = LicenseState.Free
         } else {
             _state.value = LicenseState.Unlicensed
+        }
+
+        scope.launch {
+            com.nuvio.app.core.analytics.PostHogAnalytics.isFreeTierEnabledFlow.collect { isEnabled ->
+                if (!isEnabled && _state.value is LicenseState.Free) {
+                    log.w { "Free tier disabled via PostHog flag! Revoking free mode session." }
+                    LicenseStorage.saveFreeMode(false)
+                    _state.value = LicenseState.Unlicensed
+                    _error.value = "Free tier is currently disabled. Please enter a valid license key."
+                }
+            }
         }
 
         startHeartbeat()
     }
 
     fun continueForFree() {
+        if (!com.nuvio.app.core.analytics.PostHogAnalytics.isFreeTierEnabled()) {
+            _error.value = "Free tier is currently disabled. Please enter a valid license key."
+            return
+        }
         LicenseStorage.saveFreeMode(true)
         _state.value = LicenseState.Free
         _error.value = null

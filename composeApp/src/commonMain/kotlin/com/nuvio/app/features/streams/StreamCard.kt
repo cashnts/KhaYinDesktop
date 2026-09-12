@@ -58,8 +58,9 @@ internal fun StreamCard(
     currentLabel: String? = null,
 ) {
     val cardShape = RoundedCornerShape(12.dp)
+    val details = remember(stream) { StreamCardPresentation.format(stream) }
     val badgeImages = stream.badges.filter { it.imageURL.isNotBlank() }
-    val hasBadges = badgeImages.isNotEmpty() || (showFileSizeBadges && stream.behaviorHints.videoSize != null)
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -98,71 +99,103 @@ internal fun StreamCard(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            if (hasBadges && badgePlacement == StreamBadgePlacement.TOP) {
-                StreamCardBadgeRow(
-                    badgeImages = badgeImages,
-                    stream = stream,
-                    showFileSizeBadges = showFileSizeBadges,
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-            }
-
-            StreamNameWithInstantService(
-                stream = stream,
-                appendInstantServiceToDefaultName = appendInstantServiceToDefaultName,
+            // Header Row: ⚡ Server Name (Resolution)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                Text(
+                    text = details.headerTitle,
+                    modifier = Modifier.weight(1f, fill = false),
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = 20.sp,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
                 if (isCurrent && !currentLabel.isNullOrBlank()) {
                     Spacer(modifier = Modifier.width(8.dp))
                     CurrentStreamBadge(label = currentLabel)
                 }
             }
 
-            val subtitle = stream.streamSubtitle
-            if (!subtitle.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Body Detail Fields: Name, Languages, Audio
+            if (!details.mediaName.isNullOrBlank()) {
                 Text(
-                    text = subtitle,
+                    text = "Name: ${details.mediaName}",
                     style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 12.sp,
-                        lineHeight = 18.sp,
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp,
                     ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
-            if (hasBadges && badgePlacement == StreamBadgePlacement.BOTTOM) {
-                Spacer(modifier = Modifier.height(5.dp))
-                StreamCardBadgeRow(
-                    badgeImages = badgeImages,
-                    stream = stream,
-                    showFileSizeBadges = showFileSizeBadges,
+            if (!details.languages.isNullOrBlank()) {
+                Text(
+                    text = "Languages: ${details.languages}",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-        }
 
-        if (showAddonLogo) {
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                if (!stream.addonLogo.isNullOrBlank()) {
-                    AsyncImage(
-                        model = stream.addonLogo,
-                        contentDescription = stream.addonName,
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(6.dp)),
-                        contentScale = ContentScale.Fit,
-                    )
-                }
-                Spacer(modifier = Modifier.height(2.dp))
+            if (!details.audio.isNullOrBlank()) {
                 Text(
-                    text = stream.addonName,
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    text = "Audio: ${details.audio}",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp,
+                    ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
+            }
+
+            // Gap before Bitrate
+            if (!details.bitrate.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Bitrate: ${details.bitrate}",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            // Size badge & any custom badges row
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (!details.sizeLabel.isNullOrBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.Black.copy(alpha = 0.6f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "SIZE ${details.sizeLabel}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White,
+                            letterSpacing = 0.5.sp,
+                            maxLines = 1,
+                        )
+                    }
+                }
+                badgeImages.forEach { badge ->
+                    StreamBadgeImage(badge = badge)
+                }
             }
         }
     }

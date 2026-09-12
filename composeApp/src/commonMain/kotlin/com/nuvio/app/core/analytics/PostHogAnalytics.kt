@@ -3,9 +3,16 @@ package com.nuvio.app.core.analytics
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.features.addons.httpRequestRaw
+import com.posthog.kmp.PostHog
+import com.posthog.kmp.PostHogConfig
+import com.posthog.kmp.PostHogContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -96,6 +103,122 @@ object PostHogAnalytics {
         log.i { "Initialized PostHog for $platform ($deviceType, version=$version, distinctId=$currentDistinctId, sessionId=$currentSessionId)" }
     }
 
+    private var isKmpSetupDone = false
+
+    private val _isAdsEnabledFlow = kotlinx.coroutines.flow.MutableStateFlow(true)
+    val isAdsEnabledFlow: kotlinx.coroutines.flow.StateFlow<Boolean> = _isAdsEnabledFlow.asStateFlow()
+
+    private val _isFreeTierEnabledFlow = kotlinx.coroutines.flow.MutableStateFlow(true)
+    val isFreeTierEnabledFlow: kotlinx.coroutines.flow.StateFlow<Boolean> = _isFreeTierEnabledFlow.asStateFlow()
+
+    private val _isSportsFreeForAllFlow = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val isSportsFreeForAllFlow: kotlinx.coroutines.flow.StateFlow<Boolean> = _isSportsFreeForAllFlow.asStateFlow()
+
+    private val _flagsLoadedFlow = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val flagsLoadedFlow: kotlinx.coroutines.flow.StateFlow<Boolean> = _flagsLoadedFlow.asStateFlow()
+
+    fun setupKmp(context: PostHogContext) {
+        if (isAnalyticsDisabled || isKmpSetupDone) return
+        try {
+            PostHog.setup(
+                config = PostHogConfig(
+                    apiKey = API_KEY,
+                    host = HOST,
+                ),
+                context = context,
+            )
+            isKmpSetupDone = true
+            log.i { "PostHog KMP setup successfully" }
+            refreshFeatureFlagsInternal()
+        } catch (e: Throwable) {
+            log.w(e) { "PostHog KMP setup failed: ${e.message}" }
+        }
+    }
+
+    private fun updateLocalFlagStates() {
+        val ads = evaluateFlag(listOf("ads-enabled", "enable-ads", "ads_enabled"), default = true)
+        val freeTier = evaluateFlag(listOf("free-tier-login", "enable-free-tier", "free_tier_enabled"), default = true)
+        val sportsFree = evaluateFlag(listOf("sports-free-for-all", "free-sports", "sports_free_for_all", "enable-free-sports"), default = false)
+        _isAdsEnabledFlow.value = ads
+        _isFreeTierEnabledFlow.value = freeTier
+        _isSportsFreeForAllFlow.value = sportsFree
+        _flagsLoadedFlow.value = true
+        log.i { "PostHog feature flags updated -> ads-enabled=$ads, free-tier-login=$freeTier, sports-free-for-all=$sportsFree" }
+    }
+
+    private fun evaluateFlag(keys: List<String>, default: Boolean): Boolean {
+        val allFlags = try { PostHog.getAllFeatureFlags() } catch (_: Throwable) { emptyMap() }
+        for (key in keys) {
+            val result = allFlags[key]
+            if (result != null) {
+                return result.enabled
+            }
+            val flagVal = try { PostHog.getFeatureFlag(key) } catch (_: Throwable) { null }
+            if (flagVal != null) {
+                return when (flagVal) {
+                    is Boolean -> flagVal
+                    is String -> flagVal.equals("true", ignoreCase = true) || flagVal.equals("enabled", ignoreCase = true)
+                    else -> true
+                }
+            }
+        }
+        return default
+    }
+
+    fun isFeatureEnabled(key: String, defaultValue: Boolean = true): Boolean {
+        if (!isKmpSetupDone) return defaultValue
+        return try {
+            PostHog.isFeatureEnabled(key, defaultValue = defaultValue)
+        } catch (_: Throwable) {
+            defaultValue
+        }
+    }
+
+    suspend fun awaitFlagsLoaded(timeoutMs: Long = 1000L) {
+        if (_flagsLoadedFlow.value) return
+        try {
+            kotlinx.coroutines.withTimeoutOrNull(timeoutMs) {
+                _flagsLoadedFlow.first { it }
+            }
+        } catch (_: Throwable) {
+        }
+    }
+
+    fun isAdsEnabled(): Boolean {
+        if (_flagsLoadedFlow.value) return _isAdsEnabledFlow.value
+        return evaluateFlag(listOf("ads-enabled", "enable-ads", "ads_enabled"), default = _isAdsEnabledFlow.value)
+    }
+
+    fun isFreeTierEnabled(): Boolean {
+        if (_flagsLoadedFlow.value) return _isFreeTierEnabledFlow.value
+        return evaluateFlag(listOf("free-tier-login", "enable-free-tier", "free_tier_enabled"), default = _isFreeTierEnabledFlow.value)
+    }
+
+    fun isSportsFreeForAll(): Boolean {
+        if (_flagsLoadedFlow.value) return _isSportsFreeForAllFlow.value
+        return evaluateFlag(listOf("sports-free-for-all", "free-sports", "sports_free_for_all", "enable-free-sports"), default = _isSportsFreeForAllFlow.value)
+    }
+
+    fun reloadFeatureFlags(onComplete: (() -> Unit)? = null) {
+        refreshFeatureFlagsInternal(onComplete)
+    }
+
+    private fun refreshFeatureFlagsInternal(onComplete: (() -> Unit)? = null) {
+        if (!isKmpSetupDone) {
+            onComplete?.invoke()
+            return
+        }
+        try {
+            PostHog.reloadFeatureFlags {
+                updateLocalFlagStates()
+                onComplete?.invoke()
+            }
+        } catch (e: Throwable) {
+            log.w(e) { "Failed to reload feature flags: ${e.message}" }
+            onComplete?.invoke()
+        }
+    }
+
     fun getDistinctId(): String = currentDistinctId
     fun getSessionId(): String = currentSessionId
 
@@ -111,6 +234,12 @@ object PostHogAnalytics {
         if (isAnalyticsDisabled || distinctId.isBlank()) return
         val anonId = currentDistinctId
         currentDistinctId = distinctId
+        if (isKmpSetupDone) {
+            try {
+                PostHog.identify(distinctId)
+                PostHog.reloadFeatureFlags()
+            } catch (_: Throwable) {}
+        }
         capture(
             event = "\$identify",
             properties = buildMap {

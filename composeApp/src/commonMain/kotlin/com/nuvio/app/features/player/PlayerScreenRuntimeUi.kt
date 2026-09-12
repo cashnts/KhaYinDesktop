@@ -506,7 +506,8 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                         com.nuvio.app.features.subtitles.jit.SubtitleJitManager.updatePlaybackProgress(
                             currentTimeSec = snapshot.positionMs / 1000.0,
                             isPlaying = snapshot.isPlaying,
-                            durationSec = snapshot.durationMs / 1000.0
+                            durationSec = snapshot.durationMs / 1000.0,
+                            isLoading = snapshot.isLoading || !initialLoadCompleted
                         )
                     }
                     if (snapshot.isEnded) {

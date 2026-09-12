@@ -326,39 +326,42 @@ fun LicenseActivationScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                val isFreeTierEnabled by com.nuvio.app.core.analytics.PostHogAnalytics.isFreeTierEnabledFlow.collectAsStateWithLifecycle()
+                if (isFreeTierEnabled) {
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                Button(
-                    onClick = {
-                        focusManager.clearFocus()
-                        LicenseRepository.continueForFree()
-                        onContinueForFree()
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White.copy(alpha = 0.08f),
-                        contentColor = Color.White,
-                    ),
-                    enabled = !isSubmitting,
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center,
+                    Button(
+                        onClick = {
+                            focusManager.clearFocus()
+                            LicenseRepository.continueForFree()
+                            onContinueForFree()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.White.copy(alpha = 0.08f),
+                            contentColor = Color.White,
+                        ),
+                        enabled = !isSubmitting,
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.PlayArrow,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = Color(0xFF00E699),
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Continue for Free (with Ads)",
-                            style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp),
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = Color(0xFF00E699),
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Continue for Free (with Ads)",
+                                style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp),
+                            )
+                        }
                     }
                 }
             }

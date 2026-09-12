@@ -33,6 +33,7 @@ object PostHogInitializer {
             deviceBrand = Build.BRAND ?: "unknown",
             serviceName = "khayin-mobile"
         )
+        PostHogAnalytics.setupKmp(com.posthog.kmp.PostHogContext(application))
 
         SentrySettingsRepository.ensureLoaded()
         PostHogLogger.isEnabled = SentrySettingsRepository.enabled.value

@@ -79,7 +79,7 @@ private fun HomeCatalogRowSectionContent(
         catalogId = (section.target as? CatalogTarget.Addon)?.catalogId,
         addonName = section.addonName,
     )
-    val isSportsLocked = isSportsCatalog && !com.nuvio.app.features.license.LicenseRepository.isPlusMember
+    val isSportsLocked = isSportsCatalog && !com.nuvio.app.features.license.LicenseRepository.canAccessSports
     var showUpgradeDialog by remember { mutableStateOf(false) }
 
     if (showUpgradeDialog) {
@@ -99,7 +99,7 @@ private fun HomeCatalogRowSectionContent(
         viewAllPillSize = NuvioViewAllPillSize.Compact,
         key = { item -> item.stableKey() },
     ) { item ->
-        val itemLocked = isSportsLocked || (!com.nuvio.app.features.license.LicenseRepository.isPlusMember && com.nuvio.app.features.details.LiveMediaCleaner.isSportsItem(type = item.type, title = item.name, genres = item.genres, description = item.description))
+        val itemLocked = isSportsLocked || (!com.nuvio.app.features.license.LicenseRepository.canAccessSports && com.nuvio.app.features.details.LiveMediaCleaner.isSportsItem(type = item.type, title = item.name, genres = item.genres, description = item.description))
         HomePosterCard(
             item = item,
             useLandscapeBackdropMode = posterCardStyle.catalogLandscapeModeEnabled,

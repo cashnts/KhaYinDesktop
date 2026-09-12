@@ -1214,6 +1214,7 @@ kotlin {
             implementation(libs.supabase.functions)
             implementation(libs.supabase.storage)
             implementation(libs.reorderable)
+            implementation("com.posthog:posthog-kmp:0.5.1")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

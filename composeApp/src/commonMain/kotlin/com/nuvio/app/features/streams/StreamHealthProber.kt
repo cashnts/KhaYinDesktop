@@ -120,6 +120,8 @@ object StreamHealthProber {
             !isUncachedNotice &&
             (response.status in 200..299 || response.status in 300..399)
 
+        com.nuvio.app.core.network.NetworkQualityTracker.recordProbeLatency(latency, isSuccess)
+
         return StreamProbeResult(
             stream = stream,
             isLive = isSuccess,
@@ -153,6 +155,7 @@ object StreamHealthProber {
 
         val deadline = TimeSource.Monotonic.markNow()
         var receivedCount = 0
+        val currentNetTier = com.nuvio.app.core.network.NetworkQualityTracker.currentTier
 
         while (receivedCount < probePool.size) {
             val remainingMs = timeoutMs - deadline.elapsedNow().inWholeMilliseconds
@@ -165,20 +168,73 @@ object StreamHealthProber {
 
             receivedCount++
             if (result.isLive && !result.stream.isLowQualitySource && !result.stream.isUncachedStream) {
-                val score = PlayerResolutionHelper.calculateStreamQualityScore(result.stream)
+                val baseScore = PlayerResolutionHelper.calculateStreamQualityScore(result.stream)
                 val tier = PlayerResolutionHelper.detectResolutionTier(result.stream)
 
-                // Instant match for confirmed cached high-quality stream (4K or 1080p)
-                if (result.stream.isConfirmedCached &&
-                    (tier == VideoResolutionTier.UHD_4K || tier == VideoResolutionTier.QHD_2K || tier == VideoResolutionTier.FHD_1080P)
-                ) {
+                // Network line quality adaptive scoring
+                val adjustedScore = when (currentNetTier) {
+                    com.nuvio.app.core.network.NetworkQualityTier.POOR -> {
+                        // Bad line / high jitter: heavily penalize 4K/2K, reward 720p/1080p, heavily penalize slow response times
+                        val resAdjustment = when (tier) {
+                            VideoResolutionTier.UHD_4K -> -60_000L
+                            VideoResolutionTier.QHD_2K -> -30_000L
+                            VideoResolutionTier.FHD_1080P -> 5_000L
+                            VideoResolutionTier.HD_720P -> 25_000L
+                            VideoResolutionTier.SD_480P -> 15_000L
+                            else -> 0L
+                        }
+                        val latencyPenalty = (result.latencyMs * 20L).coerceAtMost(200_000L)
+                        baseScore + resAdjustment - latencyPenalty
+                    }
+                    com.nuvio.app.core.network.NetworkQualityTier.MODERATE -> {
+                        val resAdjustment = when (tier) {
+                            VideoResolutionTier.UHD_4K -> -20_000L
+                            VideoResolutionTier.QHD_2K -> 0L
+                            VideoResolutionTier.FHD_1080P -> 15_000L
+                            VideoResolutionTier.HD_720P -> 10_000L
+                            else -> 0L
+                        }
+                        val latencyPenalty = (result.latencyMs * 10L).coerceAtMost(100_000L)
+                        baseScore + resAdjustment - latencyPenalty
+                    }
+                    com.nuvio.app.core.network.NetworkQualityTier.GOOD -> {
+                        val latencyPenalty = (result.latencyMs * 5L).coerceAtMost(50_000L)
+                        baseScore - latencyPenalty
+                    }
+                    com.nuvio.app.core.network.NetworkQualityTier.EXCELLENT -> {
+                        val latencyPenalty = (result.latencyMs * 2L).coerceAtMost(20_000L)
+                        baseScore - latencyPenalty
+                    }
+                }
+
+                // Instant match check:
+                // On POOR network, DO NOT instant match 4K! Instant match 720p or fast 1080p.
+                // On MODERATE network, DO NOT instant match 4K! Instant match 1080p or 720p.
+                // On GOOD / EXCELLENT network, 4K/2K/1080p instant match when confirmed cached.
+                val canInstantMatch = when (currentNetTier) {
+                    com.nuvio.app.core.network.NetworkQualityTier.POOR -> {
+                        result.stream.isConfirmedCached &&
+                            (tier == VideoResolutionTier.HD_720P || (tier == VideoResolutionTier.FHD_1080P && result.latencyMs < 350L))
+                    }
+                    com.nuvio.app.core.network.NetworkQualityTier.MODERATE -> {
+                        result.stream.isConfirmedCached &&
+                            (tier == VideoResolutionTier.FHD_1080P || tier == VideoResolutionTier.HD_720P || tier == VideoResolutionTier.QHD_2K)
+                    }
+                    com.nuvio.app.core.network.NetworkQualityTier.GOOD,
+                    com.nuvio.app.core.network.NetworkQualityTier.EXCELLENT -> {
+                        result.stream.isConfirmedCached &&
+                            (tier == VideoResolutionTier.UHD_4K || tier == VideoResolutionTier.QHD_2K || tier == VideoResolutionTier.FHD_1080P)
+                    }
+                }
+
+                if (canInstantMatch) {
                     probeJobs.forEach { it.cancel() }
                     return@coroutineScope result.stream
                 }
 
-                if (score > bestScore) {
+                if (adjustedScore > bestScore) {
                     bestStream = result.stream
-                    bestScore = score
+                    bestScore = adjustedScore
                 }
             }
         }

@@ -70,6 +70,7 @@ internal class NativePlayerController(
     private var pendingSubtitleDelayMs: Int? = null
     private var pendingSubtitleStyle: SubtitleStyleState? = null
     private var pendingUseLibass: Boolean = false
+    private var pendingSubtitleUri: String? = null
     private var lastSentControlsStructureKey: NativeControlsStructureKey? = null
     private var onAction: (PlayerControlsAction) -> Boolean = { false }
     private var onEvent: (String, Double) -> Boolean = { _, _ -> false }
@@ -433,6 +434,7 @@ internal class NativePlayerController(
     private fun disposePlayerHandle() {
         val current = handle
         handle = 0L
+        pendingSubtitleUri = null
         lastSentControlsStructureKey = null
         if (current == 0L) return
         // Native shutdown blocks: it SendMessage()s the player's own UI thread and then joins it.
@@ -547,13 +549,20 @@ internal class NativePlayerController(
 
     override fun setSubtitleUri(url: String) {
         log.d { "setSubtitleUri ${url.toPlaybackLogKey()} handle=$handle" }
-        val current = handle.takeIf { it != 0L } ?: return
+        pendingSubtitleUri = url
+        val current = handle.takeIf { it != 0L } ?: run {
+            log.d { "setSubtitleUri queued pending handle=$handle" }
+            return
+        }
+        applySubtitleUri(current, url)
+    }
 
+    private fun applySubtitleUri(current: Long, url: String) {
         if (url.startsWith("http://", ignoreCase = true) || url.startsWith("https://", ignoreCase = true)) {
             subtitleDownloadJob?.cancel()
             subtitleDownloadJob = asyncScope.launch {
                 try {
-                    val text = fetchAddonResponseText(url)
+                    val text = fetchAddonResponseText(url, forceRefresh = true)
                     val ext = when {
                         url.contains(".vtt", ignoreCase = true) -> "vtt"
                         url.contains(".ass", ignoreCase = true) || url.contains(".ssa", ignoreCase = true) -> "ass"
@@ -590,12 +599,14 @@ internal class NativePlayerController(
 
     override fun clearExternalSubtitle() {
         log.d { "clearExternalSubtitle handle=$handle" }
+        pendingSubtitleUri = null
         subtitleDownloadJob?.cancel()
         subtitleDownloadJob = null
         handle.takeIf { it != 0L }?.let(NativePlayerBridge::clearExternalSubtitles)
     }
 
     override fun clearExternalSubtitleAndSelect(trackIndex: Int) {
+        pendingSubtitleUri = null
         val current = handle.takeIf { it != 0L } ?: return
         val trackId = if (trackIndex < 0) {
             -1
@@ -634,6 +645,9 @@ internal class NativePlayerController(
         }
         pendingSubtitleStyle?.let { style ->
             applySubtitleStyle(current, style, pendingUseLibass)
+        }
+        pendingSubtitleUri?.let { uri ->
+            applySubtitleUri(current, uri)
         }
     }
 

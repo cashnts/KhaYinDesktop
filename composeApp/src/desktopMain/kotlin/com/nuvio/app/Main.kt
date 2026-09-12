@@ -65,6 +65,7 @@ fun main(args: Array<String>) {
         deviceBrand = osArch,
         serviceName = "khayin-desktop"
     )
+    com.nuvio.app.core.analytics.PostHogAnalytics.setupKmp(com.posthog.kmp.PostHogContext())
 
     val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
     Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->

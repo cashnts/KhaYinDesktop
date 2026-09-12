@@ -411,15 +411,13 @@ internal fun HomescreenCatalogRow(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    text = if (item.isCollection) {
-                        stringResource(Res.string.settings_homescreen_collection_with_addon, item.addonName)
-                    } else {
-                        item.addonName
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = tokens.colors.textMuted,
-                )
+                if (item.isCollection) {
+                    Text(
+                        text = "Collection",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = tokens.colors.textMuted,
+                    )
+                }
                 Text(
                     text = buildString {
                         append(

@@ -17,12 +17,25 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
+import com.nuvio.app.core.analytics.PostHogAnalytics
 import kotlinx.serialization.json.Json
-
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+
+@Serializable
+data class PostHogFeatureFlag(
+    val id: Long,
+    val key: String,
+    val name: String = "",
+    val active: Boolean = false,
+)
 
 @Serializable
 data class PresetCatalogConfig(
@@ -128,6 +141,9 @@ object AdminControlRepository {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true }
     private val _config = MutableStateFlow(SystemServiceConfig())
     val config: StateFlow<SystemServiceConfig> = _config.asStateFlow()
+
+    private val _featureFlags = MutableStateFlow<List<PostHogFeatureFlag>>(emptyList())
+    val featureFlags: StateFlow<List<PostHogFeatureFlag>> = _featureFlags.asStateFlow()
 
     private val _dismissedBroadcastTimestamp = MutableStateFlow(0L)
     val dismissedBroadcastTimestamp: StateFlow<Long> = _dismissedBroadcastTimestamp.asStateFlow()
@@ -463,12 +479,57 @@ private data class AppSettingsDbRecord(
         )
     }
 
-    suspend fun fetchPostHogAnalytics(apiKey: String? = null, limit: Int = 300): Result<List<LicenseAnalyticsRecord>> = runCatching {
+    private fun extractJsonString(element: kotlinx.serialization.json.JsonElement?): String? {
+        if (element == null || element is kotlinx.serialization.json.JsonNull) return null
+        if (element is kotlinx.serialization.json.JsonPrimitive) {
+            val c = element.content
+            if (c.equals("null", ignoreCase = true) || c.isBlank()) return null
+            return c
+        }
+        return element.toString()
+    }
+
+    private fun extractJsonDouble(element: kotlinx.serialization.json.JsonElement?): Double? {
+        if (element == null || element is kotlinx.serialization.json.JsonNull) return null
+        if (element is kotlinx.serialization.json.JsonPrimitive) {
+            return element.content.toDoubleOrNull()
+        }
+        return null
+    }
+
+    suspend fun fetchPostHogAnalytics(apiKey: String? = null, limit: Int = 200): Result<List<LicenseAnalyticsRecord>> = runCatching {
         val key = apiKey?.trim()?.takeIf { it.isNotBlank() } ?: getEffectivePostHogApiKey()
         if (key.isBlank()) return@runCatching emptyList()
 
         val postHogQueryUrl = "https://aa.khayin.dev/api/projects/583868/query/"
-        val hogQlQuery = "SELECT event, distinct_id, timestamp, properties, person.properties FROM events ORDER BY timestamp DESC LIMIT $limit"
+        val hogQlQuery = """
+            SELECT
+                event,
+                distinct_id,
+                timestamp,
+                properties.platform,
+                properties.app_version,
+                properties.device_id,
+                properties.device_model,
+                properties.`${'$'}geoip_city_name`,
+                properties.`${'$'}geoip_country_name`,
+                person.properties.customer_name,
+                properties.level,
+                properties.message,
+                properties.`${'$'}exception_message`,
+                properties.session_id,
+                properties.media_title,
+                properties.stream_name,
+                properties.addon_name,
+                properties.search_query,
+                properties.duration_ms,
+                properties.position_ms,
+                properties.progress_percent
+            FROM events
+            ORDER BY timestamp DESC
+            LIMIT $limit
+        """.trimIndent()
+
         val queryBody = json.encodeToString(
             mapOf(
                 "query" to mapOf(
@@ -486,6 +547,7 @@ private data class AppSettingsDbRecord(
                 "Content-Type" to "application/json",
             ),
             body = queryBody,
+            maxResponseBodyBytes = 10 * 1024 * 1024,
         )
 
         val records = mutableListOf<LicenseAnalyticsRecord>()
@@ -499,21 +561,79 @@ private data class AppSettingsDbRecord(
             if (resultsArray != null) {
                 resultsArray.forEachIndexed { idx, item ->
                     val row = item as? kotlinx.serialization.json.JsonArray ?: return@forEachIndexed
-                    val event = (row.getOrNull(0) as? kotlinx.serialization.json.JsonPrimitive)?.content ?: ""
-                    val distinctId = (row.getOrNull(1) as? kotlinx.serialization.json.JsonPrimitive)?.content ?: ""
-                    val timestamp = (row.getOrNull(2) as? kotlinx.serialization.json.JsonPrimitive)?.content ?: ""
-                    val props = parsePropertiesElement(row.getOrNull(3))
-                    val personProps = parsePropertiesElement(row.getOrNull(4))
+                    if (row.size >= 15) {
+                        // Fast column-projected format
+                        val event = extractJsonString(row.getOrNull(0)).orEmpty()
+                        val distinctId = extractJsonString(row.getOrNull(1)).orEmpty()
+                        val timestamp = extractJsonString(row.getOrNull(2)).orEmpty()
+                        val platform = extractJsonString(row.getOrNull(3)) ?: "Desktop / Mobile"
+                        val appVersion = extractJsonString(row.getOrNull(4)).orEmpty()
+                        val deviceId = extractJsonString(row.getOrNull(5)) ?: extractJsonString(row.getOrNull(6)) ?: "Device"
+                        val city = extractJsonString(row.getOrNull(7))
+                        val country = extractJsonString(row.getOrNull(8))
+                        val location = listOfNotNull(city, country).filter { it.isNotBlank() }.joinToString(", ").takeIf { it.isNotBlank() }
+                        val customerName = extractJsonString(row.getOrNull(9))
+                        val logLevel = extractJsonString(row.getOrNull(10))
+                        val message = extractJsonString(row.getOrNull(11)) ?: extractJsonString(row.getOrNull(12))
+                        val sessionId = extractJsonString(row.getOrNull(13))
+                        val mediaTitle = extractJsonString(row.getOrNull(14))
+                        val streamName = extractJsonString(row.getOrNull(15))
+                        val addonName = extractJsonString(row.getOrNull(16))
+                        val searchQuery = extractJsonString(row.getOrNull(17))
+                        val durationMs = extractJsonDouble(row.getOrNull(18))?.toLong()
+                        val positionMs = extractJsonDouble(row.getOrNull(19))?.toLong()
+                        val progressPercent = extractJsonDouble(row.getOrNull(20))?.toFloat()
 
-                    val record = buildRecordFromProps(
-                        idx = idx,
-                        event = event,
-                        distinctId = distinctId,
-                        timestamp = timestamp,
-                        props = props,
-                        personProps = personProps,
-                    )
-                    records.add(record)
+                        val licenseKey = if (distinctId.isNotBlank() && !distinctId.startsWith("anon_")) {
+                            distinctId
+                        } else {
+                            customerName ?: distinctId
+                        }
+
+                        records.add(
+                            LicenseAnalyticsRecord(
+                                id = idx.toLong() + 1,
+                                license_key = licenseKey,
+                                device_id = deviceId.ifBlank { location ?: "Device" },
+                                platform = platform,
+                                version = appVersion,
+                                event = event,
+                                last_seen_at = timestamp,
+                                created_at = timestamp,
+                                customer_name = customerName,
+                                location = location,
+                                log_level = logLevel,
+                                log_message = message,
+                                session_id = sessionId,
+                                media_title = mediaTitle,
+                                stream_name = streamName,
+                                addon_name = addonName,
+                                search_query = searchQuery,
+                                duration_ms = durationMs,
+                                position_ms = positionMs,
+                                progress_percent = progressPercent,
+                                source = "PostHog",
+                            )
+                        )
+                    } else {
+                        // Legacy 5-column format
+                        val event = (row.getOrNull(0) as? kotlinx.serialization.json.JsonPrimitive)?.content ?: ""
+                        val distinctId = (row.getOrNull(1) as? kotlinx.serialization.json.JsonPrimitive)?.content ?: ""
+                        val timestamp = (row.getOrNull(2) as? kotlinx.serialization.json.JsonPrimitive)?.content ?: ""
+                        val props = parsePropertiesElement(row.getOrNull(3))
+                        val personProps = parsePropertiesElement(row.getOrNull(4))
+
+                        records.add(
+                            buildRecordFromProps(
+                                idx = idx,
+                                event = event,
+                                distinctId = distinctId,
+                                timestamp = timestamp,
+                                props = props,
+                                personProps = personProps,
+                            )
+                        )
+                    }
                 }
             }
         }
@@ -529,6 +649,7 @@ private data class AppSettingsDbRecord(
                     "Content-Type" to "application/json",
                 ),
                 body = "",
+                maxResponseBodyBytes = 10 * 1024 * 1024,
             )
             if (fallbackResp.status in 200..299 && !fallbackResp.body.startsWith("<")) {
                 val root = runCatching {
@@ -585,6 +706,101 @@ private data class AppSettingsDbRecord(
 
     suspend fun fetchAnalytics(limit: Int = 300): Result<List<LicenseAnalyticsRecord>> =
         fetchPostHogAnalytics(limit = limit)
+
+    suspend fun fetchFeatureFlags(apiKey: String? = null): Result<List<PostHogFeatureFlag>> = runCatching {
+        val key = apiKey?.trim()?.takeIf { it.isNotBlank() } ?: getEffectivePostHogApiKey()
+        if (key.isBlank()) return@runCatching emptyList()
+
+        val url = "https://aa.khayin.dev/api/projects/583868/feature_flags/?limit=100"
+        val response = httpRequestRaw(
+            method = "GET",
+            url = url,
+            headers = mapOf(
+                "Authorization" to "Bearer $key",
+                "Content-Type" to "application/json",
+            ),
+            body = "",
+            maxResponseBodyBytes = 2 * 1024 * 1024,
+        )
+        if (response.status !in 200..299) {
+            throw IllegalStateException("Failed to fetch feature flags (${response.status})")
+        }
+
+        val parsedJson = json.parseToJsonElement(response.body).jsonObject
+        val results = parsedJson["results"]?.jsonArray ?: JsonArray(emptyList())
+        val parsed = results.mapNotNull { element ->
+            val obj = element.jsonObject
+            val id = obj["id"]?.jsonPrimitive?.content?.toLongOrNull() ?: return@mapNotNull null
+            val flagKey = obj["key"]?.jsonPrimitive?.content ?: return@mapNotNull null
+            val name = obj["name"]?.jsonPrimitive?.content.orEmpty()
+            val active = obj["active"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
+            val deleted = obj["deleted"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
+            if (deleted) null else PostHogFeatureFlag(id = id, key = flagKey, name = name, active = active)
+        }.sortedBy { it.key }
+        _featureFlags.value = parsed
+        parsed
+    }
+
+    suspend fun updateFeatureFlagStatus(flagId: Long, active: Boolean, apiKey: String? = null): Result<Unit> = runCatching {
+        val key = apiKey?.trim()?.takeIf { it.isNotBlank() } ?: getEffectivePostHogApiKey()
+        val url = "https://aa.khayin.dev/api/projects/583868/feature_flags/$flagId/"
+        val payload = buildJsonObject {
+            put("active", active)
+        }
+        val response = httpRequestRaw(
+            method = "PATCH",
+            url = url,
+            headers = mapOf(
+                "Authorization" to "Bearer $key",
+                "Content-Type" to "application/json",
+            ),
+            body = payload.toString(),
+            maxResponseBodyBytes = 1024 * 1024,
+        )
+        if (response.status !in 200..299) {
+            throw IllegalStateException("Failed to update flag (${response.status})")
+        }
+        _featureFlags.value = _featureFlags.value.map {
+            if (it.id == flagId) it.copy(active = active) else it
+        }
+        PostHogAnalytics.reloadFeatureFlags()
+    }
+
+    suspend fun createFeatureFlag(key: String, name: String = "", active: Boolean = true, apiKey: String? = null): Result<PostHogFeatureFlag> = runCatching {
+        val apiKeyToUse = apiKey?.trim()?.takeIf { it.isNotBlank() } ?: getEffectivePostHogApiKey()
+        val url = "https://aa.khayin.dev/api/projects/583868/feature_flags/"
+        val payload = buildJsonObject {
+            put("key", key.trim())
+            put("name", name.trim())
+            put("active", active)
+            put("filters", buildJsonObject {
+                put("groups", buildJsonArray {
+                    add(buildJsonObject {
+                        put("rollout_percentage", 100)
+                    })
+                })
+            })
+        }
+        val response = httpRequestRaw(
+            method = "POST",
+            url = url,
+            headers = mapOf(
+                "Authorization" to "Bearer $apiKeyToUse",
+                "Content-Type" to "application/json",
+            ),
+            body = payload.toString(),
+            maxResponseBodyBytes = 1024 * 1024,
+        )
+        if (response.status !in 200..299) {
+            throw IllegalStateException("Failed to create flag (${response.status})")
+        }
+        val obj = json.parseToJsonElement(response.body).jsonObject
+        val id = obj["id"]?.jsonPrimitive?.content?.toLongOrNull() ?: 0L
+        val created = PostHogFeatureFlag(id = id, key = key.trim(), name = name.trim(), active = active)
+        _featureFlags.value = (_featureFlags.value.filterNot { it.id == id || it.key == key.trim() } + created).sortedBy { it.key }
+        PostHogAnalytics.reloadFeatureFlags()
+        created
+    }
 
     fun groupSessions(
         records: List<LicenseAnalyticsRecord>,

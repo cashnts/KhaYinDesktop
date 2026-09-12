@@ -46,6 +46,7 @@ import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.SystemUpdate
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -59,6 +60,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -88,12 +90,9 @@ import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import kotlinx.coroutines.launch
 
 private enum class AdminHubTab(val label: String) {
-    Licenses("License Keys"),
-    Analytics("Analytics & Telemetry"),
+    Analytics("Telemetry"),
+    Licenses("Licenses"),
     ServiceControls("Service Controls"),
-    UserDevices("User Devices"),
-    MassAddons("Addon Management"),
-    Catalogs("Catalog Management"),
 }
 
 @Composable
@@ -102,10 +101,8 @@ fun AdminLicenseScreen(
     modifier: Modifier = Modifier,
 ) {
     var adminPassword by remember { mutableStateOf("") }
-    var isUnlocked by remember { mutableStateOf(false) }
-    var isAuthenticating by remember { mutableStateOf(false) }
     var authError by remember { mutableStateOf<String?>(null) }
-    var selectedTab by remember { mutableStateOf(AdminHubTab.Licenses) }
+    var selectedTab by remember { mutableStateOf(AdminHubTab.Analytics) }
 
     var licenses by remember { mutableStateOf<List<LicenseInfo>>(emptyList()) }
     var isLoadingList by remember { mutableStateOf(false) }
@@ -114,6 +111,18 @@ fun AdminLicenseScreen(
     // Analytics State
     var analyticsRecords by remember { mutableStateOf<List<LicenseAnalyticsRecord>>(emptyList()) }
     var isLoadingAnalytics by remember { mutableStateOf(false) }
+    var analyticsError by remember { mutableStateOf<String?>(null) }
+    var lastAnalyticsSyncTime by remember { mutableStateOf<String?>(null) }
+
+    // Feature Flags State
+    var showFeatureFlagsDialog by remember { mutableStateOf(false) }
+    val featureFlags by AdminControlRepository.featureFlags.collectAsState()
+    var isLoadingFeatureFlags by remember { mutableStateOf(false) }
+    var featureFlagsError by remember { mutableStateOf<String?>(null) }
+    var updatingFlagId by remember { mutableStateOf<Long?>(null) }
+    var newFlagKey by remember { mutableStateOf("") }
+    var isCreatingFlag by remember { mutableStateOf(false) }
+    var showCreateFlagForm by remember { mutableStateOf(false) }
 
     // Generator Form State
     var customerName by remember { mutableStateOf("") }
@@ -157,16 +166,85 @@ fun AdminLicenseScreen(
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
 
+    // Dynamic real-time synchronization with PostHog feature flags
+    androidx.compose.runtime.LaunchedEffect(showFeatureFlagsDialog) {
+        AdminControlRepository.fetchFeatureFlags()
+        while (true) {
+            val interval = if (showFeatureFlagsDialog) 4_000L else 15_000L
+            kotlinx.coroutines.delay(interval)
+            AdminControlRepository.fetchFeatureFlags()
+        }
+    }
+
+    fun loadFeatureFlags() {
+        isLoadingFeatureFlags = true
+        featureFlagsError = null
+        scope.launch {
+            AdminControlRepository.fetchFeatureFlags().fold(
+                onSuccess = {
+                    isLoadingFeatureFlags = false
+                },
+                onFailure = { err ->
+                    isLoadingFeatureFlags = false
+                    featureFlagsError = err.message ?: "Failed to load feature flags"
+                }
+            )
+        }
+    }
+
+    fun toggleFeatureFlag(flag: PostHogFeatureFlag) {
+        val newActive = !flag.active
+        updatingFlagId = flag.id
+        scope.launch {
+            AdminControlRepository.updateFeatureFlagStatus(flag.id, newActive).fold(
+                onSuccess = {
+                    updatingFlagId = null
+                    actionToast = "Flag '${flag.key}' set to ${if (newActive) "Active" else "Disabled"}"
+                },
+                onFailure = { err ->
+                    updatingFlagId = null
+                    featureFlagsError = "Failed to update flag: ${err.message}"
+                }
+            )
+        }
+    }
+
+    fun createNewFeatureFlag() {
+        val key = newFlagKey.trim().lowercase().replace(" ", "-")
+        if (key.isBlank()) return
+        isCreatingFlag = true
+        featureFlagsError = null
+        scope.launch {
+            AdminControlRepository.createFeatureFlag(key = key, active = true).fold(
+                onSuccess = { newFlag ->
+                    isCreatingFlag = false
+                    newFlagKey = ""
+                    showCreateFlagForm = false
+                    actionToast = "Flag '${newFlag.key}' created"
+                    AdminControlRepository.fetchFeatureFlags()
+                },
+                onFailure = { err ->
+                    isCreatingFlag = false
+                    featureFlagsError = "Failed to create flag: ${err.message}"
+                }
+            )
+        }
+    }
+
     fun loadAnalytics() {
         isLoadingAnalytics = true
+        analyticsError = null
         scope.launch {
-            AdminControlRepository.fetchAnalytics(300).fold(
+            AdminControlRepository.fetchAnalytics(200).fold(
                 onSuccess = { list ->
                     isLoadingAnalytics = false
                     analyticsRecords = list
+                    analyticsError = null
+                    lastAnalyticsSyncTime = com.nuvio.app.features.watchprogress.CurrentDateProvider.todayIsoDate()
                 },
-                onFailure = {
+                onFailure = { err ->
                     isLoadingAnalytics = false
+                    analyticsError = err.message ?: "Failed to connect to PostHog Telemetry"
                 },
             )
         }
@@ -209,18 +287,35 @@ fun AdminLicenseScreen(
         adminHideUnreleased = cfg.hideUnreleasedContent
     }
 
+    // High-Level KPI Aggregations
+    val liveSessionsCount = remember(analyticsRecords) {
+        AdminControlRepository.groupSessions(analyticsRecords).count { it.isLive }
+    }
+    val totalPlaybacksCount = remember(analyticsRecords) {
+        analyticsRecords.count { it.event == "playback_started" || it.event == "playback_stopped" || it.event == "playback_resumed" }
+    }
+    val activeLicensesCount = remember(licenses) {
+        licenses.count { it.status == "active" && !isDateExpired(it.expiresAt) }
+    }
+    val errorRecordsCount = remember(analyticsRecords) {
+        analyticsRecords.count { r ->
+            val evt = r.event.orEmpty().lowercase()
+            evt == "${'$'}exception" || evt.contains("error") || evt == "playback_failed" || r.log_level?.equals("error", ignoreCase = true) == true
+        }
+    }
+
     // Unlocked Admin Management UI
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF0D0D11)),
+            .background(Color(0xFF0D0D12)),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Header bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF13131A))
+                    .background(Color(0xFF13131D))
                     .padding(horizontal = 20.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -237,15 +332,33 @@ fun AdminLicenseScreen(
                     )
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = stringResource(Res.string.settings_admin_control_hub_title),
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                ),
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFF00E699).copy(alpha = 0.15f))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                            ) {
+                                Text(
+                                    text = "ADMIN",
+                                    style = TextStyle(
+                                        color = Color(0xFF00E699),
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                )
+                            }
+                        }
                         Text(
-                            text = stringResource(Res.string.settings_admin_control_hub_title),
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                            ),
-                        )
-                        Text(
-                            text = "KhaYin Media Server Operations",
+                            text = "Telemetry, licenses, and service controls",
                             style = MaterialTheme.typography.bodySmall.copy(
                                 color = Color(0xFF888899),
                                 fontSize = 11.sp,
@@ -254,66 +367,133 @@ fun AdminLicenseScreen(
                     }
                 }
 
-                Button(
-                    onClick = {
-                        refreshList()
-                        loadAnalytics()
-                        scope.launch {
-                            val cfg = AdminControlRepository.fetchConfig()
-                            maintenanceModeEnabled = cfg.maintenanceMode
-                            maintenanceNotice = cfg.maintenanceNotice
-                            streamingDisabled = cfg.streamingDisabled
-                            streamingNotice = cfg.streamingDisabledNotice
-                            broadcastAlertMessage = cfg.broadcastMessage
-                            broadcastSeverity = cfg.broadcastSeverity
-                            disabledAddonsText = cfg.disabledAddons.joinToString("\n")
-                            if (cfg.presetAddons.isNotEmpty()) {
-                                addonManifestUrls = cfg.presetAddons.joinToString("\n")
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        onClick = {
+                            showFeatureFlagsDialog = true
+                            loadFeatureFlags()
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF222234),
+                            contentColor = Color.White,
+                        ),
+                    ) {
+                        Icon(imageVector = Icons.Rounded.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Feature Flags", fontSize = 13.sp)
+                    }
+
+                    Button(
+                        onClick = {
+                            refreshList()
+                            loadAnalytics()
+                            scope.launch {
+                                val cfg = AdminControlRepository.fetchConfig()
+                                maintenanceModeEnabled = cfg.maintenanceMode
+                                maintenanceNotice = cfg.maintenanceNotice
+                                streamingDisabled = cfg.streamingDisabled
+                                streamingNotice = cfg.streamingDisabledNotice
+                                broadcastAlertMessage = cfg.broadcastMessage
+                                broadcastSeverity = cfg.broadcastSeverity
+                                disabledAddonsText = cfg.disabledAddons.joinToString("\n")
+                                if (cfg.presetAddons.isNotEmpty()) {
+                                    addonManifestUrls = cfg.presetAddons.joinToString("\n")
+                                }
+                                adminAddonMetadata = cfg.addonMetadata
+                                adminPresetCatalogs = cfg.presetCatalogs
+                                adminHeroEnabled = cfg.heroCarouselEnabled
+                                adminShowCatalogType = cfg.showCatalogType
+                                adminHideUnreleased = cfg.hideUnreleasedContent
                             }
-                            adminAddonMetadata = cfg.addonMetadata
-                            adminPresetCatalogs = cfg.presetCatalogs
-                            adminHeroEnabled = cfg.heroCarouselEnabled
-                            adminShowCatalogType = cfg.showCatalogType
-                            adminHideUnreleased = cfg.hideUnreleasedContent
-                        }
-                    },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF222230),
-                        contentColor = Color.White,
-                    ),
-                ) {
-                    Icon(imageVector = Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Refresh", fontSize = 13.sp)
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF222234),
+                            contentColor = Color.White,
+                        ),
+                    ) {
+                        Icon(imageVector = Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (isLoadingAnalytics || isLoadingList) "Syncing..." else "Refresh", fontSize = 13.sp)
+                    }
                 }
             }
 
-            // Navigation Tabs
+            // Top KPI Overview Cards
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF161622))
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                AnalyticsMetricCard(
+                    title = "LIVE USERS",
+                    value = "$liveSessionsCount",
+                    subtitle = if (liveSessionsCount > 0) "$liveSessionsCount active in past 3m" else "No active sessions",
+                    accentColor = if (liveSessionsCount > 0) Color(0xFF00E699) else Color(0xFF888899),
+                    modifier = Modifier.weight(1f),
+                )
+                AnalyticsMetricCard(
+                    title = "ACTIVE LICENSES",
+                    value = "$activeLicensesCount",
+                    subtitle = "${licenses.size} keys issued",
+                    accentColor = Color(0xFF3399FF),
+                    modifier = Modifier.weight(1f),
+                )
+                AnalyticsMetricCard(
+                    title = "MEDIA PLAYBACKS",
+                    value = "$totalPlaybacksCount",
+                    subtitle = "${analyticsRecords.size} events",
+                    accentColor = Color(0xFFAA77FF),
+                    modifier = Modifier.weight(1f),
+                )
+                AnalyticsMetricCard(
+                    title = "SYSTEM HEALTH",
+                    value = if (errorRecordsCount == 0) "100%" else "$errorRecordsCount Issues",
+                    subtitle = if (errorRecordsCount == 0) "Operational" else "Alerts logged",
+                    accentColor = if (errorRecordsCount == 0) Color(0xFF00E699) else Color(0xFFFF5252),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            // Streamlined Navigation Tabs
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF14141E))
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 AdminHubTab.values().forEach { tab ->
                     val selected = selectedTab == tab
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (selected) Color(0xFF00E699) else Color.Transparent)
+                            .background(if (selected) Color(0xFF00E699) else Color(0xFF1C1C28))
+                            .border(1.dp, if (selected) Color(0xFF00E699) else Color(0xFF2C2C3C), RoundedCornerShape(8.dp))
                             .clickable { selectedTab = tab }
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                            .padding(horizontal = 16.dp, vertical = 9.dp),
                     ) {
-                        Text(
-                            text = tab.label,
-                            style = TextStyle(
-                                color = if (selected) Color.Black else Color(0xFF9E9EA7),
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                fontSize = 13.sp,
-                            ),
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (tab == AdminHubTab.Analytics && liveSessionsCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .clip(CircleShape)
+                                        .background(if (selected) Color.Black else Color(0xFF00E699)),
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                            }
+                            Text(
+                                text = tab.label,
+                                style = TextStyle(
+                                    color = if (selected) Color.Black else Color(0xFFCCCEDD),
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+                                    fontSize = 13.sp,
+                                ),
+                            )
+                        }
                     }
                 }
             }
@@ -348,6 +528,15 @@ fun AdminLicenseScreen(
 
             // Tab Content
             when (selectedTab) {
+                AdminHubTab.Analytics -> {
+                    AnalyticsTabContent(
+                        analytics = analyticsRecords,
+                        licenses = licenses,
+                        isLoading = isLoadingAnalytics,
+                        errorMessage = analyticsError,
+                        onRefresh = { loadAnalytics() },
+                    )
+                }
                 AdminHubTab.Licenses -> {
                     LicensesTabContent(
                         licenses = licenses,
@@ -432,83 +621,6 @@ fun AdminLicenseScreen(
                         onDeleteKey = { key ->
                             licenseToDelete = key
                         },
-                    )
-                }
-                AdminHubTab.MassAddons -> {
-                    AdminAddonManagementTabContent(
-                        initialUrls = addonManifestUrls.lines().map { it.trim() }.filter { it.isNotBlank() },
-                        initialDisabledAddons = disabledAddonsText.lines().map { it.trim() }.filter { it.isNotBlank() },
-                        initialAddonMetadata = adminAddonMetadata,
-                        onSaveAndBroadcast = { newPresets, newDisabled, newMetadata ->
-                            isPushingAddons = true
-                            addonManifestUrls = newPresets.joinToString("\n")
-                            disabledAddonsText = newDisabled.joinToString("\n")
-                            adminAddonMetadata = newMetadata
-                            scope.launch {
-                                val currentConfig = AdminControlRepository.config.value
-                                val updatedConfig = currentConfig.copy(
-                                    presetAddons = newPresets,
-                                    disabledAddons = newDisabled,
-                                    addonMetadata = newMetadata,
-                                )
-                                AdminControlRepository.updateConfig(updatedConfig).fold(
-                                    onSuccess = {
-                                        isPushingAddons = false
-                                        addonPushStatus = "Broadcasted ${newPresets.size} addons (${newDisabled.size} blacklisted) to all clients."
-                                        actionToast = "Broadcasted ${newPresets.size} addons to all clients."
-                                    },
-                                    onFailure = { err ->
-                                        isPushingAddons = false
-                                        addonPushStatus = "Broadcast error: ${err.message}"
-                                    },
-                                )
-                            }
-                        },
-                        isBroadcasting = isPushingAddons,
-                        broadcastStatus = addonPushStatus,
-                        onCopyToast = { actionToast = it },
-                        onNavigateToCatalogs = { selectedTab = AdminHubTab.Catalogs },
-                    )
-                }
-
-                AdminHubTab.Catalogs -> {
-                    AdminCatalogManagementTabContent(
-                        configuredAddonUrls = addonManifestUrls.lines().map { it.trim() }.filter { it.isNotBlank() },
-                        initialPresetCatalogs = adminPresetCatalogs,
-                        initialHeroEnabled = adminHeroEnabled,
-                        initialShowCatalogType = adminShowCatalogType,
-                        initialHideUnreleased = adminHideUnreleased,
-                        onSaveAndBroadcastCatalogs = { catalogs, hero, showType, hideUnrel ->
-                            isPushingCatalogs = true
-                            adminPresetCatalogs = catalogs
-                            adminHeroEnabled = hero
-                            adminShowCatalogType = showType
-                            adminHideUnreleased = hideUnrel
-                            scope.launch {
-                                val currentConfig = AdminControlRepository.config.value
-                                val updatedConfig = currentConfig.copy(
-                                    presetCatalogs = catalogs,
-                                    heroCarouselEnabled = hero,
-                                    showCatalogType = showType,
-                                    hideUnreleasedContent = hideUnrel,
-                                )
-                                AdminControlRepository.updateConfig(updatedConfig).fold(
-                                    onSuccess = {
-                                        isPushingCatalogs = false
-                                        catalogPushStatus = "Broadcasted ${catalogs.size} catalog placements to all clients."
-                                        actionToast = "Broadcasted ${catalogs.size} catalogs to all clients."
-                                    },
-                                    onFailure = { err ->
-                                        isPushingCatalogs = false
-                                        catalogPushStatus = "Broadcast error: ${err.message}"
-                                    },
-                                )
-                            }
-                        },
-                        isBroadcasting = isPushingCatalogs,
-                        broadcastStatus = catalogPushStatus,
-                        onCopyToast = { actionToast = it },
-                        onNavigateToAddons = { selectedTab = AdminHubTab.MassAddons },
                     )
                 }
                 AdminHubTab.ServiceControls -> {
@@ -622,17 +734,6 @@ fun AdminLicenseScreen(
                         },
                     )
                 }
-                AdminHubTab.Analytics -> {
-                    AnalyticsTabContent(
-                        analytics = analyticsRecords,
-                        licenses = licenses,
-                        isLoading = isLoadingAnalytics,
-                        onRefresh = { loadAnalytics() },
-                    )
-                }
-                AdminHubTab.UserDevices -> {
-                    UserDevicesTabContent(licenses = licenses)
-                }
             }
         }
     }
@@ -678,6 +779,266 @@ fun AdminLicenseScreen(
             dismissButton = {
                 TextButton(onClick = { licenseToDelete = null }) {
                     Text("Cancel", color = Color(0xFF888899))
+                }
+            },
+        )
+    }
+
+    if (showFeatureFlagsDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showFeatureFlagsDialog = false
+                showCreateFlagForm = false
+                featureFlagsError = null
+            },
+            confirmButton = {},
+            dismissButton = {},
+            shape = RoundedCornerShape(12.dp),
+            containerColor = Color(0xFF14141E),
+            modifier = Modifier.widthIn(min = 420.dp, max = 560.dp),
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                ) {
+                    // Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column {
+                            Text(
+                                text = "Feature Flags",
+                                style = TextStyle(
+                                    color = Color.White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                            )
+                            Text(
+                                text = "PostHog remote toggles",
+                                style = TextStyle(
+                                    color = Color(0xFF888899),
+                                    fontSize = 11.sp,
+                                ),
+                            )
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Rounded.Refresh,
+                                contentDescription = "Refresh",
+                                tint = Color(0xFF888899),
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clip(CircleShape)
+                                    .clickable { loadFeatureFlags() },
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Icon(
+                                imageVector = Icons.Rounded.Close,
+                                contentDescription = "Close",
+                                tint = Color(0xFF888899),
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clip(CircleShape)
+                                    .clickable {
+                                        showFeatureFlagsDialog = false
+                                        showCreateFlagForm = false
+                                        featureFlagsError = null
+                                    },
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    featureFlagsError?.let { err ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF331616))
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                        ) {
+                            Text(
+                                text = err,
+                                style = TextStyle(color = Color(0xFFFF6666), fontSize = 12.sp),
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    if (isLoadingFeatureFlags && featureFlags.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(140.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            NuvioLoadingIndicator(modifier = Modifier.size(28.dp))
+                        }
+                    } else if (featureFlags.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(80.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "No feature flags configured",
+                                style = TextStyle(color = Color(0xFF666677), fontSize = 13.sp),
+                            )
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            featureFlags.forEach { flag ->
+                                val isUpdating = updatingFlagId == flag.id
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFF1B1B28))
+                                        .border(1.dp, Color(0xFF28283C), RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = flag.key,
+                                                style = TextStyle(
+                                                    color = Color.White,
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    fontFamily = FontFamily.Monospace,
+                                                ),
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(4.dp))
+                                                    .background(
+                                                        if (flag.active) Color(0xFF00E699).copy(alpha = 0.15f)
+                                                        else Color(0xFF282836)
+                                                    )
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                                            ) {
+                                                Text(
+                                                    text = if (flag.active) "ACTIVE" else "OFF",
+                                                    style = TextStyle(
+                                                        color = if (flag.active) Color(0xFF00E699) else Color(0xFF888899),
+                                                        fontSize = 9.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                    ),
+                                                )
+                                            }
+                                        }
+                                        if (flag.name.isNotBlank() && flag.name != flag.key) {
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = flag.name,
+                                                style = TextStyle(color = Color(0xFF888899), fontSize = 11.sp),
+                                            )
+                                        }
+                                    }
+
+                                    Switch(
+                                        checked = flag.active,
+                                        onCheckedChange = { toggleFeatureFlag(flag) },
+                                        enabled = !isUpdating,
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = Color.White,
+                                            checkedTrackColor = Color(0xFF00E699),
+                                            uncheckedThumbColor = Color(0xFF888899),
+                                            uncheckedTrackColor = Color(0xFF282838),
+                                        ),
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    if (!showCreateFlagForm) {
+                        OutlinedButton(
+                            onClick = { showCreateFlagForm = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF00E699)),
+                            border = BorderStroke(1.dp, Color(0xFF00E699).copy(alpha = 0.4f)),
+                        ) {
+                            Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Add Flag", fontSize = 13.sp)
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF1B1B28))
+                                .border(1.dp, Color(0xFF28283C), RoundedCornerShape(8.dp))
+                                .padding(12.dp),
+                        ) {
+                            Text(
+                                text = "New Flag Key",
+                                style = TextStyle(color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold),
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            BasicTextField(
+                                value = newFlagKey,
+                                onValueChange = { newFlagKey = it.lowercase().replace(" ", "-") },
+                                textStyle = TextStyle(color = Color.White, fontSize = 13.sp, fontFamily = FontFamily.Monospace),
+                                singleLine = true,
+                                cursorBrush = SolidColor(Color(0xFF00E699)),
+                                decorationBox = { innerTextField ->
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Color(0xFF13131D))
+                                            .border(1.dp, Color(0xFF2C2C3E), RoundedCornerShape(6.dp))
+                                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    ) {
+                                        if (newFlagKey.isEmpty()) {
+                                            Text("flag-key-name", color = Color(0xFF555566), fontSize = 13.sp, fontFamily = FontFamily.Monospace)
+                                        }
+                                        innerTextField()
+                                    }
+                                },
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                            ) {
+                                TextButton(
+                                    onClick = { showCreateFlagForm = false },
+                                ) {
+                                    Text("Cancel", color = Color(0xFF888899), fontSize = 12.sp)
+                                }
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Button(
+                                    onClick = { createNewFeatureFlag() },
+                                    enabled = newFlagKey.isNotBlank() && !isCreatingFlag,
+                                    shape = RoundedCornerShape(6.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF00E699),
+                                        contentColor = Color.Black,
+                                    ),
+                                ) {
+                                    Text(if (isCreatingFlag) "Creating..." else "Create", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
                 }
             },
         )
@@ -1340,57 +1701,6 @@ private fun ServiceControlsTabContent(
 }
 
 @Composable
-private fun UserDevicesTabContent(licenses: List<LicenseInfo>) {
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        item {
-            Text(
-                text = "ACTIVE DEVICE REGISTRATIONS (${licenses.sumOf { it.activeDevices }} Devices)",
-                style = MaterialTheme.typography.labelMedium.copy(color = Color.White, fontWeight = FontWeight.Bold),
-            )
-        }
-
-        items(licenses) { lic ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF16161E))
-                    .border(1.dp, Color(0xFF262633), RoundedCornerShape(10.dp))
-                    .padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column {
-                    Text(text = lic.customerName ?: "User Client", style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold))
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Key: ${lic.key} • Tier: ${if (lic.isPlus) "PLUS" else "STANDARD"}",
-                        style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp, fontFamily = FontFamily.Monospace),
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFF222230))
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                ) {
-                    Text(
-                        text = "${lic.activeDevices}/${lic.maxDevices} Devices",
-                        style = TextStyle(color = Color(0xFF00E699), fontSize = 12.sp, fontWeight = FontWeight.Bold),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun LicenseCardItem(
     license: LicenseInfo,
     onCopy: () -> Unit,
@@ -1551,6 +1861,7 @@ private fun AnalyticsTabContent(
     analytics: List<LicenseAnalyticsRecord>,
     licenses: List<LicenseInfo>,
     isLoading: Boolean,
+    errorMessage: String? = null,
     onRefresh: () -> Unit,
 ) {
     var searchFilter by remember { mutableStateOf("") }
@@ -1758,6 +2069,41 @@ private fun AnalyticsTabContent(
                         Icon(imageVector = Icons.Rounded.Refresh, contentDescription = "Refresh", modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(if (isLoading) "Updating..." else "Refresh", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // Error Banner
+        if (!errorMessage.isNullOrBlank()) {
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF3B1818))
+                        .border(1.dp, Color(0xFFFF4D4D).copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text(
+                            text = errorMessage,
+                            style = TextStyle(color = Color(0xFFFFCCCC), fontSize = 12.sp),
+                        )
+                    }
+                    Button(
+                        onClick = onRefresh,
+                        shape = RoundedCornerShape(6.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF4D4D), contentColor = Color.White),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    ) {
+                        Text("Retry", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }

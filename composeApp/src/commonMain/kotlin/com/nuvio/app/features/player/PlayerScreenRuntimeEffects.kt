@@ -58,7 +58,7 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
     }
 
     LaunchedEffect(isLive) {
-        if (isLive && !com.nuvio.app.features.license.LicenseRepository.isPlusMember) {
+        if (isLive && !com.nuvio.app.features.license.LicenseRepository.canAccessSports) {
             errorMessage = "Upgrade to Plus to access sports streams."
             shouldPlay = false
         }
@@ -265,6 +265,30 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
                 return@LaunchedEffect
             }
             delay(300)
+        }
+    }
+
+    LaunchedEffect(
+        addonSubtitles,
+        isLoadingAddonSubtitles,
+        preferredSubtitleSelectionApplied,
+        playerController,
+    ) {
+        if (preferredSubtitleSelectionApplied) return@LaunchedEffect
+        if (useCustomSubtitles && selectedAddonSubtitleId != null) return@LaunchedEffect
+        val preferredTargets = preferredSubtitleTargetsForSettings(playerSettingsUiState)
+        if (preferredTargets.isEmpty()) return@LaunchedEffect
+
+        if (addonSubtitles.isNotEmpty()) {
+            val matched = tryAutoSelectAddonSubtitle(preferredTargets)
+            if (matched) {
+                preferredSubtitleSelectionApplied = true
+                return@LaunchedEffect
+            }
+        }
+
+        if (!isLoadingAddonSubtitles && autoFetchedAddonSubtitlesForKey != null) {
+            preferredSubtitleSelectionApplied = true
         }
     }
 

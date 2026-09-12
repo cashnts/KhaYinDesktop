@@ -231,11 +231,11 @@ private fun HeroSourcesDropdown(
                         ) {
                             stringResource(
                                 Res.string.settings_homescreen_limit_reached,
-                                item.addonName,
+                                item.displayTitle,
                                 HomeCatalogSettingsRepository.HERO_SOURCE_SELECTION_LIMIT,
                             )
                         } else {
-                            item.addonName
+                            null
                         },
                         checked = item.heroSourceEnabled,
                         enabled = item.heroSourceEnabled ||

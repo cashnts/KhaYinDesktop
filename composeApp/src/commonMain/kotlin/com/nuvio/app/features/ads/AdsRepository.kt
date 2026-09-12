@@ -14,6 +14,11 @@ object AdsRepository {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     suspend fun getNextAd(): AdsResult {
+        com.nuvio.app.core.analytics.PostHogAnalytics.awaitFlagsLoaded(1000L)
+        if (!com.nuvio.app.core.analytics.PostHogAnalytics.isAdsEnabled()) {
+            log.i { "Ads disabled by PostHog feature flag" }
+            return AdsResult.Disabled
+        }
         com.nuvio.app.core.analytics.PostHogAnalytics.trackAdRequested(
             adType = "preroll",
             isFreeUser = LicenseRepository.isFreeUser
@@ -81,6 +86,11 @@ object AdsRepository {
     }
 
     suspend fun getNextPrerollAd(stream: StreamItem?): StreamPreroll? {
+        com.nuvio.app.core.analytics.PostHogAnalytics.awaitFlagsLoaded(1000L)
+        if (!com.nuvio.app.core.analytics.PostHogAnalytics.isAdsEnabled()) {
+            log.d { "Skipping preroll: ads disabled by PostHog feature flag" }
+            return null
+        }
         if (!LicenseRepository.isFreeUser) {
             log.d { "Skipping preroll: user is paid/licensed (isFreeUser=false)" }
             return null

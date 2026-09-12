@@ -29,3 +29,18 @@ data class SubtitleTranslationStatusDto(
     val progressPercent: Int? = null,
     val isComplete: Boolean = false
 )
+
+@Serializable
+data class SubtitleSeekRequestDto(
+    val id: String,
+    val currentTime: Double
+)
+
+@Serializable
+data class SubtitleSeekResponseDto(
+    val success: Boolean = false,
+    val mediaId: String? = null,
+    val targetSection: Int? = null,
+    val isReady: Boolean = false,
+    val inFlight: Boolean = false
+)
