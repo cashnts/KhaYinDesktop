@@ -1,4 +1,8 @@
 <resources>
+    <string name="sports_plus_locked_title">Plus Feature</string>
+    <string name="sports_plus_locked_message">Upgrade to Plus to access sports streams.</string>
+    <string name="sports_plus_upgrade_button">Upgrade to Plus</string>
+    <string name="sports_plus_badge">PLUS</string>
     <string name="theme_gold">Gold</string>
     <string name="theme_jade">Jade</string>
     <string name="theme_rose_gold">Rose Gold</string>
@@ -1357,6 +1361,14 @@
     <string name="theme_rose">Rose</string>
     <string name="theme_violet">Violet</string>
     <string name="theme_white">White</string>
+    <string name="theme_cyberpunk">Cyberpunk</string>
+    <string name="theme_sunset">Sunset</string>
+    <string name="theme_midnight_purple">Midnight Purple</string>
+    <string name="theme_ruby">Ruby</string>
+    <string name="theme_aquamarine">Aquamarine</string>
+    <string name="theme_mint">Mint</string>
+    <string name="theme_coral">Coral</string>
+    <string name="theme_titanium">Titanium</string>
     <string name="player_next_episode">Next Episode</string>
     <string name="player_next_episode_finding_source">Finding source…</string>
     <string name="player_next_episode_playing_via_countdown">Playing via %1$s in %2$d…</string>

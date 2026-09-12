@@ -14,6 +14,26 @@ object MyanmarSubLimiter {
     const val MAX_DAILY_MOVIES = 2
     private val lock = SynchronizedObject()
 
+    @Volatile
+    var activeContentId: String? = null
+
+    fun normalizeId(contentId: String?): String? {
+        if (contentId.isNullOrBlank()) return null
+        val clean = contentId.trim().substringBefore("?")
+        val withoutType = when {
+            clean.startsWith("movie:") -> clean.removePrefix("movie:")
+            clean.startsWith("series:") -> clean.removePrefix("series:")
+            clean.startsWith("tv:") -> clean.removePrefix("tv:")
+            else -> clean
+        }
+        val parts = withoutType.split(":")
+        return if (parts.size >= 3 && parts[parts.size - 1].toIntOrNull() != null && parts[parts.size - 2].toIntOrNull() != null) {
+            parts.dropLast(2).joinToString(":")
+        } else {
+            withoutType
+        }
+    }
+
     private fun loadTodayMovies(): Pair<String, MutableSet<String>> {
         val today = CurrentDateProvider.todayIsoDate()
         val raw = LicenseStorage.loadMmsubQuotaData() ?: return today to mutableSetOf()
@@ -21,16 +41,20 @@ object MyanmarSubLimiter {
         if (parts.size != 2 || parts[0] != today) {
             return today to mutableSetOf()
         }
-        val ids = parts[1].split(",").filter { it.isNotBlank() }.toMutableSet()
+        val ids = parts[1].split(",")
+            .mapNotNull { normalizeId(it) }
+            .filter { it.isNotBlank() }
+            .toMutableSet()
         return today to ids
     }
 
     private fun saveTodayMovies(today: String, ids: Set<String>) {
-        val payload = "$today|${ids.joinToString(",")}"
+        val normalized = ids.mapNotNull { normalizeId(it) }.toSet()
+        val payload = "$today|${normalized.joinToString(",")}"
         LicenseStorage.saveMmsubQuotaData(payload)
     }
 
-    fun canAccessMyanmarSub(contentId: String?): Boolean = synchronized(lock) {
+    fun canAccessMyanmarSub(contentId: String? = null): Boolean = synchronized(lock) {
         // Plus license has unlimited access
         if (LicenseRepository.isPlusMember) return true
 
@@ -39,26 +63,30 @@ object MyanmarSubLimiter {
 
         // Free tier: allow up to MAX_DAILY_MOVIES per day
         val (today, currentSet) = loadTodayMovies()
+        val effectiveId = normalizeId(contentId) ?: normalizeId(activeContentId)
 
-        if (!contentId.isNullOrBlank() && currentSet.contains(contentId)) {
-            return true
+        if (!effectiveId.isNullOrBlank()) {
+            if (currentSet.contains(effectiveId) || currentSet.any { normalizeId(it) == effectiveId }) {
+                return true
+            }
         }
 
         return currentSet.size < MAX_DAILY_MOVIES
     }
 
-    fun recordMyanmarSubUsed(contentId: String?) = synchronized(lock) {
-        if (contentId.isNullOrBlank()) return
+    fun recordMyanmarSubUsed(contentId: String? = null) = synchronized(lock) {
+        val effectiveId = normalizeId(contentId) ?: normalizeId(activeContentId)
+        if (effectiveId.isNullOrBlank()) return
         if (LicenseRepository.isLicensed) return
 
         val (today, currentSet) = loadTodayMovies()
-        if (!currentSet.contains(contentId)) {
-            currentSet.add(contentId)
+        if (!currentSet.contains(effectiveId)) {
+            currentSet.add(effectiveId)
             saveTodayMovies(today, currentSet)
         }
     }
 
-    fun recordMovieAccess(contentId: String?) {
+    fun recordMovieAccess(contentId: String? = null) {
         recordMyanmarSubUsed(contentId)
     }
 

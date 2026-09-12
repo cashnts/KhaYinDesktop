@@ -26,9 +26,16 @@ internal object AddonManifestParser {
         val defaultTypes = root.stringList("types")
         val defaultPrefixes = root.stringList("idPrefixes")
 
+        val rawName = root.requiredString("name")
+        val name = if (manifestUrl.contains("opensubtitles-v3", ignoreCase = true) || rawName.contains("OpenSubtitles", ignoreCase = true)) {
+            "KhaYin Subtitle"
+        } else {
+            rawName
+        }
+
         return AddonManifest(
             id = root.requiredString("id"),
-            name = root.requiredString("name"),
+            name = name,
             description = root.optionalString("description").orEmpty(),
             version = root.requiredString("version"),
             logoUrl = root.optionalString("logo")?.resolveAgainstManifest(manifestUrl),

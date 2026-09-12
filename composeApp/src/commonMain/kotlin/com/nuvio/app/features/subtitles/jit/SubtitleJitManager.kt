@@ -17,7 +17,8 @@ object SubtitleJitManager {
     private val log = Logger.withTag("SubtitleJitManager")
     private const val BASE_URL = "https://stream.khayin.net"
     private const val HEARTBEAT_INTERVAL_MS = 12_000L
-    private const val STATUS_POLL_INTERVAL_MS = 15_000L
+    // Fast poll while translation is in-flight; stops once complete
+    private const val STATUS_POLL_INTERVAL_IN_FLIGHT_MS = 4_000L
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -41,6 +42,26 @@ object SubtitleJitManager {
             addonName?.contains("KhaYin", ignoreCase = true) == true
     }
 
+    /**
+     * Extract the real media/episode ID from the subtitle URL.
+     * e.g. https://stream.khayin.net/subtitles/vtt/series/tt1234567:1:1.vtt?extra=...
+     * -> "tt1234567:1:1"
+     * Falls back to [mediaId] if the URL filename cannot be parsed.
+     */
+    private fun extractEffectiveId(subtitleUrl: String, mediaId: String): String {
+        return try {
+            subtitleUrl
+                .substringBefore("?")
+                .substringAfterLast("/")
+                .removeSuffix(".vtt")
+                .removeSuffix(".srt")
+                .removeSuffix(".json")
+                .takeIf { it.isNotBlank() } ?: mediaId
+        } catch (_: Exception) {
+            mediaId
+        }
+    }
+
     fun startSession(
         mediaId: String,
         type: String,
@@ -52,8 +73,10 @@ object SubtitleJitManager {
         } else {
             "movie"
         }
-        val cleanId = mediaId.trim()
-        val sessionKey = "$cleanType:$cleanId:$subtitleUrl"
+        // Use the ID embedded in the subtitle URL (e.g. tt1234567:1:1 for an episode)
+        // so status checks hit the right endpoint even when parentMetaId is the show ID only.
+        val effectiveId = extractEffectiveId(subtitleUrl, mediaId.trim())
+        val sessionKey = "$cleanType:$effectiveId:$subtitleUrl"
 
         if (activeSessionId == sessionKey) {
             return
@@ -62,14 +85,22 @@ object SubtitleJitManager {
         stopSession()
 
         activeSessionId = sessionKey
-        activeMediaId = cleanId
+        activeMediaId = effectiveId
         activeType = cleanType
         activeSubtitleUrl = subtitleUrl
 
-        log.d { "Starting JIT session for $cleanType $cleanId ($subtitleUrl)" }
+        log.d { "Starting JIT session for $cleanType $effectiveId ($subtitleUrl)" }
 
-        // 1. Heartbeat loop (every 12s while playing)
+        // 1. Send an immediate heartbeat so the backend starts/continues translation right away
+        scope.launch {
+            sendHeartbeat(isPlaying = true)
+            wasPlayingSent = true
+            lastIsPlaying = true
+        }
+
+        // 2. Heartbeat loop (every 12s while playing). First beat already sent above.
         heartbeatJob = scope.launch {
+            delay(HEARTBEAT_INTERVAL_MS)
             while (isActive && activeSessionId == sessionKey) {
                 if (lastIsPlaying) {
                     sendHeartbeat(isPlaying = true)
@@ -79,14 +110,14 @@ object SubtitleJitManager {
             }
         }
 
-        // 2. Status polling & progressive reload loop
+        // 3. Status polling & progressive reload loop – starts immediately (no initial delay)
         pollingJob = scope.launch {
             var lastCompletedSections = -1
             var isFinished = false
 
             while (isActive && activeSessionId == sessionKey && !isFinished) {
                 try {
-                    val statusUrl = "$BASE_URL/api/translation/status/$cleanId"
+                    val statusUrl = "$BASE_URL/api/translation/status/$effectiveId"
                     val resp = withTimeoutOrNull(4000L) {
                         httpRequestRaw(
                             method = "GET",
@@ -103,23 +134,26 @@ object SubtitleJitManager {
                         val body = json.decodeFromString<SubtitleTranslationStatusDto>(resp.body)
                         val completed = body.completedSections ?: 0
                         log.d {
-                            "JIT status for $cleanId: complete=${body.isComplete} inFlight=${body.inFlight} " +
+                            "JIT status for $effectiveId: complete=${body.isComplete} inFlight=${body.inFlight} " +
                                 "sections=$completed/${body.totalSections} progress=${body.progressPercent}%"
                         }
 
                         if (body.isComplete) {
                             isFinished = true
                             onNewCuesAvailable?.invoke(subtitleUrl)
+                            log.d { "JIT translation complete for $effectiveId" }
                             break
                         } else if (completed > lastCompletedSections || lastCompletedSections == -1) {
                             lastCompletedSections = completed
+                            // Trigger reload whenever new sections arrive (even at 0 to load initial cues)
                             onNewCuesAvailable?.invoke(subtitleUrl)
                         }
                     }
                 } catch (e: Exception) {
                     log.w { "JIT status check error: ${e.message}" }
                 }
-                delay(STATUS_POLL_INTERVAL_MS)
+                // Fast poll while in-flight; loop exits via break when complete
+                delay(STATUS_POLL_INTERVAL_IN_FLIGHT_MS)
             }
         }
     }

@@ -50,6 +50,20 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         }
     }
 
+    LaunchedEffect(parentMetaId, activeVideoId) {
+        val id = parentMetaId.ifBlank { activeVideoId.orEmpty() }
+        if (id.isNotBlank()) {
+            com.nuvio.app.features.license.MyanmarSubLimiter.activeContentId = id
+        }
+    }
+
+    LaunchedEffect(isLive) {
+        if (isLive && !com.nuvio.app.features.license.LicenseRepository.isPlusMember) {
+            errorMessage = "Upgrade to Plus to access sports streams."
+            shouldPlay = false
+        }
+    }
+
     LaunchedEffect(parentMetaType, parentMetaId) {
         playerMetaVideos = MetaDetailsRepository.peek(parentMetaType, parentMetaId)?.videos ?: emptyList()
         if (playerMetaVideos.isEmpty()) {
@@ -307,6 +321,7 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
 
     DisposableEffect(Unit) {
         onDispose {
+            com.nuvio.app.features.license.MyanmarSubLimiter.activeContentId = null
             playerController?.clearNowPlayingInfo()
             P2pStreamingEngine.shutdown()
             PlayerStreamsRepository.clearAll()

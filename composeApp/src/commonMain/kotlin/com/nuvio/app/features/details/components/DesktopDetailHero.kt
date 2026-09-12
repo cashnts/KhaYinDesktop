@@ -81,7 +81,8 @@ fun DesktopDetailHero(
     onHeroTrailerEnded: () -> Unit,
     onHeroTrailerError: () -> Unit,
     onPlayClick: () -> Unit,
-    onPlayLongClick: (() -> Unit)?,
+    onPlayLongClick: (() -> Unit)? = null,
+    isLocked: Boolean = false,
     onWatchedClick: () -> Unit,
     onSaveClick: () -> Unit,
     onSaveLongClick: (() -> Unit)?,
@@ -259,6 +260,7 @@ fun DesktopDetailHero(
             DetailActionButtons(
                 modifier = Modifier.widthIn(max = 520.dp),
                 playLabel = playButtonLabel,
+                isLocked = isLocked,
                 secondaryActions = listOf(
                     DetailSecondaryAction(
                         label = if (isWatched) {

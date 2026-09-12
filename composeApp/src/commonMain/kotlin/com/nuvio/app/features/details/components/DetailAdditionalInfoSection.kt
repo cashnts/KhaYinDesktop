@@ -28,11 +28,18 @@ fun DetailAdditionalInfoSection(
     modifier: Modifier = Modifier,
     showHeader: Boolean = true,
 ) {
+    val isLive = com.nuvio.app.features.details.LiveMediaCleaner.isLive(
+        type = meta.type,
+        releaseInfo = meta.releaseInfo,
+        status = meta.status,
+        title = meta.name,
+        description = meta.description,
+    )
     val isSeriesLike = meta.type == "series" || meta.videos.any { it.season != null || it.episode != null }
-    val title = if (isSeriesLike) {
-        stringResource(Res.string.details_show_details)
-    } else {
-        stringResource(Res.string.details_movie_details)
+    val title = when {
+        isLive -> "Stream Details"
+        isSeriesLike -> stringResource(Res.string.details_show_details)
+        else -> stringResource(Res.string.details_movie_details)
     }
     val rows = buildList {
         meta.status?.let { add(stringResource(Res.string.details_status) to it) }

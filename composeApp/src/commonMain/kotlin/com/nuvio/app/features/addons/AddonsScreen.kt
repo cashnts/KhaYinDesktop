@@ -454,7 +454,7 @@ private fun InstalledAddonCard(
             Switch(
                 checked = addon.enabled,
                 onCheckedChange = onEnabledChange,
-                enabled = !isBuiltIn || addon.manifestUrl != AddonRepository.DEFAULT_CINEMETA_ADDON_URL,
+                enabled = !isBuiltIn,
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                     checkedTrackColor = MaterialTheme.colorScheme.primary,

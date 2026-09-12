@@ -81,6 +81,7 @@ fun SubtitleModal(
     onAutoSyncReload: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    contentId: String? = null,
 ) {
     val effectiveSelectedAddonSubtitle = selectedAddonSubtitle ?: addonSubtitles.firstOrNull { subtitle ->
         subtitle.id == selectedAddonSubtitleId || subtitle.url == selectedAddonSubtitleId
@@ -102,6 +103,7 @@ fun SubtitleModal(
         secondaryPreferredSubtitleLanguage,
         subtitleStyle.showOnlyPreferredLanguages,
         playbackLanguageKey,
+        contentId,
     ) {
         buildSubtitleLanguageItems(
             subtitleTracks = subtitleTracks,
@@ -110,6 +112,7 @@ fun SubtitleModal(
             secondaryPreferredLanguage = secondaryPreferredSubtitleLanguage,
             showOnlyPreferredLanguages = subtitleStyle.showOnlyPreferredLanguages,
             selectedLanguageKey = playbackLanguageKey,
+            contentId = contentId,
         )
     }
     var activeLanguageKey by remember(visible) {
@@ -120,8 +123,8 @@ fun SubtitleModal(
         )
     }
     var pendingOptionId by remember(visible) { mutableStateOf<String?>(playbackOptionId) }
-    val options = remember(activeLanguageKey, subtitleTracks, addonSubtitles) {
-        buildSubtitleSelectionOptions(activeLanguageKey, subtitleTracks, addonSubtitles)
+    val options = remember(activeLanguageKey, subtitleTracks, addonSubtitles, contentId) {
+        buildSubtitleSelectionOptions(activeLanguageKey, subtitleTracks, addonSubtitles, contentId = contentId)
     }
     val selectedOptionId = pendingOptionId ?: playbackOptionId
     val styleVisible = activeLanguageKey != SubtitleOffLanguageKey &&

@@ -1,5 +1,6 @@
 package com.nuvio.app.features.home
 
+import com.nuvio.app.features.details.LiveMediaCleaner
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -42,21 +43,34 @@ internal object HomeCatalogParser {
                     return@forEach
                 }
 
+                val rawDescription = meta.string("description")
+                val rawReleaseInfo = meta.string("releaseInfo")
+                val isLiveSource = LiveMediaCleaner.isLive(
+                    type = type,
+                    releaseInfo = rawReleaseInfo,
+                    title = name,
+                    description = rawDescription,
+                )
+                val cleanedName = LiveMediaCleaner.cleanTitle(name)
+                val cleanedDescription = LiveMediaCleaner.cleanDescription(rawDescription, cleanedName, isLiveSource)
+                val rawGenres = meta.array("genres").mapNotNull { genre ->
+                    genre.jsonPrimitive.contentOrNull?.takeIf { it.isNotBlank() }
+                }
+                val cleanedGenres = LiveMediaCleaner.cleanGenres(rawGenres)
+
                 val item = MetaPreview(
                     id = id,
                     type = type,
-                    name = name,
+                    name = cleanedName,
                     poster = meta.string("poster"),
                     banner = meta.string("banner") ?: meta.string("background"),
                     logo = meta.string("logo"),
                     posterShape = meta.string("posterShape").toPosterShape(),
-                    description = meta.string("description"),
-                    releaseInfo = meta.string("releaseInfo"),
+                    description = cleanedDescription,
+                    releaseInfo = rawReleaseInfo,
                     rawReleaseDate = meta.string("released"),
                     imdbRating = meta.string("imdbRating"),
-                    genres = meta.array("genres").mapNotNull { genre ->
-                        genre.jsonPrimitive.contentOrNull?.takeIf { it.isNotBlank() }
-                    },
+                    genres = cleanedGenres,
                 )
                 if (seenKeys.add(item.stableKey())) {
                     add(item)

@@ -147,6 +147,7 @@ internal fun PlayerScreenModalHosts(
         onAutoSyncCueSelected = onAutoSyncCueSelected,
         onAutoSyncReload = onAutoSyncReload,
         onDismiss = onSubtitleModalDismissed,
+        contentId = parentMetaId.ifBlank { activeVideoId },
     )
 
     IosVideoSettingsModal(

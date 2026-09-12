@@ -160,8 +160,9 @@ internal fun PlayerScreenRuntime.restorePersistedTrackPreferenceIfNeeded() {
 internal fun PlayerScreenRuntime.refreshTracks() {
     val ctrl = playerController ?: return
     val isPlus = com.nuvio.app.features.license.LicenseRepository.isPlusMember
+    val activeContentId = parentMetaId.ifBlank { activeVideoId }
     audioTracks = ctrl.getAudioTracks().filter { isAllowedAudioTrack(it) }
-    subtitleTracks = ctrl.getSubtitleTracks().filter { isAllowedSubtitleTrack(it, isPlus) }
+    subtitleTracks = ctrl.getSubtitleTracks().filter { isAllowedSubtitleTrack(it, isPlus, activeContentId) }
     val selectedAudio = audioTracks.firstOrNull { it.isSelected }
     if (selectedAudio != null) selectedAudioIndex = selectedAudio.index
     val selectedSub = subtitleTracks.firstOrNull { it.isSelected }
@@ -179,7 +180,14 @@ internal fun PlayerScreenRuntime.refreshTracks() {
         ) ?: args.contentLanguage,
     )
 
-    if (!preferredAudioSelectionApplied) {
+    val englishAudio = audioTracks.firstOrNull { isEnglishAudioTrack(it) }
+    if (englishAudio != null) {
+        if (selectedAudioIndex != englishAudio.index) {
+            playerController?.selectAudioTrack(englishAudio.index)
+            selectedAudioIndex = englishAudio.index
+        }
+        preferredAudioSelectionApplied = true
+    } else if (!preferredAudioSelectionApplied) {
         if (preferredAudioTargets.isEmpty()) {
             preferredAudioSelectionApplied = true
         } else if (audioTracks.isNotEmpty()) {

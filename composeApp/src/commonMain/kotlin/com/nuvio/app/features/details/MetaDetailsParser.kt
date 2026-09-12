@@ -28,21 +28,40 @@ internal object MetaDetailsParser {
             ?: error("Response did not contain a valid meta object")
         val links = meta.links()
 
+        val rawType = meta.requiredString("type")
+        val rawName = meta.requiredString("name")
+        val rawDescription = meta.string("description")
+        val rawReleaseInfo = meta.string("releaseInfo")
+        val rawStatus = meta.string("status")
+        val rawGenres = meta.stringList("genres")
+
+        val isLiveSource = LiveMediaCleaner.isLive(
+            type = rawType,
+            releaseInfo = rawReleaseInfo,
+            status = rawStatus,
+            title = rawName,
+            description = rawDescription,
+        )
+
+        val cleanedName = LiveMediaCleaner.cleanTitle(rawName)
+        val cleanedDescription = LiveMediaCleaner.cleanDescription(rawDescription, cleanedName, isLiveSource)
+        val cleanedGenres = LiveMediaCleaner.cleanGenres(rawGenres)
+
         return MetaDetails(
             id = meta.requiredString("id"),
-            type = meta.requiredString("type"),
-            name = meta.requiredString("name"),
+            type = rawType,
+            name = cleanedName,
             poster = meta.string("poster"),
             background = meta.string("background"),
             logo = meta.string("logo"),
-            description = meta.string("description"),
-            releaseInfo = meta.string("releaseInfo"),
+            description = cleanedDescription,
+            releaseInfo = rawReleaseInfo,
             lastAirDate = meta.string("lastAirDate"),
-            status = meta.string("status"),
+            status = rawStatus,
             imdbRating = meta.string("imdbRating"),
             ageRating = meta.string("ageRating"),
             runtime = meta.string("runtime"),
-            genres = meta.stringList("genres"),
+            genres = cleanedGenres,
             director = meta.directors(links),
             writer = meta.writers(links),
             cast = meta.cast(links),

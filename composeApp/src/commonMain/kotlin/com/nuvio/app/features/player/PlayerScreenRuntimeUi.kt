@@ -22,6 +22,7 @@ import com.nuvio.app.core.ui.PresenceSnapshot
 import com.nuvio.app.core.ui.nuvio
 import com.nuvio.app.features.debrid.DebridSettingsRepository
 import com.nuvio.app.features.debrid.DirectDebridPlaybackResolver
+import com.nuvio.app.features.details.LiveMediaCleaner
 import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.details.MetaVideo
 import com.nuvio.app.features.p2p.P2pSettingsRepository
@@ -241,9 +242,9 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         else -> ""
     }
     val playerControlsState = PlayerControlsState(
-        title = title,
+        title = LiveMediaCleaner.cleanTitle(title),
         episodeText = episodeText,
-        streamTitle = activeStreamTitle,
+        streamTitle = LiveMediaCleaner.cleanStreamLabel(activeStreamTitle),
         providerName = activeProviderName,
         pauseOverlayWatchingLabel = stringResource(Res.string.compose_player_youre_watching),
         pauseOverlayLogo = logo,
@@ -345,6 +346,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         themeTextMutedColor = themeColors.textMuted.toCssColorString(),
         themeBorderDefaultColor = themeColors.borderDefault.toCssColorString(),
         isPlaying = playbackSnapshot.isPlaying,
+        isLive = isLive,
         isLoading = playbackSnapshot.isLoading,
         isLocked = playerControlsLocked,
         lockedOverlayVisible = lockedOverlayVisible,
@@ -654,6 +656,7 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long, 
             metrics = metrics,
             resizeMode = resizeMode,
             isLocked = playerControlsLocked,
+            isLive = isLive,
             showPlaybackControls = controlsVisible,
             isPrerollActive = isPrerollActive,
             onLockToggle = {
@@ -1409,6 +1412,7 @@ private fun PlayerScreenRuntime.buildPlayerControlSubtitleSelection(): PlayerCon
         selectedSubtitleIndex = selectedSubtitleIndex,
         selectedAddonSubtitle = selectedAddon,
     ).orEmpty()
+    val activeContentId = parentMetaId.ifBlank { activeVideoId }
     val languageItems = buildSubtitleLanguageItems(
         subtitleTracks = subtitleTracks,
         addonSubtitles = visibleAddonSubtitles,
@@ -1416,6 +1420,7 @@ private fun PlayerScreenRuntime.buildPlayerControlSubtitleSelection(): PlayerCon
         secondaryPreferredLanguage = playerSettingsUiState.secondaryPreferredSubtitleLanguage,
         showOnlyPreferredLanguages = subtitleStyle.showOnlyPreferredLanguages,
         selectedLanguageKey = selectedLanguageKey,
+        contentId = activeContentId,
     )
     val noneLabel = stringResource(Res.string.compose_player_none)
     val unknownLabel = stringResource(Res.string.subtitle_language_unknown)
@@ -1439,6 +1444,7 @@ private fun PlayerScreenRuntime.buildPlayerControlSubtitleSelection(): PlayerCon
             languageKey = language.key,
             subtitleTracks = subtitleTracks,
             addonSubtitles = visibleAddonSubtitles,
+            contentId = activeContentId,
         ).map { option ->
             when (option) {
                 is SubtitleSelectionOption.BuiltIn -> PlayerControlSubtitleOptionItem(

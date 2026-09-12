@@ -93,8 +93,10 @@ object StreamLinkCacheRepository {
             StreamLinkCacheStorage.removeEntry(hashedKey(contentKey))
             return null
         }
+        val isP2p = entry.url.isBlank() && !entry.infoHash.isNullOrBlank()
+        val effectiveMaxAgeMs = if (isP2p) maxOf(maxAgeMs, 30L * 24 * 60 * 60 * 1000L) else maxAgeMs
         val age = epochMs() - entry.cachedAtMs
-        if (entry.cachedAtMs <= 0L || age > maxAgeMs) {
+        if (entry.cachedAtMs <= 0L || age > effectiveMaxAgeMs) {
             StreamLinkCacheStorage.removeEntry(hashedKey(contentKey))
             return null
         }

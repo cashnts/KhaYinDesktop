@@ -32,6 +32,15 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import javax.swing.SwingUtilities
 import kotlin.concurrent.Volatile
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
+import java.io.File
+import com.nuvio.app.features.addons.fetchAddonResponseText
 
 internal class NativePlayerController(
     private val host: NativePlayerHost,
@@ -46,6 +55,9 @@ internal class NativePlayerController(
         @Volatile
         var rememberedVolumeLevel: Float = DesktopPlayerVolumeStorage.loadVolumeLevel() ?: 1f
     }
+
+    private val asyncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var subtitleDownloadJob: Job? = null
 
     @Volatile
     private var handle: Long = 0L
@@ -535,7 +547,42 @@ internal class NativePlayerController(
 
     override fun setSubtitleUri(url: String) {
         log.d { "setSubtitleUri ${url.toPlaybackLogKey()} handle=$handle" }
-        handle.takeIf { it != 0L }?.let { current ->
+        val current = handle.takeIf { it != 0L } ?: return
+
+        if (url.startsWith("http://", ignoreCase = true) || url.startsWith("https://", ignoreCase = true)) {
+            subtitleDownloadJob?.cancel()
+            subtitleDownloadJob = asyncScope.launch {
+                try {
+                    val text = fetchAddonResponseText(url)
+                    val ext = when {
+                        url.contains(".vtt", ignoreCase = true) -> "vtt"
+                        url.contains(".ass", ignoreCase = true) || url.contains(".ssa", ignoreCase = true) -> "ass"
+                        url.contains(".ttml", ignoreCase = true) -> "ttml"
+                        else -> "srt"
+                    }
+                    val cacheDir = File(System.getProperty("java.io.tmpdir"), "nuvio_subtitles").also { it.mkdirs() }
+                    val file = File(cacheDir, "sub_${url.hashCode().toString().replace("-", "n")}.$ext")
+                    file.writeText(text, Charsets.UTF_8)
+
+                    withContext(Dispatchers.Main) {
+                        if (handle == current) {
+                            NativePlayerBridge.clearExternalSubtitles(current)
+                            NativePlayerBridge.addSubtitleUrl(current, file.absolutePath)
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    log.w(e) { "Failed to download subtitle asynchronously, falling back to direct URL" }
+                    withContext(Dispatchers.Main) {
+                        if (handle == current) {
+                            NativePlayerBridge.clearExternalSubtitles(current)
+                            NativePlayerBridge.addSubtitleUrl(current, url)
+                        }
+                    }
+                }
+            }
+        } else {
             NativePlayerBridge.clearExternalSubtitles(current)
             NativePlayerBridge.addSubtitleUrl(current, url)
         }
@@ -543,6 +590,8 @@ internal class NativePlayerController(
 
     override fun clearExternalSubtitle() {
         log.d { "clearExternalSubtitle handle=$handle" }
+        subtitleDownloadJob?.cancel()
+        subtitleDownloadJob = null
         handle.takeIf { it != 0L }?.let(NativePlayerBridge::clearExternalSubtitles)
     }
 
@@ -935,6 +984,8 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =
         appendJsonField("themeBorderDefaultColor", themeBorderDefaultColor)
         append(',')
         appendJsonField("isPlaying", isPlaying)
+        append(',')
+        appendJsonField("isLive", isLive)
         append(',')
         appendJsonField("isLoading", isLoading)
         append(',')

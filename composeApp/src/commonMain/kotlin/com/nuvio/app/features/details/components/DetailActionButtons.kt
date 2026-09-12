@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -59,6 +60,7 @@ data class DetailSecondaryAction(
 fun DetailActionButtons(
     modifier: Modifier = Modifier,
     playLabel: String = stringResource(Res.string.action_play),
+    isLocked: Boolean = false,
     secondaryActions: List<DetailSecondaryAction> = emptyList(),
     actionsMenuLabel: String = stringResource(Res.string.details_actions_menu_label),
     isTablet: Boolean = false,
@@ -96,8 +98,8 @@ fun DetailActionButtons(
                     .weight(1f)
                     .height(buttonHeight),
                 shape = playShape,
-                color = MaterialTheme.colorScheme.onBackground,
-                contentColor = MaterialTheme.colorScheme.background,
+                color = if (isLocked) androidx.compose.ui.graphics.Color(0xFFFF9500) else MaterialTheme.colorScheme.onBackground,
+                contentColor = if (isLocked) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.background,
             ) {
                 Row(
                     modifier = Modifier
@@ -114,11 +116,19 @@ fun DetailActionButtons(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        painter = playPainter,
-                        contentDescription = null,
-                        modifier = Modifier.size(if (isTablet) 20.dp else 18.dp),
-                    )
+                    if (isLocked) {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Rounded.Lock,
+                            contentDescription = "Plus Locked",
+                            modifier = Modifier.size(if (isTablet) 20.dp else 18.dp),
+                        )
+                    } else {
+                        Icon(
+                            painter = playPainter,
+                            contentDescription = null,
+                            modifier = Modifier.size(if (isTablet) 20.dp else 18.dp),
+                        )
+                    }
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = playLabel,

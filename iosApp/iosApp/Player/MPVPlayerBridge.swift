@@ -737,7 +737,42 @@ final class MPVPlayerViewController: UIViewController {
 
     func addSubtitleUrl(_ url: String) {
         guard mpv != nil else { return }
-        command("sub-add", args: [url, "select"])
+        if url.hasPrefix("http://") || url.hasPrefix("https://") {
+            Task {
+                do {
+                    guard let targetUrl = URL(string: url) else { return }
+                    var request = URLRequest(url: targetUrl, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+                    request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+                    let (data, response) = try await URLSession.shared.data(for: request)
+                    if let httpResp = response as? HTTPURLResponse, (200...299).contains(httpResp.statusCode) {
+                        let tempDir = FileManager.default.temporaryDirectory
+                        let ext = url.contains(".vtt") ? "vtt" : (url.contains(".ass") ? "ass" : "srt")
+                        let fileUrl = tempDir.appendingPathComponent("sub_\(abs(url.hashValue)).\(ext)")
+                        try data.write(to: fileUrl)
+                        await MainActor.run {
+                            if self.mpv != nil {
+                                self.command("sub-add", args: [fileUrl.path, "select"])
+                            }
+                        }
+                    } else {
+                        await MainActor.run {
+                            if self.mpv != nil {
+                                self.command("sub-add", args: [url, "select"])
+                            }
+                        }
+                    }
+                } catch {
+                    print("[MPV] Failed to download subtitle asynchronously: \(error)")
+                    await MainActor.run {
+                        if self.mpv != nil {
+                            self.command("sub-add", args: [url, "select"])
+                        }
+                    }
+                }
+            }
+        } else {
+            command("sub-add", args: [url, "select"])
+        }
     }
 
     private func addSubtitle(_ subtitle: PluginSubtitle, mode: String) {

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -128,6 +129,7 @@ private fun PosterGridTile(
                 .then(it),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            val itemLocked = !com.nuvio.app.features.license.LicenseRepository.isPlusMember && com.nuvio.app.features.details.LiveMediaCleaner.isSportsItem(type = item.type, title = item.name, genres = item.genres, description = item.description)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -152,6 +154,15 @@ private fun PosterGridTile(
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
                     )
+                }
+                if (itemLocked) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp),
+                    ) {
+                        com.nuvio.app.features.license.SportsLockPill()
+                    }
                 }
                 NuvioPosterWatchedOverlay(isWatched = isWatched)
             }

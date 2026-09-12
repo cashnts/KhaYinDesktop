@@ -18,6 +18,14 @@ enum class AppTheme {
     AMBER,
     ROSE,
     WHITE,
+    CYBERPUNK,
+    SUNSET,
+    MIDNIGHT_PURPLE,
+    RUBY,
+    AQUAMARINE,
+    MINT,
+    CORAL,
+    TITANIUM,
 }
 
 val AppTheme.labelRes: StringResource
@@ -36,4 +44,12 @@ val AppTheme.labelRes: StringResource
         AppTheme.AMBER -> Res.string.theme_amber
         AppTheme.ROSE -> Res.string.theme_rose
         AppTheme.WHITE -> Res.string.theme_white
+        AppTheme.CYBERPUNK -> Res.string.theme_cyberpunk
+        AppTheme.SUNSET -> Res.string.theme_sunset
+        AppTheme.MIDNIGHT_PURPLE -> Res.string.theme_midnight_purple
+        AppTheme.RUBY -> Res.string.theme_ruby
+        AppTheme.AQUAMARINE -> Res.string.theme_aquamarine
+        AppTheme.MINT -> Res.string.theme_mint
+        AppTheme.CORAL -> Res.string.theme_coral
+        AppTheme.TITANIUM -> Res.string.theme_titanium
     }

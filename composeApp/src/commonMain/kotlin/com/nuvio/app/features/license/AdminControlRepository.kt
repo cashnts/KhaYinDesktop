@@ -20,7 +20,23 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.put
+
+@Serializable
+data class PresetCatalogConfig(
+    val key: String,
+    val addonId: String = "",
+    val addonName: String = "",
+    val catalogId: String = "",
+    val type: String = "",
+    val defaultTitle: String = "",
+    val customTitle: String = "",
+    val enabled: Boolean = true,
+    val heroSourceEnabled: Boolean = false,
+    val order: Int = 0,
+)
 
 @Serializable
 data class SystemServiceConfig(
@@ -39,9 +55,21 @@ data class SystemServiceConfig(
     val broadcastActionUrl: String = "",
     val broadcastActionLabel: String = "",
 
-    // 3. Over-The-Air Addon Management
+    // 3. Over-The-Air Addon & Catalog Management
     val presetAddons: List<String> = emptyList(),
     val disabledAddons: List<String> = emptyList(), // Instant remote blacklist for broken/malicious addons
+    val addonMetadata: Map<String, AddonMetadataOverride> = emptyMap(), // Admin-overridden names/descriptions per addon URL
+    val presetCatalogs: List<PresetCatalogConfig> = emptyList(), // Global home catalog layout for all users
+    val heroCarouselEnabled: Boolean = true,
+    val showCatalogType: Boolean = true,
+    val hideUnreleasedContent: Boolean = false,
+)
+
+/** Per-addon metadata overrides set by the admin and broadcast to all clients. */
+@Serializable
+data class AddonMetadataOverride(
+    val name: String? = null,
+    val description: String? = null,
 )
 
 private val DEFAULT_PH_KEY_PARTS = listOf("phx_", "JzxYddY8UjrVtn7hr43Z", "BoEiMykSAQkz2XfVqRKPmXoQsRLA")
@@ -188,8 +216,47 @@ object AdminControlRepository {
         return com.nuvio.app.core.security.KhaYinSecurityBridge.buildSecureHeaders(method, url, body, baseHeaders).first
     }
 
+
+@Serializable
+private data class AppSettingsDbRecord(
+    val id: String = "global",
+    val config: kotlinx.serialization.json.JsonElement? = null,
+    val updated_at: String? = null,
+)
+
     suspend fun fetchRemoteConfig(): Result<SystemServiceConfig> = runCatching {
         val restUrl = supabaseRestUrl()
+
+        // 1. Primary: query dedicated app_settings table (row id = 'global')
+        val appSettingsUrl = "$restUrl/app_settings?id=eq.global&select=*"
+        val appSettingsResponse = httpRequestRaw(
+            method = "GET",
+            url = appSettingsUrl,
+            headers = supabaseHeaders(method = "GET", url = appSettingsUrl),
+            body = "",
+        )
+
+        if (appSettingsResponse.status in 200..299 && !appSettingsResponse.body.startsWith("<")) {
+            val records = runCatching { json.decodeFromString<List<AppSettingsDbRecord>>(appSettingsResponse.body) }.getOrNull()
+            val configElement = records?.firstOrNull()?.config
+            if (configElement != null) {
+                val parsed = runCatching { json.decodeFromJsonElement<SystemServiceConfig>(configElement) }.getOrNull()
+                if (parsed != null) {
+                    _config.value = parsed
+                    // Automatically sync pushed addons & catalogs on client device
+                    com.nuvio.app.features.addons.AddonRepository.syncRemotePresetAddons(parsed.presetAddons, parsed.disabledAddons)
+                    com.nuvio.app.features.home.HomeCatalogSettingsRepository.applyPresetCatalogs(
+                        presetCatalogs = parsed.presetCatalogs,
+                        heroCarouselEnabled = parsed.heroCarouselEnabled,
+                        showCatalogType = parsed.showCatalogType,
+                        hideUnreleasedContent = parsed.hideUnreleasedContent,
+                    )
+                    return@runCatching parsed
+                }
+            }
+        }
+
+        // 2. Fallback: query legacy license_keys for SYSTEM_CONFIG row
         val licUrl = "$restUrl/license_keys?key=eq.SYSTEM_CONFIG&select=*"
         val licResponse = httpRequestRaw(
             method = "GET",
@@ -204,8 +271,14 @@ object AdminControlRepository {
             if (!configNote.isNullOrBlank()) {
                 val parsed = json.decodeFromString<SystemServiceConfig>(configNote)
                 _config.value = parsed
-                // Automatically sync pushed addons on client device
+                // Automatically sync pushed addons & catalogs on client device
                 com.nuvio.app.features.addons.AddonRepository.syncRemotePresetAddons(parsed.presetAddons, parsed.disabledAddons)
+                com.nuvio.app.features.home.HomeCatalogSettingsRepository.applyPresetCatalogs(
+                    presetCatalogs = parsed.presetCatalogs,
+                    heroCarouselEnabled = parsed.heroCarouselEnabled,
+                    showCatalogType = parsed.showCatalogType,
+                    hideUnreleasedContent = parsed.hideUnreleasedContent,
+                )
                 return@runCatching parsed
             }
         }
@@ -216,44 +289,76 @@ object AdminControlRepository {
     suspend fun saveRemoteConfig(newConfig: SystemServiceConfig): Result<SystemServiceConfig> = runCatching {
         val restUrl = supabaseRestUrl()
         val configJson = json.encodeToString(newConfig)
+        val configElement = json.encodeToJsonElement(newConfig)
 
-        // 1. Try to PATCH the existing SYSTEM_CONFIG row
-        val patchUrl = "$restUrl/license_keys?key=eq.SYSTEM_CONFIG"
-        val patchPayload = buildJsonObject {
-            put("notes", configJson)
-            put("customer_name", "System Config")
-            put("tier", "system")
-            put("status", "config")
+        // 1. Primary: Upsert / update app_settings table
+        val appSettingsPatchUrl = "$restUrl/app_settings?id=eq.global"
+        val patchAppSettingsPayload = buildJsonObject {
+            put("config", configElement)
         }
-        val patchBody = patchPayload.toString()
-        val patchResp = httpRequestRaw(
+        val patchAppSettingsBody = patchAppSettingsPayload.toString()
+        val appSettingsPatchResp = httpRequestRaw(
             method = "PATCH",
-            url = patchUrl,
-            headers = supabaseHeaders(method = "PATCH", url = patchUrl, body = patchBody),
-            body = patchBody,
+            url = appSettingsPatchUrl,
+            headers = supabaseHeaders(method = "PATCH", url = appSettingsPatchUrl, body = patchAppSettingsBody),
+            body = patchAppSettingsBody,
         )
 
-        val patchedCount = runCatching { json.decodeFromString<List<SupabaseLicenseRecord>>(patchResp.body).size }.getOrDefault(0)
-        if (patchResp.status !in 200..299 || patchedCount == 0) {
-            val postUrl = "$restUrl/license_keys"
-            val postPayload = buildJsonObject {
-                put("key", "SYSTEM_CONFIG")
-                put("status", "config")
-                put("customer_name", "System Config")
-                put("tier", "system")
-                put("notes", configJson)
+        val appSettingsPatchedCount = runCatching {
+            json.decodeFromString<List<AppSettingsDbRecord>>(appSettingsPatchResp.body).size
+        }.getOrDefault(0)
+
+        if (appSettingsPatchResp.status !in 200..299 || appSettingsPatchedCount == 0) {
+            val appSettingsPostUrl = "$restUrl/app_settings"
+            val postAppSettingsPayload = buildJsonObject {
+                put("id", "global")
+                put("config", configElement)
             }
-            val postBody = postPayload.toString()
+            val postAppSettingsBody = postAppSettingsPayload.toString()
             httpRequestRaw(
                 method = "POST",
-                url = postUrl,
-                headers = supabaseHeaders(method = "POST", url = postUrl, body = postBody),
-                body = postBody,
+                url = appSettingsPostUrl,
+                headers = supabaseHeaders(method = "POST", url = appSettingsPostUrl, body = postAppSettingsBody),
+                body = postAppSettingsBody,
             )
+        }
+
+        // 2. Secondary fallback: Also try to update legacy SYSTEM_CONFIG in license_keys
+        runCatching {
+            val patchLicUrl = "$restUrl/license_keys?key=eq.SYSTEM_CONFIG"
+            val patchLicPayload = buildJsonObject {
+                put("notes", configJson)
+                put("customer_name", "System Config")
+                put("tier", "system")
+                put("status", "config")
+            }
+            val patchLicBody = patchLicPayload.toString()
+            val patchLicResp = httpRequestRaw(
+                method = "PATCH",
+                url = patchLicUrl,
+                headers = supabaseHeaders(method = "PATCH", url = patchLicUrl, body = patchLicBody),
+                body = patchLicBody,
+            )
+            val licPatchedCount = runCatching { json.decodeFromString<List<SupabaseLicenseRecord>>(patchLicResp.body).size }.getOrDefault(0)
+            if (patchLicResp.status !in 200..299 || licPatchedCount == 0) {
+                val postLicUrl = "$restUrl/license_keys"
+                httpRequestRaw(
+                    method = "POST",
+                    url = postLicUrl,
+                    headers = supabaseHeaders(method = "POST", url = postLicUrl, body = patchLicBody),
+                    body = patchLicBody,
+                )
+            }
         }
 
         _config.value = newConfig
         com.nuvio.app.features.addons.AddonRepository.syncRemotePresetAddons(newConfig.presetAddons, newConfig.disabledAddons)
+        com.nuvio.app.features.home.HomeCatalogSettingsRepository.applyPresetCatalogs(
+            presetCatalogs = newConfig.presetCatalogs,
+            heroCarouselEnabled = newConfig.heroCarouselEnabled,
+            showCatalogType = newConfig.showCatalogType,
+            hideUnreleasedContent = newConfig.hideUnreleasedContent,
+        )
         newConfig
     }
 

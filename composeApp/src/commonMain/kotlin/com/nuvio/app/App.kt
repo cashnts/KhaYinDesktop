@@ -1913,6 +1913,120 @@ private fun MainAppContent(
                 }
             }
 
+            val isMovie = type.equals("movie", ignoreCase = true) ||
+                (seasonNumber == null && episodeNumber == null)
+            val isContinueWatching = targetResumePositionMs > 0L || targetResumeProgressFraction != null
+            val shouldAttemptCacheReuse = (isMovie && isContinueWatching) || playerSettingsUiState.streamReuseLastLinkEnabled
+
+            if (!manualSelection && shouldAttemptCacheReuse) {
+                val cacheKey = StreamLinkCacheRepository.contentKey(
+                    type = type,
+                    videoId = videoId,
+                    parentMetaId = parentMetaId,
+                    season = seasonNumber,
+                    episode = episodeNumber,
+                )
+                val maxAgeMs = maxOf(
+                    playerSettingsUiState.streamReuseLastLinkCacheHours * 60L * 60L * 1000L,
+                    if (isContinueWatching) 72L * 60L * 60L * 1000L else 0L,
+                )
+                val cached = StreamLinkCacheRepository.getValid(cacheKey, maxAgeMs)
+                if (cached != null) {
+                    val isP2p = cached.url.isBlank() && !cached.infoHash.isNullOrBlank()
+                    val canPlayP2pDirectly = isP2p && P2pSettingsRepository.isVisible && p2pSettingsUiState.p2pEnabled
+                    val canPlayDirectUrl = !isP2p && cached.url.isNotBlank()
+
+                    if (canPlayP2pDirectly || canPlayDirectUrl) {
+                        coroutineScope.launch {
+                            val preroll = if (isMovie) com.nuvio.app.features.ads.AdsRepository.getNextPrerollAd(null) else null
+                            val playerLaunch = if (canPlayP2pDirectly) {
+                                val sentinelUrl = "torrent://${cached.infoHash}${cached.fileIdx?.let { "?index=$it" }.orEmpty()}"
+                                PlayerLaunch(
+                                    profileId = activePlaybackProfileId,
+                                    title = title,
+                                    sourceUrl = sentinelUrl,
+                                    sourceHeaders = emptyMap(),
+                                    sourceResponseHeaders = emptyMap(),
+                                    externalSubtitles = emptyList(),
+                                    streamType = cached.streamType,
+                                    logo = logo,
+                                    poster = poster,
+                                    background = background,
+                                    seasonNumber = seasonNumber,
+                                    episodeNumber = episodeNumber,
+                                    episodeTitle = episodeTitle,
+                                    episodeThumbnail = episodeThumbnail,
+                                    streamTitle = cached.streamName,
+                                    streamSubtitle = null,
+                                    bingeGroup = cached.bingeGroup,
+                                    pauseDescription = pauseDescription,
+                                    providerName = cached.addonName,
+                                    providerAddonId = cached.addonId,
+                                    contentType = type,
+                                    videoId = videoId,
+                                    parentMetaId = parentMetaId.ifBlank { videoId },
+                                    parentMetaType = parentMetaType.ifBlank { type },
+                                    torrentInfoHash = cached.infoHash,
+                                    torrentFileIdx = cached.fileIdx,
+                                    torrentFilename = cached.filename,
+                                    torrentTrackers = emptyList(),
+                                    initialPositionMs = targetResumePositionMs,
+                                    initialProgressFraction = targetResumeProgressFraction,
+                                    contentLanguage = cached.contentLanguage,
+                                    prerollUrl = preroll?.url,
+                                    prerollDuration = preroll?.duration,
+                                    prerollTitle = preroll?.title,
+                                    prerollSkippableAfter = preroll?.skippableAfter,
+                                    prerollId = preroll?.id,
+                                )
+                            } else {
+                                PlayerLaunch(
+                                    profileId = activePlaybackProfileId,
+                                    title = title,
+                                    sourceUrl = cached.url,
+                                    sourceHeaders = sanitizePlaybackHeaders(cached.requestHeaders),
+                                    sourceResponseHeaders = sanitizePlaybackResponseHeaders(cached.responseHeaders),
+                                    externalSubtitles = emptyList(),
+                                    streamType = cached.streamType,
+                                    logo = logo,
+                                    poster = poster,
+                                    background = background,
+                                    seasonNumber = seasonNumber,
+                                    episodeNumber = episodeNumber,
+                                    episodeTitle = episodeTitle,
+                                    episodeThumbnail = episodeThumbnail,
+                                    streamTitle = cached.streamName,
+                                    streamSubtitle = null,
+                                    bingeGroup = cached.bingeGroup,
+                                    pauseDescription = pauseDescription,
+                                    providerName = cached.addonName,
+                                    providerAddonId = cached.addonId,
+                                    contentType = type,
+                                    videoId = videoId,
+                                    parentMetaId = parentMetaId.ifBlank { videoId },
+                                    parentMetaType = parentMetaType.ifBlank { type },
+                                    initialPositionMs = targetResumePositionMs,
+                                    initialProgressFraction = targetResumeProgressFraction,
+                                    contentLanguage = cached.contentLanguage,
+                                    prerollUrl = preroll?.url,
+                                    prerollDuration = preroll?.duration,
+                                    prerollTitle = preroll?.title,
+                                    prerollSkippableAfter = preroll?.skippableAfter,
+                                    prerollId = preroll?.id,
+                                )
+                            }
+                            if (externalPlayerSupported && playerSettingsUiState.externalPlayerEnabled) {
+                                openExternalPlayback(playerLaunch)
+                                return@launch
+                            }
+                            val launchId = PlayerLaunchStore.put(playerLaunch)
+                            navController.navigate(PlayerRoute(launchId = launchId, title = playerLaunch.title))
+                        }
+                        return
+                    }
+                }
+            }
+
             val streamLaunchId = StreamLaunchStore.put(
                 StreamLaunch(
                     profileId = activePlaybackProfileId,
@@ -2748,30 +2862,28 @@ private fun MainAppContent(
                                 (launch.seasonNumber == null && launch.episodeNumber == null)
                             val preroll = if (isMovie) com.nuvio.app.features.ads.AdsRepository.getNextPrerollAd(stream) else null
 
-                            if (playerSettings.streamReuseLastLinkEnabled) {
-                                val cacheKey = StreamLinkCacheRepository.contentKey(
-                                    type = launch.type,
-                                    videoId = effectiveVideoId,
-                                    parentMetaId = launch.parentMetaId,
-                                    season = launch.seasonNumber,
-                                    episode = launch.episodeNumber,
-                                )
-                                StreamLinkCacheRepository.save(
-                                    contentKey = cacheKey,
-                                    url = "",
-                                    streamName = stream.streamLabel,
-                                    addonName = stream.addonName,
-                                    addonId = stream.addonId,
-                                    requestHeaders = emptyMap(),
-                                    responseHeaders = emptyMap(),
-                                    filename = stream.behaviorHints.filename,
-                                    videoSize = stream.behaviorHints.videoSize,
-                                    infoHash = infoHash,
-                                    fileIdx = stream.p2pFileIdx,
-                                    sources = stream.sources,
-                                    bingeGroup = stream.behaviorHints.bingeGroup,
-                                )
-                            }
+                            val cacheKey = StreamLinkCacheRepository.contentKey(
+                                type = launch.type,
+                                videoId = effectiveVideoId,
+                                parentMetaId = launch.parentMetaId,
+                                season = launch.seasonNumber,
+                                episode = launch.episodeNumber,
+                            )
+                            StreamLinkCacheRepository.save(
+                                contentKey = cacheKey,
+                                url = "",
+                                streamName = stream.streamLabel,
+                                addonName = stream.addonName,
+                                addonId = stream.addonId,
+                                requestHeaders = emptyMap(),
+                                responseHeaders = emptyMap(),
+                                filename = stream.behaviorHints.filename,
+                                videoSize = stream.behaviorHints.videoSize,
+                                infoHash = infoHash,
+                                fileIdx = stream.p2pFileIdx,
+                                sources = stream.sources,
+                                bingeGroup = stream.behaviorHints.bingeGroup,
+                            )
                             val playerLaunch = PlayerLaunch(
                                 profileId = launch.profileId,
                                 title = launch.title,
@@ -2862,7 +2974,10 @@ private fun MainAppContent(
                         if (reuseHandled) return@LaunchedEffect
                         reuseHandled = true
                         if (launch.manualSelection) return@LaunchedEffect
-                        if (!playerSettings.streamReuseLastLinkEnabled) return@LaunchedEffect
+                        val isMovie = launch.type.equals("movie", ignoreCase = true) ||
+                            (launch.seasonNumber == null && launch.episodeNumber == null)
+                        val isContinueWatching = (launch.resumePositionMs != null && launch.resumePositionMs > 0L) || launch.resumeProgressFraction != null
+                        if (!playerSettings.streamReuseLastLinkEnabled && !(isMovie && isContinueWatching)) return@LaunchedEffect
                         val cacheKey = StreamLinkCacheRepository.contentKey(
                             type = launch.type,
                             videoId = effectiveVideoId,
@@ -2870,9 +2985,13 @@ private fun MainAppContent(
                             season = launch.seasonNumber,
                             episode = launch.episodeNumber,
                         )
-                        val maxAgeMs = playerSettings.streamReuseLastLinkCacheHours * 60L * 60L * 1000L
+                        val maxAgeMs = maxOf(
+                            playerSettings.streamReuseLastLinkCacheHours * 60L * 60L * 1000L,
+                            if (isContinueWatching) 72L * 60L * 60L * 1000L else 0L,
+                        )
                         val cached = StreamLinkCacheRepository.getValid(cacheKey, maxAgeMs)
                         if (cached != null) {
+                            StreamsRepository.cancelLoading()
                             if (cached.url.isBlank() && !cached.infoHash.isNullOrBlank()) {
                                 val cachedStream = StreamItem(
                                     name = cached.streamName,
@@ -3022,28 +3141,27 @@ private fun MainAppContent(
                             return@LaunchedEffect
                         }
                         autoPlayHandled = true
-                        if (playerSettings.streamReuseLastLinkEnabled) {
-                            val cacheKey = StreamLinkCacheRepository.contentKey(
-                                type = launch.type,
-                                videoId = effectiveVideoId,
-                                parentMetaId = launch.parentMetaId,
-                                season = launch.seasonNumber,
-                                episode = launch.episodeNumber,
-                            )
-                            StreamLinkCacheRepository.save(
-                                contentKey = cacheKey,
-                                url = sourceUrl,
-                                streamName = stream.streamLabel,
-                                addonName = stream.addonName,
-                                addonId = stream.addonId,
-                                requestHeaders = sanitizePlaybackHeaders(stream.behaviorHints.proxyHeaders?.request),
-                                responseHeaders = sanitizePlaybackResponseHeaders(stream.behaviorHints.proxyHeaders?.response),
-                                filename = stream.behaviorHints.filename,
-                                videoSize = stream.behaviorHints.videoSize,
-                                bingeGroup = stream.behaviorHints.bingeGroup,
-                                streamType = stream.streamType,
-                            )
-                        }
+                        val cacheKey = StreamLinkCacheRepository.contentKey(
+                            type = launch.type,
+                            videoId = effectiveVideoId,
+                            parentMetaId = launch.parentMetaId,
+                            season = launch.seasonNumber,
+                            episode = launch.episodeNumber,
+                        )
+                        StreamLinkCacheRepository.save(
+                            contentKey = cacheKey,
+                            url = sourceUrl,
+                            streamName = stream.streamLabel,
+                            addonName = stream.addonName,
+                            addonId = stream.addonId,
+                            requestHeaders = sanitizePlaybackHeaders(stream.behaviorHints.proxyHeaders?.request),
+                            responseHeaders = sanitizePlaybackResponseHeaders(stream.behaviorHints.proxyHeaders?.response),
+                            filename = stream.behaviorHints.filename,
+                            videoSize = stream.behaviorHints.videoSize,
+                            sources = stream.sources,
+                            bingeGroup = stream.behaviorHints.bingeGroup,
+                            streamType = stream.streamType,
+                        )
                         val isMovie = launch.type.equals("movie", ignoreCase = true) ||
                             (launch.seasonNumber == null && launch.episodeNumber == null)
                         val preroll = if (isMovie) com.nuvio.app.features.ads.AdsRepository.getNextPrerollAd(stream) else null
@@ -3165,28 +3283,27 @@ private fun MainAppContent(
                             return
                         }
                         val sourceUrl = stream.playableDirectUrl ?: return
-                        if (playerSettings.streamReuseLastLinkEnabled) {
-                            val cacheKey = StreamLinkCacheRepository.contentKey(
-                                type = launch.type,
-                                videoId = effectiveVideoId,
-                                parentMetaId = launch.parentMetaId,
-                                season = launch.seasonNumber,
-                                episode = launch.episodeNumber,
-                            )
-                            StreamLinkCacheRepository.save(
-                                contentKey = cacheKey,
-                                url = sourceUrl,
-                                streamName = stream.streamLabel,
-                                addonName = stream.addonName,
-                                addonId = stream.addonId,
-                                requestHeaders = sanitizePlaybackHeaders(stream.behaviorHints.proxyHeaders?.request),
-                                responseHeaders = sanitizePlaybackResponseHeaders(stream.behaviorHints.proxyHeaders?.response),
-                                filename = stream.behaviorHints.filename,
-                                videoSize = stream.behaviorHints.videoSize,
-                                bingeGroup = stream.behaviorHints.bingeGroup,
-                                streamType = stream.streamType,
-                            )
-                        }
+                        val cacheKey = StreamLinkCacheRepository.contentKey(
+                            type = launch.type,
+                            videoId = effectiveVideoId,
+                            parentMetaId = launch.parentMetaId,
+                            season = launch.seasonNumber,
+                            episode = launch.episodeNumber,
+                        )
+                        StreamLinkCacheRepository.save(
+                            contentKey = cacheKey,
+                            url = sourceUrl,
+                            streamName = stream.streamLabel,
+                            addonName = stream.addonName,
+                            addonId = stream.addonId,
+                            requestHeaders = sanitizePlaybackHeaders(stream.behaviorHints.proxyHeaders?.request),
+                            responseHeaders = sanitizePlaybackResponseHeaders(stream.behaviorHints.proxyHeaders?.response),
+                            filename = stream.behaviorHints.filename,
+                            videoSize = stream.behaviorHints.videoSize,
+                            sources = stream.sources,
+                            bingeGroup = stream.behaviorHints.bingeGroup,
+                            streamType = stream.streamType,
+                        )
                         streamRouteScope.launch {
                             val isMovie = launch.type.equals("movie", ignoreCase = true) ||
                                 (launch.seasonNumber == null && launch.episodeNumber == null)

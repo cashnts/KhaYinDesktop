@@ -618,7 +618,7 @@ fun resolveContentLanguage(language: String?, country: String?): String? {
     return null
 }
 
-fun isAllowedAudioTrack(track: AudioTrack): Boolean {
+fun isEnglishAudioTrack(track: AudioTrack): Boolean {
     val code = track.language?.trim().orEmpty()
     val lbl = track.label.trim()
     val combined = "$code $lbl".trim()
@@ -626,26 +626,44 @@ fun isAllowedAudioTrack(track: AudioTrack): Boolean {
     val normalizedCode = normalizeLanguageCode(code)?.lowercase()?.substringBefore('-')
     val normalizedLabel = normalizeLanguageCode(lbl)?.lowercase()?.substringBefore('-')
 
-    val isEnglish = normalizedCode == "en" || normalizedCode == "eng" ||
-                    normalizedLabel == "en" || normalizedLabel == "eng" ||
-                    combined.contains("english", ignoreCase = true) ||
-                    code.equals("en", ignoreCase = true) ||
-                    code.equals("eng", ignoreCase = true)
+    return normalizedCode == "en" || normalizedCode == "eng" ||
+           normalizedLabel == "en" || normalizedLabel == "eng" ||
+           combined.contains("english", ignoreCase = true) ||
+           code.equals("en", ignoreCase = true) ||
+           code.equals("eng", ignoreCase = true)
+}
 
-    val isChinese = normalizedCode == "zh" || normalizedCode == "zho" || normalizedCode == "chi" || normalizedCode == "cmn" || normalizedCode == "yue" ||
-                    normalizedLabel == "zh" || normalizedLabel == "zho" || normalizedLabel == "chi" ||
-                    combined.contains("chinese", ignoreCase = true) ||
-                    combined.contains("mandarin", ignoreCase = true) ||
-                    combined.contains("cantonese", ignoreCase = true) ||
-                    combined.contains("中文", ignoreCase = true) ||
-                    code.equals("zh", ignoreCase = true) ||
-                    code.equals("chi", ignoreCase = true) ||
-                    code.equals("zho", ignoreCase = true)
+fun isAllowedAudioTrack(track: AudioTrack): Boolean {
+    if (isEnglishAudioTrack(track)) return true
+
+    val code = track.language?.trim().orEmpty()
+    val lbl = track.label.trim()
+    val combined = "$code $lbl".trim()
+
+    val normalizedCode = normalizeLanguageCode(code)?.lowercase()?.substringBefore('-')
+    if (normalizedCode != null && normalizedCode != "en" && normalizedCode != "eng") {
+        return false
+    }
+
+    if (code.isNotBlank() && code != "und" && code != "unknown" && !code.equals("en", ignoreCase = true) && !code.equals("eng", ignoreCase = true)) {
+        return false
+    }
+
+    val nonEnglishKeywords = listOf(
+        "spanish", "español", "espanol", "french", "français", "francais", "german", "deutsch",
+        "italian", "italiano", "portuguese", "português", "russian", "русский", "hindi", "हिन्दी",
+        "chinese", "mandarin", "cantonese", "中文", "japanese", "nihongo", "日本語", "korean", "한국어",
+        "thai", "vietnamese", "arabic", "turkish", "polish", "dutch", "swedish", "norwegian",
+        "danish", "finnish", "tagalog", "filipino", "indonesian", "burmese", "myanmar"
+    )
+    if (nonEnglishKeywords.any { combined.contains(it, ignoreCase = true) }) {
+        return false
+    }
 
     val isGenericOrBlank = (code.isBlank() || code == "und" || code == "unknown") &&
-                           (lbl.isBlank() || lbl.matches(Regex("(?i)track\\s*\\d*|audio\\s*\\d*|default|stereo|surround|5\\.1|7\\.1|aac|ac3|eac3|dts|mp3|flac|pcm")))
+                           (lbl.isBlank() || lbl.matches(Regex("(?i)track\\s*\\d*|audio\\s*\\d*|default|stereo|surround|5\\.1|7\\.1|aac|ac3|eac3|dts|mp3|flac|pcm|main|original|audio track.*")))
 
-    return isEnglish || isChinese || isGenericOrBlank
+    return isGenericOrBlank
 }
 
 fun isAllowedSubtitleTrack(track: SubtitleTrack, isPlus: Boolean, contentId: String? = null): Boolean {

@@ -2082,6 +2082,12 @@ private class SubtitleOffsetRenderer(
 }
 
 private fun resolveSubtitleMimeType(url: String, headers: Map<String, String>? = null): String {
+    val cleanUrl = url.substringBefore('?').lowercase()
+    if (cleanUrl.endsWith(".vtt")) return MimeTypes.TEXT_VTT
+    if (cleanUrl.endsWith(".srt")) return MimeTypes.APPLICATION_SUBRIP
+    if (cleanUrl.endsWith(".ass") || cleanUrl.endsWith(".ssa")) return MimeTypes.TEXT_SSA
+    if (cleanUrl.endsWith(".ttml") || cleanUrl.endsWith(".xml")) return MimeTypes.APPLICATION_TTML
+
     probeSubtitleHeaders(url, headers)?.let { (contentType, contentDisposition) ->
         mapSubtitleMime(contentType)?.let { return it }
         filenameFromContentDisposition(contentDisposition)?.let(::guessSubtitleMime)?.let { return it }

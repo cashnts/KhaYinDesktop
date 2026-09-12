@@ -92,7 +92,8 @@ private enum class AdminHubTab(val label: String) {
     Analytics("Analytics & Telemetry"),
     ServiceControls("Service Controls"),
     UserDevices("User Devices"),
-    MassAddons("Mass-Addon Push"),
+    MassAddons("Addon Management"),
+    Catalogs("Catalog Management"),
 }
 
 @Composable
@@ -131,8 +132,17 @@ fun AdminLicenseScreen(
             "https://v3-cinemeta.strem.io/manifest.json\nhttps://stream.khayin.net/manifest.json"
         )
     }
+    var adminAddonMetadata by remember { mutableStateOf<Map<String, AddonMetadataOverride>>(emptyMap()) }
     var isPushingAddons by remember { mutableStateOf(false) }
     var addonPushStatus by remember { mutableStateOf<String?>(null) }
+
+    // Catalog Management State
+    var adminPresetCatalogs by remember { mutableStateOf<List<PresetCatalogConfig>>(emptyList()) }
+    var adminHeroEnabled by remember { mutableStateOf(true) }
+    var adminShowCatalogType by remember { mutableStateOf(true) }
+    var adminHideUnreleased by remember { mutableStateOf(false) }
+    var isPushingCatalogs by remember { mutableStateOf(false) }
+    var catalogPushStatus by remember { mutableStateOf<String?>(null) }
 
     // Service Controls State
     var maintenanceModeEnabled by remember { mutableStateOf(false) }
@@ -192,6 +202,11 @@ fun AdminLicenseScreen(
         if (cfg.presetAddons.isNotEmpty()) {
             addonManifestUrls = cfg.presetAddons.joinToString("\n")
         }
+        adminAddonMetadata = cfg.addonMetadata
+        adminPresetCatalogs = cfg.presetCatalogs
+        adminHeroEnabled = cfg.heroCarouselEnabled
+        adminShowCatalogType = cfg.showCatalogType
+        adminHideUnreleased = cfg.hideUnreleasedContent
     }
 
     // Unlocked Admin Management UI
@@ -255,6 +270,11 @@ fun AdminLicenseScreen(
                             if (cfg.presetAddons.isNotEmpty()) {
                                 addonManifestUrls = cfg.presetAddons.joinToString("\n")
                             }
+                            adminAddonMetadata = cfg.addonMetadata
+                            adminPresetCatalogs = cfg.presetCatalogs
+                            adminHeroEnabled = cfg.heroCarouselEnabled
+                            adminShowCatalogType = cfg.showCatalogType
+                            adminHideUnreleased = cfg.hideUnreleasedContent
                         }
                     },
                     shape = RoundedCornerShape(8.dp),
@@ -415,29 +435,80 @@ fun AdminLicenseScreen(
                     )
                 }
                 AdminHubTab.MassAddons -> {
-                    MassAddonsTabContent(
-                        addonManifestUrls = addonManifestUrls,
-                        onUrlsChange = { addonManifestUrls = it },
-                        isPushing = isPushingAddons,
-                        pushStatus = addonPushStatus,
-                        onPush = {
+                    AdminAddonManagementTabContent(
+                        initialUrls = addonManifestUrls.lines().map { it.trim() }.filter { it.isNotBlank() },
+                        initialDisabledAddons = disabledAddonsText.lines().map { it.trim() }.filter { it.isNotBlank() },
+                        initialAddonMetadata = adminAddonMetadata,
+                        onSaveAndBroadcast = { newPresets, newDisabled, newMetadata ->
                             isPushingAddons = true
+                            addonManifestUrls = newPresets.joinToString("\n")
+                            disabledAddonsText = newDisabled.joinToString("\n")
+                            adminAddonMetadata = newMetadata
                             scope.launch {
-                                val urls = addonManifestUrls.lines().map { it.trim() }.filter { it.isNotBlank() }
-                                AdminControlRepository.updateConfig(
-                                    AdminControlRepository.config.value.copy(presetAddons = urls),
-                                ).fold(
+                                val currentConfig = AdminControlRepository.config.value
+                                val updatedConfig = currentConfig.copy(
+                                    presetAddons = newPresets,
+                                    disabledAddons = newDisabled,
+                                    addonMetadata = newMetadata,
+                                )
+                                AdminControlRepository.updateConfig(updatedConfig).fold(
                                     onSuccess = {
                                         isPushingAddons = false
-                                        addonPushStatus = "Broadcasted ${urls.size} manifests."
+                                        addonPushStatus = "Broadcasted ${newPresets.size} addons (${newDisabled.size} blacklisted) to all clients."
+                                        actionToast = "Broadcasted ${newPresets.size} addons to all clients."
                                     },
                                     onFailure = { err ->
                                         isPushingAddons = false
-                                        addonPushStatus = "Error: ${err.message}"
+                                        addonPushStatus = "Broadcast error: ${err.message}"
                                     },
                                 )
                             }
                         },
+                        isBroadcasting = isPushingAddons,
+                        broadcastStatus = addonPushStatus,
+                        onCopyToast = { actionToast = it },
+                        onNavigateToCatalogs = { selectedTab = AdminHubTab.Catalogs },
+                    )
+                }
+
+                AdminHubTab.Catalogs -> {
+                    AdminCatalogManagementTabContent(
+                        configuredAddonUrls = addonManifestUrls.lines().map { it.trim() }.filter { it.isNotBlank() },
+                        initialPresetCatalogs = adminPresetCatalogs,
+                        initialHeroEnabled = adminHeroEnabled,
+                        initialShowCatalogType = adminShowCatalogType,
+                        initialHideUnreleased = adminHideUnreleased,
+                        onSaveAndBroadcastCatalogs = { catalogs, hero, showType, hideUnrel ->
+                            isPushingCatalogs = true
+                            adminPresetCatalogs = catalogs
+                            adminHeroEnabled = hero
+                            adminShowCatalogType = showType
+                            adminHideUnreleased = hideUnrel
+                            scope.launch {
+                                val currentConfig = AdminControlRepository.config.value
+                                val updatedConfig = currentConfig.copy(
+                                    presetCatalogs = catalogs,
+                                    heroCarouselEnabled = hero,
+                                    showCatalogType = showType,
+                                    hideUnreleasedContent = hideUnrel,
+                                )
+                                AdminControlRepository.updateConfig(updatedConfig).fold(
+                                    onSuccess = {
+                                        isPushingCatalogs = false
+                                        catalogPushStatus = "Broadcasted ${catalogs.size} catalog placements to all clients."
+                                        actionToast = "Broadcasted ${catalogs.size} catalogs to all clients."
+                                    },
+                                    onFailure = { err ->
+                                        isPushingCatalogs = false
+                                        catalogPushStatus = "Broadcast error: ${err.message}"
+                                    },
+                                )
+                            }
+                        },
+                        isBroadcasting = isPushingCatalogs,
+                        broadcastStatus = catalogPushStatus,
+                        onCopyToast = { actionToast = it },
+                        onNavigateToAddons = { selectedTab = AdminHubTab.MassAddons },
                     )
                 }
                 AdminHubTab.ServiceControls -> {
@@ -977,146 +1048,7 @@ private fun LicensesTabContent(
     }
 }
 
-@Composable
-private fun MassAddonsTabContent(
-    addonManifestUrls: String,
-    onUrlsChange: (String) -> Unit,
-    isPushing: Boolean,
-    pushStatus: String?,
-    onPush: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color(0xFF16161E))
-                .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
-                .padding(20.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(imageVector = Icons.Rounded.Extension, contentDescription = null, tint = Color(0xFF00E699), modifier = Modifier.size(24.dp))
-                Spacer(modifier = Modifier.width(10.dp))
-                Column {
-                    Text(
-                        text = "BROADCAST ADDON BUNDLES TO ALL USERS",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = Color.White),
-                    )
-                    Text(
-                        text = "Addons configured here will be pushed and automatically installed on all user devices when they launch or sync.",
-                        style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF888899)),
-                    )
-                }
-            }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text("Manifest URLs (One per line):", style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFFAAAAAA)))
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Quick preset pills
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Quick Add:", style = TextStyle(color = Color(0xFF666677), fontSize = 11.sp, fontWeight = FontWeight.Bold))
-                listOf(
-                    "Cinemeta" to "https://v3-cinemeta.strem.io/manifest.json",
-                    "KhaYin Streams" to "https://stream.khayin.net/manifest.json",
-                    "Archive.org" to "https://dev.nebulawp.org/stremio/archive.org-addon/manifest.json",
-                    "OpenSubtitles" to "https://opensubtitles-v3.strem.io/manifest.json",
-                ).forEach { (label, url) ->
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFF222230))
-                            .border(1.dp, Color(0xFF333344), RoundedCornerShape(6.dp))
-                            .clickable {
-                                val currentLines = addonManifestUrls.lines().map { it.trim() }.filter { it.isNotBlank() }
-                                if (url !in currentLines) {
-                                    val updated = (currentLines + url).joinToString("\n")
-                                    onUrlsChange(updated)
-                                }
-                            }
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                    ) {
-                        Text(
-                            text = "+ $label",
-                            style = TextStyle(color = Color(0xFF00E699), fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF0F0F16))
-                    .border(1.dp, Color(0xFF323244), RoundedCornerShape(8.dp))
-                    .padding(12.dp),
-            ) {
-                BasicTextField(
-                    value = addonManifestUrls,
-                    onValueChange = onUrlsChange,
-                    modifier = Modifier.fillMaxSize(),
-                    textStyle = TextStyle(color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 13.sp),
-                    cursorBrush = SolidColor(Color(0xFF00E699)),
-                    decorationBox = { inner ->
-                        if (addonManifestUrls.isEmpty()) {
-                            Text("https://v3-cinemeta.strem.io/manifest.json\nhttps://stream.khayin.net/manifest.json", color = Color(0xFF555566), fontSize = 13.sp)
-                        }
-                        inner()
-                    },
-                )
-            }
-
-            pushStatus?.let { status ->
-                Spacer(modifier = Modifier.height(10.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF0D2818))
-                        .border(1.dp, Color(0xFF00E699).copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                        .padding(10.dp),
-                ) {
-                    Text(text = status, style = TextStyle(color = Color(0xFF00E699), fontSize = 12.sp, fontWeight = FontWeight.SemiBold))
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Button(
-                onClick = onPush,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(46.dp),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF00E699),
-                    contentColor = Color.Black,
-                ),
-                enabled = !isPushing,
-            ) {
-                if (isPushing) {
-                    NuvioLoadingIndicator(modifier = Modifier.size(18.dp), color = Color.Black)
-                } else {
-                    Text("Push Addon Bundles to All Devices", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                }
-            }
-        }
-    }
-}
 
 @Composable
 private fun ServiceControlsTabContent(

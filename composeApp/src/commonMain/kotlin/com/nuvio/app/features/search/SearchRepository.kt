@@ -409,7 +409,7 @@ object SearchRepository {
         }
         val sortedItems = if (query.isNotBlank()) {
             items.sortedWith(
-                compareByDescending<MetaPreview> { calculateSearchRelevanceScore(it.name, query) }
+                compareByDescending<MetaPreview> { calculateSearchRelevanceScore(it.name, query, it) }
                     .thenBy { it.name.length }
             )
         } else {
@@ -553,50 +553,81 @@ private fun Array<IndexedSearchResult?>.orderedSections(query: String = ""): Lis
 
     return nonNullSections.sortedWith(
         compareByDescending<HomeCatalogSection> { section ->
-            section.items.maxOfOrNull { calculateSearchRelevanceScore(it.name, query) } ?: 0
+            section.items.maxOfOrNull { calculateSearchRelevanceScore(it.name, query, it) } ?: 0.0
         }.thenByDescending { section ->
-            section.items.take(3).map { calculateSearchRelevanceScore(it.name, query) }.average()
+            section.items.take(3).map { calculateSearchRelevanceScore(it.name, query, it) }.average()
         }
     )
 }
 
-private fun calculateSearchRelevanceScore(name: String, query: String): Int {
+internal fun calculateSearchRelevanceScore(name: String, query: String, item: MetaPreview? = null): Double {
     val cleanName = name.trim().lowercase()
     val cleanQuery = query.trim().lowercase()
-    if (cleanName.isEmpty() || cleanQuery.isEmpty()) return 0
+    if (cleanName.isEmpty() || cleanQuery.isEmpty()) return 0.0
 
-    // 1. Exact match (e.g., "Loki" == "Loki")
-    if (cleanName == cleanQuery) return 10000
+    var score = 0.0
 
-    // 2. Exact match ignoring punctuation
-    val strippedName = cleanName.filter { it.isLetterOrDigit() || it.isWhitespace() }
-    val strippedQuery = cleanQuery.filter { it.isLetterOrDigit() || it.isWhitespace() }
-    if (strippedName == strippedQuery && strippedName.isNotEmpty()) return 9000
-
-    // 3. Exact word boundary match: title is "Loki: Season 1" or "Loki (2021)"
-    if (cleanName.startsWith("$cleanQuery ") || cleanName.startsWith("$cleanQuery:") || cleanName.startsWith("$cleanQuery-")) {
-        return 7000 - (cleanName.length - cleanQuery.length).coerceAtMost(1000)
+    // 1. Exact match (e.g., "Loki" == "loki")
+    if (cleanName == cleanQuery) {
+        score = 10000.0
+    } else {
+        // 2. Exact match ignoring punctuation
+        val strippedName = cleanName.filter { it.isLetterOrDigit() || it.isWhitespace() }
+        val strippedQuery = cleanQuery.filter { it.isLetterOrDigit() || it.isWhitespace() }
+        if (strippedName == strippedQuery && strippedName.isNotEmpty()) {
+            score = 9000.0
+        } else if (cleanName.startsWith("$cleanQuery ") || cleanName.startsWith("$cleanQuery:") || cleanName.startsWith("$cleanQuery-")) {
+            // 3. Exact word boundary match: title is "Loki: Season 1" or "Loki (2021)"
+            score = 7000.0 - (cleanName.length - cleanQuery.length).coerceAtMost(1000) * 2.0
+        } else if (cleanName.startsWith(cleanQuery)) {
+            // 4. Starts with query prefix (e.g. "Loki 7")
+            score = 5000.0 - (cleanName.length - cleanQuery.length).coerceAtMost(1000) * 3.0
+        } else {
+            val words = cleanName.split(Regex("[^a-zA-Z0-9]+")).filter { it.isNotBlank() }
+            if (words.any { it == cleanQuery }) {
+                // 5. Query matches a standalone word in the title (e.g. "Thor & Loki" or "Marvel's Loki")
+                score = 3500.0 - (cleanName.length - cleanQuery.length).coerceAtMost(1000) * 2.0
+            } else if (words.any { it.startsWith(cleanQuery) }) {
+                // 6. Word starts with query
+                score = 2000.0 - (cleanName.length - cleanQuery.length).coerceAtMost(1000) * 2.0
+            } else {
+                // 7. Substring match
+                val index = cleanName.indexOf(cleanQuery)
+                if (index >= 0) {
+                    score = 1000.0 - (index * 50.0).coerceAtMost(500.0) - (cleanName.length - cleanQuery.length).coerceAtMost(400)
+                }
+            }
+        }
     }
 
-    // 4. Starts with query prefix (e.g. "Loki 7")
-    if (cleanName.startsWith(cleanQuery)) {
-        return 5000 - (cleanName.length - cleanQuery.length).coerceAtMost(1000)
+    if (score <= 0.0) return 0.0
+
+    if (item != null) {
+        val rating = item.imdbRating?.toDoubleOrNull() ?: 0.0
+        if (rating > 0.0) {
+            score += rating * 150.0
+        }
+
+        val pop = item.popularity ?: 0.0
+        if (pop > 0.0) {
+            score += (pop * 10.0).coerceAtMost(500.0)
+        }
+
+        val votes = item.voteCount ?: 0
+        if (votes > 0) {
+            score += (kotlin.math.log10(votes.toDouble() + 1.0) * 150.0).coerceAtMost(600.0)
+        }
+
+        if (!item.poster.isNullOrBlank() && !item.poster.contains("placeholder", ignoreCase = true)) {
+            score += 300.0
+        }
+
+        if (!item.releaseInfo.isNullOrBlank()) {
+            score += 100.0
+        }
     }
 
-    // 5. Query matches a standalone word in the title (e.g. "Thor & Loki" or "Marvel's Loki")
-    val words = cleanName.split(Regex("[^a-zA-Z0-9]+")).filter { it.isNotBlank() }
-    if (words.any { it == cleanQuery }) return 3000
-
-    // 6. Word starts with query
-    if (words.any { it.startsWith(cleanQuery) }) return 2000
-
-    // 7. Substring match (e.g. "Lokita")
-    val index = cleanName.indexOf(cleanQuery)
-    if (index >= 0) {
-        return 1000 - index.coerceAtMost(500)
-    }
-
-    return 0
+    return score
 }
 
 private fun CatalogPage.withUnreleasedFilter(): CatalogPage {

@@ -49,4 +49,16 @@ class AddonTransportUrlsTest {
             catalogUrl,
         )
     }
+
+    @Test
+    fun `normalizeManifestUrl converts stremio scheme to https and appends manifest json`() {
+        assertEquals(
+            "https://v3-cinemeta.strem.io/manifest.json",
+            normalizeManifestUrl("stremio://v3-cinemeta.strem.io/manifest.json"),
+        )
+        assertEquals(
+            "https://v3-cinemeta.strem.io/manifest.json",
+            normalizeManifestUrl("v3-cinemeta.strem.io"),
+        )
+    }
 }

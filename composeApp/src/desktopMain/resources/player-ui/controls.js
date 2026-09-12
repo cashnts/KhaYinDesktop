@@ -1,5 +1,6 @@
 const root = document.getElementById("playerRoot");
 const seek = document.getElementById("seek");
+const liveIndicatorTrack = document.getElementById("liveIndicatorTrack");
 const positionLabel = document.getElementById("position");
 const durationLabel = document.getElementById("duration");
 const timeLabel = document.getElementById("timeLabel");
@@ -701,6 +702,13 @@ const formatTime = milliseconds => {
 };
 
 const setProgress = (positionMs, durationMs) => {
+  if (state.isLive) {
+    if (timeLabel) {
+      timeLabel.innerHTML = '<span class="live-dot"></span>LIVE';
+    }
+    syncVolumeControl();
+    return;
+  }
   const percent = durationMs > 0 ? Math.max(0, Math.min(100, positionMs / durationMs * 100)) : 0;
   seek.value = Math.round(percent * 10);
   seek.style.setProperty("--progress", `${percent}%`);
@@ -2110,10 +2118,15 @@ const renderChrome = () => {
   const durationMs = Math.max(0, Number(state.durationMs) || 0);
   const positionMs = isScrubbing ? scrubPositionMs : Math.max(0, Number(state.positionMs) || 0);
   const isPlaying = Boolean(state.isPlaying);
+  const isLive = Boolean(state.isLive);
   const showError = renderPlaybackError();
   root.classList.toggle("chrome-hidden", Boolean(showError || !state.controlsVisible));
   root.classList.toggle("source-visible", Boolean(!showError && !isPlaying && !state.isLoading && (state.streamTitle || state.providerName)));
   root.classList.toggle("preroll-active", Boolean(state.isPrerollActive));
+  root.classList.toggle("is-live", isLive);
+  if (liveIndicatorTrack) {
+    liveIndicatorTrack.hidden = !isLive;
+  }
   syncHiddenCursor();
   const showOpening = renderOpeningOverlay(showError);
   renderPauseMetadataOverlay(showOpening || showError);

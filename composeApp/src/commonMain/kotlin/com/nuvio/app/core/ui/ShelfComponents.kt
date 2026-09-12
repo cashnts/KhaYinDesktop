@@ -85,6 +85,7 @@ fun <T> NuvioShelfSection(
     headerHorizontalPadding: Dp = 0.dp,
     rowContentPadding: PaddingValues = PaddingValues(0.dp),
     itemSpacing: Dp = 10.dp,
+    titleTrailingContent: (@Composable () -> Unit)? = null,
     onViewAllClick: (() -> Unit)? = null,
     viewAllPillSize: NuvioViewAllPillSize = NuvioViewAllPillSize.Default,
     key: ((T) -> Any)? = null,
@@ -105,6 +106,7 @@ fun <T> NuvioShelfSection(
             NuvioShelfSectionHeader(
                 title = title,
                 modifier = Modifier.padding(horizontal = headerHorizontalPadding),
+                titleTrailingContent = titleTrailingContent,
                 onViewAllClick = onViewAllClick,
                 viewAllPillSize = viewAllPillSize,
             )
@@ -237,6 +239,7 @@ fun NuvioPosterCard(
     bottomLeftLogoUrl: String? = null,
     bottomLeftText: String? = null,
     isWatched: Boolean = false,
+    isLocked: Boolean = false,
     onClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
 ) {
@@ -324,6 +327,16 @@ fun NuvioPosterCard(
                 }
             }
 
+            if (isLocked) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(NuvioTokens.Space.s8),
+                ) {
+                    com.nuvio.app.features.license.SportsLockPill()
+                }
+            }
+
             NuvioPosterWatchedOverlay(isWatched = isWatched)
         }
         if (shouldShowTitleBelow) {
@@ -355,6 +368,7 @@ fun NuvioPosterCard(
 private fun NuvioShelfSectionHeader(
     title: String,
     modifier: Modifier = Modifier,
+    titleTrailingContent: (@Composable () -> Unit)? = null,
     onViewAllClick: (() -> Unit)? = null,
     viewAllPillSize: NuvioViewAllPillSize = NuvioViewAllPillSize.Default,
 ) {
@@ -367,14 +381,22 @@ private fun NuvioShelfSectionHeader(
             horizontalArrangement = Arrangement.spacedBy(tokens.spacing.controlGap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = title,
+            Row(
                 modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.titleLarge,
-                color = tokens.colors.textPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = tokens.colors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (titleTrailingContent != null) {
+                    titleTrailingContent()
+                }
+            }
             val viewAllPlaceholderModifier = if (onViewAllClick == null) {
                 Modifier
                     .alpha(0f)

@@ -68,11 +68,16 @@ data class ManagedAddon(
         get() = enabled && manifest != null
 
     val displayTitle: String
-        get() = userSetName?.takeIf { it.isNotBlank() && it != manifest?.name }
-            ?: manifest?.name
-            ?: manifestUrl.substringBefore("?").substringAfterLast("/").ifBlank {
-                runBlocking { getString(Res.string.generic_addon) }
+        get() {
+            if (manifestUrl.contains("opensubtitles-v3", ignoreCase = true) || manifest?.name?.contains("OpenSubtitles", ignoreCase = true) == true) {
+                return "KhaYin Subtitle"
             }
+            return userSetName?.takeIf { it.isNotBlank() && it != manifest?.name }
+                ?: manifest?.name
+                ?: manifestUrl.substringBefore("?").substringAfterLast("/").ifBlank {
+                    runBlocking { getString(Res.string.generic_addon) }
+                }
+        }
 }
 
 data class AddonsUiState(

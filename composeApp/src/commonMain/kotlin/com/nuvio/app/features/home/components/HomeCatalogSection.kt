@@ -4,11 +4,16 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import com.nuvio.app.core.ui.NuvioShelfSection
 import com.nuvio.app.core.ui.NuvioViewAllPillSize
 import com.nuvio.app.core.ui.rememberPosterCardStyleUiState
+import com.nuvio.app.features.catalog.CatalogTarget
 import com.nuvio.app.features.home.HomeCatalogSection
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.stableKey
@@ -68,6 +73,20 @@ private fun HomeCatalogRowSectionContent(
     onPosterLongClick: ((MetaPreview) -> Unit)?,
 ) {
     val posterCardStyle = rememberPosterCardStyleUiState()
+    val isSportsCatalog = com.nuvio.app.features.details.LiveMediaCleaner.isSportsCatalog(
+        type = section.target.contentType,
+        name = section.title,
+        catalogId = (section.target as? CatalogTarget.Addon)?.catalogId,
+        addonName = section.addonName,
+    )
+    val isSportsLocked = isSportsCatalog && !com.nuvio.app.features.license.LicenseRepository.isPlusMember
+    var showUpgradeDialog by remember { mutableStateOf(false) }
+
+    if (showUpgradeDialog) {
+        com.nuvio.app.features.license.SportsPlusLockedDialog(
+            onDismiss = { showUpgradeDialog = false },
+        )
+    }
 
     NuvioShelfSection(
         title = section.title,
@@ -75,10 +94,12 @@ private fun HomeCatalogRowSectionContent(
         modifier = modifier,
         headerHorizontalPadding = sectionPadding,
         rowContentPadding = PaddingValues(horizontal = sectionPadding),
-        onViewAllClick = onViewAllClick,
+        titleTrailingContent = if (isSportsLocked) { { com.nuvio.app.features.license.SportsLockPill() } } else null,
+        onViewAllClick = if (isSportsLocked) { { showUpgradeDialog = true } } else onViewAllClick,
         viewAllPillSize = NuvioViewAllPillSize.Compact,
         key = { item -> item.stableKey() },
     ) { item ->
+        val itemLocked = isSportsLocked || (!com.nuvio.app.features.license.LicenseRepository.isPlusMember && com.nuvio.app.features.details.LiveMediaCleaner.isSportsItem(type = item.type, title = item.name, genres = item.genres, description = item.description))
         HomePosterCard(
             item = item,
             useLandscapeBackdropMode = posterCardStyle.catalogLandscapeModeEnabled,
@@ -87,8 +108,9 @@ private fun HomeCatalogRowSectionContent(
                 item = item,
                 fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
             ),
-            onClick = onPosterClick?.let { { it(item) } },
-            onLongClick = onPosterLongClick?.let { { it(item) } },
+            isLocked = itemLocked,
+            onClick = if (itemLocked) { { showUpgradeDialog = true } } else onPosterClick?.let { { it(item) } },
+            onLongClick = if (itemLocked) null else onPosterLongClick?.let { { it(item) } },
         )
     }
 }
