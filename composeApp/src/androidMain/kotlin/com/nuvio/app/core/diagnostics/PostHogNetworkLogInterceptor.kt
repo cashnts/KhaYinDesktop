@@ -14,6 +14,12 @@ import java.io.IOException
 class PostHogNetworkLogInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
+        val host = originalRequest.url.host
+        val path = originalRequest.url.encodedPath
+        if (host.contains("khayin.dev") || host.contains("posthog") || path.contains("/capture") || path.contains("/i/v1/")) {
+            return chain.proceed(originalRequest)
+        }
+
         val span = PostHogTracer.startSpan(
             name = "HTTP ${originalRequest.method}",
             kind = PostHogTracer.SpanKind.CLIENT,
@@ -64,7 +70,9 @@ class PostHogNetworkLogInterceptor : Interceptor {
         } catch (error: Throwable) {
             val elapsedMs = (System.nanoTime() - startedAtNs) / 1_000_000L
             span.setAttribute("http.duration_ms", elapsedMs)
-            span.recordException(error)
+            if (!isCancellation(error)) {
+                span.recordException(error)
+            }
             span.end()
 
             record(
@@ -78,6 +86,31 @@ class PostHogNetworkLogInterceptor : Interceptor {
         }
     }
 
+    private fun isCancellation(error: Throwable?): Boolean {
+        if (error == null) return false
+        val msg = error.message.orEmpty()
+        if (msg.equals("Canceled", ignoreCase = true) ||
+            msg.equals("Socket closed", ignoreCase = true) ||
+            msg.contains("Job was cancelled", ignoreCase = true) ||
+            msg.contains("stream was reset: CANCEL", ignoreCase = true)
+        ) return true
+        val name = error.javaClass.name
+        if (name.contains("CancellationException")) return true
+        val cause = error.cause
+        return if (cause != null && cause != error) isCancellation(cause) else false
+    }
+
+    private fun isTransientHandshake(error: Throwable?): Boolean {
+        if (error == null) return false
+        val msg = error.message.orEmpty()
+        if (msg.contains("handshake", ignoreCase = true) ||
+            msg.contains("Remote host terminated", ignoreCase = true) ||
+            msg.contains("Connection reset", ignoreCase = true)
+        ) return true
+        val name = error.javaClass.name
+        return name.contains("SSLException") || name.contains("SSLHandshakeException")
+    }
+
     private fun record(
         url: HttpUrl,
         method: String,
@@ -85,8 +118,15 @@ class PostHogNetworkLogInterceptor : Interceptor {
         elapsedMs: Long,
         error: Throwable?
     ) {
+        if (isCancellation(error)) {
+            return
+        }
+
         val cleanUrl = scrubbedUrl(url)
+        val isHandshake = isTransientHandshake(error)
+
         val level = when {
+            isHandshake -> "WARN"
             error != null -> "ERROR"
             (statusCode ?: 200) >= 500 -> "ERROR"
             (statusCode ?: 200) >= 400 -> "WARN"
@@ -118,7 +158,7 @@ class PostHogNetworkLogInterceptor : Interceptor {
             level = level,
             tag = "HttpClient",
             message = message,
-            throwable = error,
+            throwable = if (isHandshake) null else error,
             properties = attributes
         )
     }

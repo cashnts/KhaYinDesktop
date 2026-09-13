@@ -92,6 +92,8 @@ import kotlinx.coroutines.launch
 private enum class AdminHubTab(val label: String) {
     Analytics("Telemetry"),
     Licenses("Licenses"),
+    Addons("Addons"),
+    Catalogs("Catalogs"),
     ServiceControls("Service Controls"),
 }
 
@@ -161,6 +163,10 @@ fun AdminLicenseScreen(
     var broadcastAlertMessage by remember { mutableStateOf("") }
     var broadcastSeverity by remember { mutableStateOf("INFO") }
     var disabledAddonsText by remember { mutableStateOf("") }
+    var minSupportedVersion by remember { mutableStateOf("") }
+    var unsupportedVersionThreshold by remember { mutableStateOf("") }
+    var updateRequiredNotice by remember { mutableStateOf("") }
+    var updateDownloadUrl by remember { mutableStateOf("") }
     var serviceStatusMessage by remember { mutableStateOf<String?>(null) }
 
     val scope = rememberCoroutineScope()
@@ -277,6 +283,10 @@ fun AdminLicenseScreen(
         broadcastAlertMessage = cfg.broadcastMessage
         broadcastSeverity = cfg.broadcastSeverity
         disabledAddonsText = cfg.disabledAddons.joinToString("\n")
+        minSupportedVersion = cfg.minSupportedVersion
+        unsupportedVersionThreshold = cfg.unsupportedVersionThreshold
+        updateRequiredNotice = cfg.updateRequiredNotice
+        updateDownloadUrl = cfg.updateDownloadUrl
         if (cfg.presetAddons.isNotEmpty()) {
             addonManifestUrls = cfg.presetAddons.joinToString("\n")
         }
@@ -300,7 +310,9 @@ fun AdminLicenseScreen(
     val errorRecordsCount = remember(analyticsRecords) {
         analyticsRecords.count { r ->
             val evt = r.event.orEmpty().lowercase()
-            evt == "${'$'}exception" || evt.contains("error") || evt == "playback_failed" || r.log_level?.equals("error", ignoreCase = true) == true
+            val msg = r.log_message.orEmpty()
+            val isCanceled = msg.equals("canceled", ignoreCase = true) || msg.contains("job was cancelled", ignoreCase = true)
+            !isCanceled && (evt == "${'$'}exception" || evt.contains("error") || evt == "playback_failed" || r.log_level?.equals("error", ignoreCase = true) == true)
         }
     }
 
@@ -623,6 +635,81 @@ fun AdminLicenseScreen(
                         },
                     )
                 }
+                AdminHubTab.Addons -> {
+                    AdminAddonManagementTabContent(
+                        initialUrls = addonManifestUrls.split("\n").map { it.trim() }.filter { it.isNotBlank() },
+                        initialDisabledAddons = AdminControlRepository.config.value.disabledAddons,
+                        initialAddonMetadata = adminAddonMetadata,
+                        onSaveAndBroadcast = { presetAddons, disabledAddons, addonMetadata ->
+                            isPushingAddons = true
+                            addonPushStatus = "Broadcasting addon updates..."
+                            scope.launch {
+                                val currentCfg = AdminControlRepository.config.value
+                                AdminControlRepository.updateConfig(
+                                    currentCfg.copy(
+                                        presetAddons = presetAddons,
+                                        disabledAddons = disabledAddons,
+                                        addonMetadata = addonMetadata,
+                                    )
+                                ).fold(
+                                    onSuccess = {
+                                        isPushingAddons = false
+                                        addonPushStatus = "Addons successfully saved and broadcast to all clients!"
+                                        actionToast = "Addons broadcast successfully"
+                                    },
+                                    onFailure = { err ->
+                                        isPushingAddons = false
+                                        addonPushStatus = "Failed to broadcast addons: ${err.message}"
+                                        actionToast = "Error: ${err.message}"
+                                    }
+                                )
+                            }
+                        },
+                        isBroadcasting = isPushingAddons,
+                        broadcastStatus = addonPushStatus,
+                        onCopyToast = { actionToast = it },
+                        onNavigateToCatalogs = { selectedTab = AdminHubTab.Catalogs },
+                    )
+                }
+                AdminHubTab.Catalogs -> {
+                    AdminCatalogManagementTabContent(
+                        configuredAddonUrls = addonManifestUrls.split("\n").map { it.trim() }.filter { it.isNotBlank() },
+                        initialPresetCatalogs = adminPresetCatalogs,
+                        initialHeroEnabled = adminHeroEnabled,
+                        initialShowCatalogType = adminShowCatalogType,
+                        initialHideUnreleased = adminHideUnreleased,
+                        onSaveAndBroadcastCatalogs = { catalogs, heroEnabled, showCatalogType, hideUnreleased ->
+                            isPushingCatalogs = true
+                            catalogPushStatus = "Broadcasting catalog updates..."
+                            scope.launch {
+                                val currentCfg = AdminControlRepository.config.value
+                                AdminControlRepository.updateConfig(
+                                    currentCfg.copy(
+                                        presetCatalogs = catalogs,
+                                        heroCarouselEnabled = heroEnabled,
+                                        showCatalogType = showCatalogType,
+                                        hideUnreleasedContent = hideUnreleased,
+                                    )
+                                ).fold(
+                                    onSuccess = {
+                                        isPushingCatalogs = false
+                                        catalogPushStatus = "Catalogs successfully saved and broadcast to all clients!"
+                                        actionToast = "Catalogs broadcast successfully"
+                                    },
+                                    onFailure = { err ->
+                                        isPushingCatalogs = false
+                                        catalogPushStatus = "Failed to broadcast catalogs: ${err.message}"
+                                        actionToast = "Error: ${err.message}"
+                                    }
+                                )
+                            }
+                        },
+                        isBroadcasting = isPushingCatalogs,
+                        broadcastStatus = catalogPushStatus,
+                        onCopyToast = { actionToast = it },
+                        onNavigateToAddons = { selectedTab = AdminHubTab.Addons },
+                    )
+                }
                 AdminHubTab.ServiceControls -> {
                     ServiceControlsTabContent(
                         maintenanceMode = maintenanceModeEnabled,
@@ -634,16 +721,89 @@ fun AdminLicenseScreen(
                                         maintenanceMode = toggle,
                                         maintenanceNotice = maintenanceNotice.trim(),
                                     ),
+                                ).fold(
+                                    onSuccess = {
+                                        serviceStatusMessage = if (toggle) {
+                                            "Maintenance mode ENABLED. Client apps frozen."
+                                        } else {
+                                            "Maintenance mode DISABLED."
+                                        }
+                                    },
+                                    onFailure = { err ->
+                                        serviceStatusMessage = "Failed to update maintenance mode: ${err.message}"
+                                    },
                                 )
-                                serviceStatusMessage = if (toggle) {
-                                    "Maintenance mode ENABLED. Client apps frozen."
-                                } else {
-                                    "Maintenance mode DISABLED."
-                                }
                             }
                         },
                         maintenanceNotice = maintenanceNotice,
                         onMaintenanceNoticeChange = { maintenanceNotice = it },
+                        onSaveMaintenanceNotice = {
+                            scope.launch {
+                                AdminControlRepository.updateConfig(
+                                    AdminControlRepository.config.value.copy(
+                                        maintenanceMode = maintenanceModeEnabled,
+                                        maintenanceNotice = maintenanceNotice.trim(),
+                                    ),
+                                ).fold(
+                                    onSuccess = {
+                                        serviceStatusMessage = "Maintenance notice saved and broadcast to all devices!"
+                                    },
+                                    onFailure = { err ->
+                                        serviceStatusMessage = "Failed to broadcast notice: ${err.message}"
+                                    },
+                                )
+                            }
+                        },
+                        minSupportedVersion = minSupportedVersion,
+                        onMinSupportedVersionChange = { minSupportedVersion = it },
+                        unsupportedVersionThreshold = unsupportedVersionThreshold,
+                        onUnsupportedVersionThresholdChange = { unsupportedVersionThreshold = it },
+                        updateRequiredNotice = updateRequiredNotice,
+                        onUpdateRequiredNoticeChange = { updateRequiredNotice = it },
+                        updateDownloadUrl = updateDownloadUrl,
+                        onUpdateDownloadUrlChange = { updateDownloadUrl = it },
+                        onPublishVersionRestrictions = {
+                            scope.launch {
+                                AdminControlRepository.updateConfig(
+                                    AdminControlRepository.config.value.copy(
+                                        minSupportedVersion = minSupportedVersion.trim(),
+                                        unsupportedVersionThreshold = unsupportedVersionThreshold.trim(),
+                                        updateRequiredNotice = updateRequiredNotice.trim(),
+                                        updateDownloadUrl = updateDownloadUrl.trim(),
+                                    ),
+                                ).fold(
+                                    onSuccess = {
+                                        serviceStatusMessage = "Version restrictions published! Unsupported clients will see Update Required screen."
+                                    },
+                                    onFailure = { err ->
+                                        serviceStatusMessage = "Failed to publish version restrictions: ${err.message}"
+                                    },
+                                )
+                            }
+                        },
+                        onClearVersionRestrictions = {
+                            minSupportedVersion = ""
+                            unsupportedVersionThreshold = ""
+                            updateRequiredNotice = ""
+                            updateDownloadUrl = ""
+                            scope.launch {
+                                AdminControlRepository.updateConfig(
+                                    AdminControlRepository.config.value.copy(
+                                        minSupportedVersion = "",
+                                        unsupportedVersionThreshold = "",
+                                        updateRequiredNotice = "",
+                                        updateDownloadUrl = "",
+                                    ),
+                                ).fold(
+                                    onSuccess = {
+                                        serviceStatusMessage = "Version restrictions cleared. All clients unlocked."
+                                    },
+                                    onFailure = { err ->
+                                        serviceStatusMessage = "Failed to clear version restrictions: ${err.message}"
+                                    },
+                                )
+                            }
+                        },
                         streamingDisabled = streamingDisabled,
                         onStreamingDisabledToggle = { toggle ->
                             streamingDisabled = toggle
@@ -653,12 +813,18 @@ fun AdminLicenseScreen(
                                         streamingDisabled = toggle,
                                         streamingDisabledNotice = streamingNotice.trim(),
                                     ),
+                                ).fold(
+                                    onSuccess = {
+                                        serviceStatusMessage = if (toggle) {
+                                            "Streaming DISABLED on client apps."
+                                        } else {
+                                            "Streaming ENABLED."
+                                        }
+                                    },
+                                    onFailure = { err ->
+                                        serviceStatusMessage = "Failed to toggle streaming: ${err.message}"
+                                    },
                                 )
-                                serviceStatusMessage = if (toggle) {
-                                    "Streaming DISABLED on client apps."
-                                } else {
-                                    "Streaming ENABLED."
-                                }
                             }
                         },
                         streamingNotice = streamingNotice,
@@ -715,6 +881,10 @@ fun AdminLicenseScreen(
                                     AdminControlRepository.config.value.copy(
                                         maintenanceMode = maintenanceModeEnabled,
                                         maintenanceNotice = maintenanceNotice.trim(),
+                                        minSupportedVersion = minSupportedVersion.trim(),
+                                        unsupportedVersionThreshold = unsupportedVersionThreshold.trim(),
+                                        updateRequiredNotice = updateRequiredNotice.trim(),
+                                        updateDownloadUrl = updateDownloadUrl.trim(),
                                         streamingDisabled = streamingDisabled,
                                         streamingDisabledNotice = streamingNotice.trim(),
                                         broadcastMessage = broadcastAlertMessage.trim(),
@@ -1417,6 +1587,17 @@ private fun ServiceControlsTabContent(
     onMaintenanceToggle: (Boolean) -> Unit,
     maintenanceNotice: String,
     onMaintenanceNoticeChange: (String) -> Unit,
+    onSaveMaintenanceNotice: () -> Unit,
+    minSupportedVersion: String,
+    onMinSupportedVersionChange: (String) -> Unit,
+    unsupportedVersionThreshold: String,
+    onUnsupportedVersionThresholdChange: (String) -> Unit,
+    updateRequiredNotice: String,
+    onUpdateRequiredNoticeChange: (String) -> Unit,
+    updateDownloadUrl: String,
+    onUpdateDownloadUrlChange: (String) -> Unit,
+    onPublishVersionRestrictions: () -> Unit,
+    onClearVersionRestrictions: () -> Unit,
     streamingDisabled: Boolean,
     onStreamingDisabledToggle: (Boolean) -> Unit,
     streamingNotice: String,
@@ -1485,10 +1666,27 @@ private fun ServiceControlsTabContent(
                             textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
                             cursorBrush = SolidColor(Color(0xFFFF5252)),
                             decorationBox = { inner ->
-                                if (maintenanceNotice.isEmpty()) Text("Custom maintenance message for users...", color = Color(0xFF555566), fontSize = 13.sp)
+                                if (maintenanceNotice.isEmpty()) Text("Custom maintenance message for users (e.g. Fixing Move Streaming error)...", color = Color(0xFF555566), fontSize = 13.sp)
                                 inner()
                             },
                         )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        Button(
+                            onClick = onSaveMaintenanceNotice,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFFF5252),
+                                contentColor = Color.White,
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(34.dp),
+                        ) {
+                            Text("Broadcast Notice to Devices", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
 
@@ -1532,6 +1730,165 @@ private fun ServiceControlsTabContent(
                                 inner()
                             },
                         )
+                    }
+                }
+            }
+        }
+
+        // App Version Restriction Card
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF16161E))
+                    .border(1.dp, Color(0xFF262633), RoundedCornerShape(14.dp))
+                    .padding(20.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(imageVector = Icons.Rounded.SystemUpdate, contentDescription = null, tint = Color(0xFF00D2FF), modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text("APP VERSION RESTRICTION & FORCED UPDATES", style = MaterialTheme.typography.titleSmall.copy(color = Color.White, fontWeight = FontWeight.Bold))
+                        Text("Block deprecated app versions and display a full-screen Update Required screen.", style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp))
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    // Unsupported threshold (X and under)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Unsupported Version Threshold (≤)", style = TextStyle(color = Color(0xFFFF8844), fontSize = 12.sp, fontWeight = FontWeight.SemiBold))
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF0F0F16))
+                                .border(1.dp, Color(0xFF323244), RoundedCornerShape(8.dp))
+                                .padding(10.dp),
+                        ) {
+                            BasicTextField(
+                                value = unsupportedVersionThreshold,
+                                onValueChange = onUnsupportedVersionThresholdChange,
+                                modifier = Modifier.fillMaxWidth(),
+                                textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
+                                cursorBrush = SolidColor(Color(0xFF00D2FF)),
+                                decorationBox = { inner ->
+                                    if (unsupportedVersionThreshold.isEmpty()) Text("e.g. 1.0.8 (blocks 1.0.8 & below)", color = Color(0xFF555566), fontSize = 13.sp)
+                                    inner()
+                                },
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("All clients running this version or below will be blocked.", style = TextStyle(color = Color(0xFF777788), fontSize = 11.sp))
+                    }
+
+                    // Minimum supported version (<)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Minimum Required Version (≥)", style = TextStyle(color = Color(0xFF00E699), fontSize = 12.sp, fontWeight = FontWeight.SemiBold))
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF0F0F16))
+                                .border(1.dp, Color(0xFF323244), RoundedCornerShape(8.dp))
+                                .padding(10.dp),
+                        ) {
+                            BasicTextField(
+                                value = minSupportedVersion,
+                                onValueChange = onMinSupportedVersionChange,
+                                modifier = Modifier.fillMaxWidth(),
+                                textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
+                                cursorBrush = SolidColor(Color(0xFF00E699)),
+                                decorationBox = { inner ->
+                                    if (minSupportedVersion.isEmpty()) Text("e.g. 1.1.0 (requires 1.1.0+)", color = Color(0xFF555566), fontSize = 13.sp)
+                                    inner()
+                                },
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Clients below this version will be blocked.", style = TextStyle(color = Color(0xFF777788), fontSize = 11.sp))
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Custom Update Notice
+                Text("Custom Update Message", style = TextStyle(color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium))
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF0F0F16))
+                        .border(1.dp, Color(0xFF323244), RoundedCornerShape(8.dp))
+                        .padding(10.dp),
+                ) {
+                    BasicTextField(
+                        value = updateRequiredNotice,
+                        onValueChange = onUpdateRequiredNoticeChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
+                        cursorBrush = SolidColor(Color(0xFF00D2FF)),
+                        decorationBox = { inner ->
+                            if (updateRequiredNotice.isEmpty()) Text("Explain why updating is required (optional)...", color = Color(0xFF555566), fontSize = 13.sp)
+                            inner()
+                        },
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Update Download Link
+                Text("Update Download URL / Link", style = TextStyle(color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium))
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF0F0F16))
+                        .border(1.dp, Color(0xFF323244), RoundedCornerShape(8.dp))
+                        .padding(10.dp),
+                ) {
+                    BasicTextField(
+                        value = updateDownloadUrl,
+                        onValueChange = onUpdateDownloadUrlChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
+                        cursorBrush = SolidColor(Color(0xFF00D2FF)),
+                        decorationBox = { inner ->
+                            if (updateDownloadUrl.isEmpty()) Text("https://github.com/aungzayphyo/KhaYin/releases (optional)", color = Color(0xFF555566), fontSize = 13.sp)
+                            inner()
+                        },
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Button(
+                        onClick = onPublishVersionRestrictions,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00D2FF), contentColor = Color.Black),
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Text("Apply & Broadcast Version Restrictions", fontWeight = FontWeight.Bold)
+                    }
+
+                    OutlinedButton(
+                        onClick = onClearVersionRestrictions,
+                        shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF444455)),
+                    ) {
+                        Text("Clear Restrictions", color = Color(0xFFCCCCCC))
                     }
                 }
             }
@@ -2400,8 +2757,9 @@ private fun AnalyticsTabContent(
                             }
 
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                val lastSeenGmt = AdminControlRepository.formatToGmt630(session.lastSeenTime).takeIf { it.isNotBlank() }
                                 Text(
-                                    text = "Duration: ${session.durationFormatted} • ${session.totalEvents} events",
+                                    text = if (lastSeenGmt != null) "$lastSeenGmt • ${session.durationFormatted}" else "Duration: ${session.durationFormatted} • ${session.totalEvents} events",
                                     style = TextStyle(color = Color(0xFF888899), fontSize = 11.sp, fontFamily = FontFamily.Monospace),
                                 )
                                 Text(
@@ -2487,8 +2845,9 @@ private fun AnalyticsTabContent(
                                         text = "SESSION JOURNEY TIMELINE",
                                         style = TextStyle(color = Color(0xFF88AAFF), fontSize = 11.sp, fontWeight = FontWeight.Bold),
                                     )
+                                    val startGmt = AdminControlRepository.formatToGmt630(session.startTime).takeIf { it.isNotBlank() }
                                     Text(
-                                        text = "Session ID: ${session.sessionId}",
+                                        text = if (startGmt != null) "Started: $startGmt • ID: ${session.sessionId.take(12)}" else "Session ID: ${session.sessionId}",
                                         style = TextStyle(color = Color(0xFF555566), fontSize = 10.sp, fontFamily = FontFamily.Monospace),
                                     )
                                 }
@@ -2610,7 +2969,7 @@ private fun AnalyticsTabContent(
                             }
 
                             Text(
-                                text = record.created_at?.take(19)?.replace("T", " ") ?: "",
+                                text = AdminControlRepository.formatToGmt630(record.created_at),
                                 style = TextStyle(color = Color(0xFF888899), fontSize = 11.sp, fontFamily = FontFamily.Monospace),
                             )
                         }
@@ -2723,7 +3082,7 @@ private fun AnalyticsTabContent(
                                 )
                             }
 
-                            val timeText = record.created_at?.take(19)?.replace("T", " ") ?: ""
+                            val timeText = AdminControlRepository.formatToGmt630(record.created_at)
                             Text(
                                 text = timeText,
                                 style = TextStyle(color = Color(0xFF888899), fontSize = 11.sp, fontFamily = FontFamily.Monospace),
@@ -2877,7 +3236,7 @@ private fun formatSessionTimeline(records: List<LicenseAnalyticsRecord>): List<C
     }
 
     if (meaningful.isEmpty()) {
-        val latestTime = records.lastOrNull()?.created_at?.take(19)?.replace("T", " ") ?: ""
+        val latestTime = AdminControlRepository.formatToGmt630(records.lastOrNull()?.created_at)
         return listOf(
             CleanTimelineEntry(
                 title = "Session Active (Idle)",
@@ -2893,7 +3252,7 @@ private fun formatSessionTimeline(records: List<LicenseAnalyticsRecord>): List<C
 
     meaningful.forEach { evt ->
         val rawEvt = evt.event.orEmpty()
-        val time = evt.created_at?.take(19)?.replace("T", " ")?.substringAfter(" ") ?: ""
+        val time = AdminControlRepository.formatToGmt630TimeOnly(evt.created_at)
 
         when {
             rawEvt.startsWith("playback_started", ignoreCase = true) -> {
@@ -3054,15 +3413,18 @@ private fun formatSessionTimeline(records: List<LicenseAnalyticsRecord>): List<C
                 }
             }
             rawEvt.contains("exception", ignoreCase = true) || rawEvt.contains("error", ignoreCase = true) -> {
-                entries.add(
-                    CleanTimelineEntry(
-                        title = "Error Occurred",
-                        detail = evt.log_message?.takeIf { it.isNotBlank() } ?: rawEvt,
-                        color = Color(0xFFFF4D4D),
-                        time = time,
-                        isImportant = true,
+                val detail = evt.log_message?.takeIf { it.isNotBlank() } ?: rawEvt
+                if (!detail.equals("Canceled", ignoreCase = true) && !detail.contains("job was cancelled", ignoreCase = true)) {
+                    entries.add(
+                        CleanTimelineEntry(
+                            title = "Error Occurred",
+                            detail = detail,
+                            color = Color(0xFFFF4D4D),
+                            time = time,
+                            isImportant = true,
+                        )
                     )
-                )
+                }
             }
             else -> {
                 val cleanTitle = rawEvt.replace("_", " ").split(" ")

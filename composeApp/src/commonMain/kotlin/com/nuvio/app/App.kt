@@ -238,6 +238,7 @@ import com.nuvio.app.features.license.LicenseExpiredScreen
 import com.nuvio.app.features.license.AdminLicenseScreen
 import com.nuvio.app.features.license.AdminControlRepository
 import com.nuvio.app.features.license.MaintenanceModeScreen
+import com.nuvio.app.features.license.UpdateRequiredScreen
 import com.nuvio.app.features.license.isActive
 import com.nuvio.app.features.license.isExpired
 import com.nuvio.app.features.license.isFree
@@ -476,6 +477,7 @@ private enum class AppGateScreen {
     LicenseActivation,
     LicenseExpired,
     Maintenance,
+    UpdateRequired,
     AdminPanel,
     Auth,
     ProfileSelection,
@@ -740,12 +742,27 @@ fun App(
             }
         }
 
-        LaunchedEffect(licenseState, authState, profileState.profiles, adminConfig.maintenanceMode, gateScreen) {
+        LaunchedEffect(
+            licenseState,
+            authState,
+            profileState.profiles,
+            adminConfig.maintenanceMode,
+            adminConfig.unsupportedVersionThreshold,
+            adminConfig.minSupportedVersion,
+            gateScreen,
+        ) {
             if (gateScreen == AppGateScreen.ProfileSwitching.name || gateScreen == AppGateScreen.AdminPanel.name) return@LaunchedEffect
 
-            if (AppFeaturePolicy.isUserClient && adminConfig.maintenanceMode) {
+            if (adminConfig.maintenanceMode) {
                 if (gateScreen != AppGateScreen.Maintenance.name) {
                     gateScreen = AppGateScreen.Maintenance.name
+                }
+                return@LaunchedEffect
+            }
+
+            if (AdminControlRepository.isCurrentVersionUnsupported()) {
+                if (gateScreen != AppGateScreen.UpdateRequired.name) {
+                    gateScreen = AppGateScreen.UpdateRequired.name
                 }
                 return@LaunchedEffect
             }
@@ -941,10 +958,33 @@ fun App(
                 }
                 AppGateScreen.Maintenance.name -> {
                     MaintenanceModeScreen(
+                        notice = adminConfig.maintenanceNotice,
                         onCheckAgain = {
                             scope.launch {
                                 val cfg = AdminControlRepository.fetchConfig()
                                 if (!cfg.maintenanceMode) {
+                                    gateScreen = if (licenseState.isActive || licenseState.isFree) AppGateScreen.Main.name else AppGateScreen.LicenseActivation.name
+                                }
+                            }
+                        },
+                        onOpenAdminPanel = {
+                            gateScreen = AppGateScreen.AdminPanel.name
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                AppGateScreen.UpdateRequired.name -> {
+                    val currentVer = com.nuvio.app.core.build.AppVersionPolicy.displayVersionName
+                    UpdateRequiredScreen(
+                        currentVersion = currentVer,
+                        minVersion = adminConfig.minSupportedVersion,
+                        unsupportedThreshold = adminConfig.unsupportedVersionThreshold,
+                        notice = adminConfig.updateRequiredNotice,
+                        updateUrl = adminConfig.updateDownloadUrl,
+                        onCheckAgain = {
+                            scope.launch {
+                                val cfg = AdminControlRepository.fetchConfig()
+                                if (!AdminControlRepository.isVersionUnsupported(currentVer)) {
                                     gateScreen = if (licenseState.isActive || licenseState.isFree) AppGateScreen.Main.name else AppGateScreen.LicenseActivation.name
                                 }
                             }

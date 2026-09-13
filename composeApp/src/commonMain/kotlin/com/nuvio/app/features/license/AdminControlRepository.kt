@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import com.nuvio.app.core.analytics.PostHogAnalytics
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.buildJsonArray
@@ -76,6 +77,12 @@ data class SystemServiceConfig(
     val heroCarouselEnabled: Boolean = true,
     val showCatalogType: Boolean = true,
     val hideUnreleasedContent: Boolean = false,
+
+    // 4. App Version Restriction & Gating
+    val minSupportedVersion: String = "",
+    val unsupportedVersionThreshold: String = "", // Version X and under is marked unsupported
+    val updateRequiredNotice: String = "",
+    val updateDownloadUrl: String = "",
 )
 
 /** Per-addon metadata overrides set by the admin and broadcast to all clients. */
@@ -173,6 +180,20 @@ object AdminControlRepository {
     fun getBoolean(key: String, defaultValue: Boolean = false): Boolean = defaultValue
 
     fun getInt(key: String, defaultValue: Int = 0): Int = defaultValue
+
+    fun isCurrentVersionUnsupported(): Boolean {
+        val current = com.nuvio.app.core.build.AppVersionPolicy.displayVersionName
+        return isVersionUnsupported(current)
+    }
+
+    fun isVersionUnsupported(version: String): Boolean {
+        val cfg = _config.value
+        return com.nuvio.app.features.updater.VersionComparator.isUnsupported(
+            clientVersion = version,
+            unsupportedVersionThreshold = cfg.unsupportedVersionThreshold,
+            minSupportedVersion = cfg.minSupportedVersion,
+        )
+    }
 
     init {
         refreshDismissedTimestamp()
@@ -306,65 +327,79 @@ private data class AppSettingsDbRecord(
         val restUrl = supabaseRestUrl()
         val configJson = json.encodeToString(newConfig)
         val configElement = json.encodeToJsonElement(newConfig)
+        var anyPersisted = false
+        var lastStatusMessage = ""
 
-        // 1. Primary: Upsert / update app_settings table
-        val appSettingsPatchUrl = "$restUrl/app_settings?id=eq.global"
-        val patchAppSettingsPayload = buildJsonObject {
+        // 1. Primary: Upsert into app_settings table (on_conflict=id)
+        val appSettingsUpsertUrl = "$restUrl/app_settings?on_conflict=id"
+        val postAppSettingsPayload = buildJsonObject {
+            put("id", "global")
             put("config", configElement)
         }
-        val patchAppSettingsBody = patchAppSettingsPayload.toString()
-        val appSettingsPatchResp = httpRequestRaw(
-            method = "PATCH",
-            url = appSettingsPatchUrl,
-            headers = supabaseHeaders(method = "PATCH", url = appSettingsPatchUrl, body = patchAppSettingsBody),
-            body = patchAppSettingsBody,
+        val postAppSettingsBody = postAppSettingsPayload.toString()
+        val appSettingsResp = httpRequestRaw(
+            method = "POST",
+            url = appSettingsUpsertUrl,
+            headers = supabaseHeaders(method = "POST", url = appSettingsUpsertUrl, body = postAppSettingsBody),
+            body = postAppSettingsBody,
         )
 
-        val appSettingsPatchedCount = runCatching {
-            json.decodeFromString<List<AppSettingsDbRecord>>(appSettingsPatchResp.body).size
-        }.getOrDefault(0)
-
-        if (appSettingsPatchResp.status !in 200..299 || appSettingsPatchedCount == 0) {
-            val appSettingsPostUrl = "$restUrl/app_settings"
-            val postAppSettingsPayload = buildJsonObject {
-                put("id", "global")
-                put("config", configElement)
-            }
-            val postAppSettingsBody = postAppSettingsPayload.toString()
-            httpRequestRaw(
-                method = "POST",
-                url = appSettingsPostUrl,
-                headers = supabaseHeaders(method = "POST", url = appSettingsPostUrl, body = postAppSettingsBody),
+        if (appSettingsResp.status in 200..299) {
+            anyPersisted = true
+        } else {
+            // Try PATCH as fallback if table doesn't support POST on_conflict
+            val patchUrl = "$restUrl/app_settings?id=eq.global"
+            val patchResp = httpRequestRaw(
+                method = "PATCH",
+                url = patchUrl,
+                headers = supabaseHeaders(method = "PATCH", url = patchUrl, body = postAppSettingsBody),
                 body = postAppSettingsBody,
             )
+            if (patchResp.status in 200..299) {
+                anyPersisted = true
+            } else {
+                lastStatusMessage = "app_settings returned HTTP ${appSettingsResp.status}"
+            }
         }
 
-        // 2. Secondary fallback: Also try to update legacy SYSTEM_CONFIG in license_keys
+        // 2. Secondary fallback: Upsert legacy SYSTEM_CONFIG row in license_keys table
         runCatching {
-            val patchLicUrl = "$restUrl/license_keys?key=eq.SYSTEM_CONFIG"
-            val patchLicPayload = buildJsonObject {
+            val licUpsertUrl = "$restUrl/license_keys?on_conflict=key"
+            val licPayload = buildJsonObject {
+                put("key", "SYSTEM_CONFIG")
                 put("notes", configJson)
                 put("customer_name", "System Config")
                 put("tier", "system")
                 put("status", "config")
             }
-            val patchLicBody = patchLicPayload.toString()
-            val patchLicResp = httpRequestRaw(
-                method = "PATCH",
-                url = patchLicUrl,
-                headers = supabaseHeaders(method = "PATCH", url = patchLicUrl, body = patchLicBody),
-                body = patchLicBody,
+            val licBody = licPayload.toString()
+            val licResp = httpRequestRaw(
+                method = "POST",
+                url = licUpsertUrl,
+                headers = supabaseHeaders(method = "POST", url = licUpsertUrl, body = licBody),
+                body = licBody,
             )
-            val licPatchedCount = runCatching { json.decodeFromString<List<SupabaseLicenseRecord>>(patchLicResp.body).size }.getOrDefault(0)
-            if (patchLicResp.status !in 200..299 || licPatchedCount == 0) {
-                val postLicUrl = "$restUrl/license_keys"
-                httpRequestRaw(
-                    method = "POST",
-                    url = postLicUrl,
-                    headers = supabaseHeaders(method = "POST", url = postLicUrl, body = patchLicBody),
-                    body = patchLicBody,
+            if (licResp.status in 200..299) {
+                anyPersisted = true
+            } else {
+                // Try PATCH if row exists
+                val patchLicUrl = "$restUrl/license_keys?key=eq.SYSTEM_CONFIG"
+                val patchLicResp = httpRequestRaw(
+                    method = "PATCH",
+                    url = patchLicUrl,
+                    headers = supabaseHeaders(method = "PATCH", url = patchLicUrl, body = licBody),
+                    body = licBody,
                 )
+                if (patchLicResp.status in 200..299) {
+                    anyPersisted = true
+                } else if (lastStatusMessage.isBlank()) {
+                    lastStatusMessage = "license_keys returned HTTP ${licResp.status}"
+                }
             }
+        }
+
+        if (!anyPersisted && lastStatusMessage.isNotBlank()) {
+            throw IllegalStateException("Failed to save remote config to Supabase ($lastStatusMessage)")
         }
 
         _config.value = newConfig
@@ -702,6 +737,34 @@ private data class AppSettingsDbRecord(
         return runCatching {
             kotlinx.datetime.Instant.parse(normalized).toEpochMilliseconds()
         }.getOrElse { 0L }
+    }
+
+    const val GMT_630_OFFSET_MS = 23_400_000L // 6 hours 30 minutes in milliseconds
+
+    fun formatToGmt630(raw: String?): String {
+        if (raw.isNullOrBlank()) return ""
+        val epochMs = parseIsoEpochMs(raw)
+        if (epochMs <= 0L) {
+            return raw.take(19).replace("T", " ")
+        }
+        return runCatching {
+            val dt = kotlinx.datetime.Instant.fromEpochMilliseconds(epochMs + GMT_630_OFFSET_MS)
+                .toLocalDateTime(kotlinx.datetime.TimeZone.UTC)
+            val yyyy = dt.year.toString().padStart(4, '0')
+            val mm = dt.monthNumber.toString().padStart(2, '0')
+            val dd = dt.dayOfMonth.toString().padStart(2, '0')
+            val hh = dt.hour.toString().padStart(2, '0')
+            val min = dt.minute.toString().padStart(2, '0')
+            val ss = dt.second.toString().padStart(2, '0')
+            "$yyyy-$mm-$dd $hh:$min:$ss"
+        }.getOrElse {
+            raw.take(19).replace("T", " ")
+        }
+    }
+
+    fun formatToGmt630TimeOnly(raw: String?): String {
+        val full = formatToGmt630(raw)
+        return full.substringAfter(" ").ifBlank { full }
     }
 
     suspend fun fetchAnalytics(limit: Int = 300): Result<List<LicenseAnalyticsRecord>> =

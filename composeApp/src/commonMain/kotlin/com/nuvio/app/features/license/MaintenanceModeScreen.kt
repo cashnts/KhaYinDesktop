@@ -1,7 +1,9 @@
 package com.nuvio.app.features.license
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -42,7 +44,9 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun MaintenanceModeScreen(
+    notice: String = "",
     onCheckAgain: () -> Unit,
+    onOpenAdminPanel: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -101,13 +105,46 @@ fun MaintenanceModeScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "KhaYin is currently undergoing scheduled maintenance. All client services and streaming are temporarily paused. Please check back shortly.",
+                text = "KhaYin is currently undergoing scheduled maintenance. All client services and streaming are temporarily paused.",
                 style = MaterialTheme.typography.bodyMedium.copy(
                     color = Color(0xFF9E9EA7),
                 ),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
+
+            if (notice.isNotBlank()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF1B1519))
+                        .border(1.dp, Color(0x66FF5252), RoundedCornerShape(12.dp))
+                        .padding(14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = "MAINTENANCE NOTICE",
+                        style = TextStyle(
+                            color = Color(0xFFFF5252),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp,
+                        ),
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = notice,
+                        style = TextStyle(
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                        ),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(28.dp))
 
@@ -140,6 +177,18 @@ fun MaintenanceModeScreen(
                     Text(
                         text = if (isChecking) "Checking Status..." else "Check Server Status",
                         style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp),
+                    )
+                }
+            }
+
+            if (onOpenAdminPanel != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                androidx.compose.material3.TextButton(
+                    onClick = onOpenAdminPanel,
+                ) {
+                    Text(
+                        text = "Admin Control Panel Access",
+                        style = TextStyle(color = Color(0xFF888899), fontSize = 12.sp),
                     )
                 }
             }

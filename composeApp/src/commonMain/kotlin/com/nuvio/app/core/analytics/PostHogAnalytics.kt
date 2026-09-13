@@ -270,6 +270,20 @@ object PostHogAnalytics {
         log(level = "ERROR", tag = tag, message = message, throwable = throwable, properties = properties)
     }
 
+    private fun isCancellation(throwable: Throwable?): Boolean {
+        if (throwable == null) return false
+        val msg = throwable.message.orEmpty()
+        if (msg.equals("Canceled", ignoreCase = true) ||
+            msg.equals("Socket closed", ignoreCase = true) ||
+            msg.contains("Job was cancelled", ignoreCase = true) ||
+            msg.contains("stream was reset: CANCEL", ignoreCase = true)
+        ) return true
+        val name = throwable::class.simpleName.orEmpty()
+        if (name.contains("CancellationException")) return true
+        val cause = throwable.cause
+        return if (cause != null && cause != throwable) isCancellation(cause) else false
+    }
+
     fun log(
         level: String = "INFO",
         tag: String = "App",
@@ -277,6 +291,10 @@ object PostHogAnalytics {
         throwable: Throwable? = null,
         properties: Map<String, Any>? = null
     ) {
+        if (isCancellation(throwable) || message.equals("Canceled", ignoreCase = true)) {
+            return
+        }
+
         // Forward to PostHog Logs (OTLP)
         PostHogLogger.log(
             level = level,
@@ -310,6 +328,10 @@ object PostHogAnalytics {
         isUnhandled: Boolean = false,
         properties: Map<String, Any>? = null
     ) {
+        if (isCancellation(throwable)) {
+            return
+        }
+
         val exProps = buildMap<String, Any> {
             put("tag", tag)
             put("\$exception_type", throwable::class.simpleName ?: "Exception")
